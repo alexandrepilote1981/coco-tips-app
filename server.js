@@ -93,16 +93,25 @@ app.post("/api/admin/login", (req, res) => {
 });
 
 app.get("/api/admin/overview", requireAdmin, (req, res) => {
+  const { startDate, endDate } = req.query;
   const restaurants = db.prepare("SELECT * FROM restaurants ORDER BY name").all();
   const data = restaurants.map((r) => {
     const employees = db
       .prepare("SELECT * FROM employees WHERE restaurant_id = ? ORDER BY name")
       .all(r.id)
       .map((emp) => {
-        const entries = db
-          .prepare("SELECT * FROM entries WHERE employee_id = ? ORDER BY date ASC")
-          .all(emp.id)
-          .map(computeEntry);
+        let query = "SELECT * FROM entries WHERE employee_id = ?";
+        const params = [emp.id];
+        if (startDate) {
+          query += " AND date >= ?";
+          params.push(startDate);
+        }
+        if (endDate) {
+          query += " AND date <= ?";
+          params.push(endDate);
+        }
+        query += " ORDER BY date ASC";
+        const entries = db.prepare(query).all(...params).map(computeEntry);
         const totals = entries.reduce(
           (acc, e) => {
             acc.ventes += e.ventes;
