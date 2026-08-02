@@ -27,6 +27,12 @@
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
   .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.5); margin: 20px 0 8px; }
+  .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .period-btn { background: #EAE4D8; color: #17302D; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
+  .period-btn.active { background: #0B5D5C; color: white; }
+  .period-dates { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+  .period-dates input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; margin-bottom: 0; }
+  .period-label { font-size: 11px; color: rgba(0,0,0,0.5); margin-top: -6px; margin-bottom: 12px; }
 </style>
 </head>
 <body>
@@ -36,6 +42,21 @@
 <script>
 let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
+let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
+
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function isoDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function resolvePeriod() {
+  if (period.mode === "2w") return { start: isoDaysAgo(13), end: todayISO() };
+  if (period.mode === "month") return { start: isoDaysAgo(29), end: todayISO() };
+  if (period.mode === "all") return { start: null, end: null };
+  return { start: period.start, end: period.end }; // custom
+}
 
 async function api(path, opts) {
   const res = await fetch(path, {
@@ -79,7 +100,11 @@ function renderLogin(errorMsg) {
 
 async function load() {
   try {
-    overview = await api("/api/admin/overview");
+    const { start, end } = resolvePeriod();
+    const params = new URLSearchParams();
+    if (start) params.set("startDate", start);
+    if (end) params.set("endDate", end);
+    overview = await api(`/api/admin/overview?${params.toString()}`);
     render();
   } catch (e) {
     renderLogin();
@@ -88,9 +113,29 @@ async function load() {
 
 function render() {
   const origin = window.location.origin;
+  const { start, end } = resolvePeriod();
+  const periodLabel =
+    period.mode === "all" ? "Toutes les données" :
+    start && end ? `Du ${start} au ${end}` : "Sélectionne une plage";
+
   let html = `
     <div class="header"><p class="title">🍧 Tableau de bord — Coco Frutti</p></div>
     <div class="content">
+      <div class="card">
+        <div class="section-label">Période affichée</div>
+        <div class="period-bar">
+          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">2 dernières semaines</button>
+          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">30 derniers jours</button>
+          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">Tout l'historique</button>
+          <div class="period-dates">
+            <input type="date" id="customStart" value="${period.mode === "custom" ? period.start || "" : ""}" />
+            <span>à</span>
+            <input type="date" id="customEnd" value="${period.mode === "custom" ? period.end || "" : ""}" />
+            <button class="period-btn" id="customApply">Appliquer</button>
+          </div>
+        </div>
+        <div class="period-label">${periodLabel}</div>
+      </div>
       <div class="card">
         <div class="section-label">Ajouter un restaurant</div>
         <div class="add-form">
@@ -141,6 +186,20 @@ function render() {
   });
 
   document.getElementById("app").innerHTML = html;
+
+  document.querySelectorAll("[data-period]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      period = { mode: btn.dataset.period, start: null, end: null };
+      await load();
+    });
+  });
+  document.getElementById("customApply").addEventListener("click", async () => {
+    const s = document.getElementById("customStart").value;
+    const e = document.getElementById("customEnd").value;
+    if (!s || !e) return;
+    period = { mode: "custom", start: s, end: e };
+    await load();
+  });
 
   document.getElementById("addRestaurantBtn").addEventListener("click", async () => {
     const name = document.getElementById("newRestaurantName").value.trim();
