@@ -135,8 +135,30 @@ app.post("/api/employee/:code/messages", (req, res) => {
   if (body.length > 2000) return res.status(400).json({ error: "Message trop long" });
 
   const id = nanoid(10);
-  db.prepare("INSERT INTO messages (id, employee_id, body) VALUES (?,?,?)").run(id, emp.id, body);
+  db.prepare("INSERT INTO messages (id, employee_id, body, sender) VALUES (?,?,?,'employee')").run(id, emp.id, body);
   res.json({ ok: true, id });
+});
+
+app.get("/api/employee/:code/messages", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  const messages = db
+    .prepare("SELECT id, body, sender, is_read, created_at FROM messages WHERE employee_id = ? ORDER BY created_at ASC")
+    .all(emp.id);
+  res.json({ messages });
+});
+
+app.post("/api/employee/:code/messages/mark-read", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  db.prepare("UPDATE messages SET is_read=1 WHERE employee_id=? AND sender='admin'").run(emp.id);
+  res.json({ ok: true });
 });
 
 // =========================================================
@@ -239,13 +261,26 @@ app.delete("/api/admin/restaurants/:id", requireAdmin, (req, res) => {
 
 app.get("/api/admin/messages", requireAdmin, (req, res) => {
   const messages = db.prepare(`
-    SELECT m.id, m.body, m.is_read, m.created_at, e.name AS employee_name, e.restaurant_id, r.name AS restaurant_name
+    SELECT m.id, m.body, m.sender, m.is_read, m.created_at, e.id AS employee_id, e.name AS employee_name, e.restaurant_id, r.name AS restaurant_name
     FROM messages m
     JOIN employees e ON e.id = m.employee_id
     JOIN restaurants r ON r.id = e.restaurant_id
     ORDER BY m.created_at DESC
   `).all();
   res.json({ messages });
+});
+
+app.post("/api/admin/employees/:id/messages", requireAdmin, (req, res) => {
+  const emp = db.prepare("SELECT * FROM employees WHERE id = ?").get(req.params.id);
+  if (!emp) return res.status(404).json({ error: "Employé introuvable" });
+
+  const body = (req.body.body || "").trim();
+  if (!body) return res.status(400).json({ error: "Message vide" });
+  if (body.length > 2000) return res.status(400).json({ error: "Message trop long" });
+
+  const id = nanoid(10);
+  db.prepare("INSERT INTO messages (id, employee_id, body, sender) VALUES (?,?,?,'admin')").run(id, emp.id, body);
+  res.json({ ok: true, id });
 });
 
 app.post("/api/admin/messages/:id/read", requireAdmin, (req, res) => {

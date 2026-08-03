@@ -51,10 +51,19 @@ CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL REFERENCES employees(id),
   body TEXT NOT NULL,
+  sender TEXT DEFAULT 'employee',
   is_read INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
 `);
+
+// Migration : ajoute la colonne sender ('employee' | 'admin') si la table messages existait déjà
+// sans cette colonne, pour permettre les réponses du gérant dans la même conversation.
+try {
+  db.exec(`ALTER TABLE messages ADD COLUMN sender TEXT DEFAULT 'employee';`);
+} catch (e) {
+  // colonne déjà présente — rien à faire
+}
 
 // Migrations sécuritaires : ajoute les colonnes si la base existait déjà (volume persistant)
 // sans ces colonnes. Ignore l'erreur si elles existent déjà.
