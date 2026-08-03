@@ -30,6 +30,18 @@
   .link-row .link-box { flex: 1; margin-top: 0; }
   .copy-btn { background: #0B5D5C; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
   .copy-btn.copied { background: #2E9E5B; }
+  .report-toggle {
+    background: #F1EEE6; color: #0B5D5C; font-size: 11px; font-weight: 700;
+    padding: 6px 12px; border-radius: 999px; margin-top: 8px;
+  }
+  .report-table-wrap { margin-top: 10px; overflow-x: auto; }
+  .report-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .report-table th {
+    text-align: left; font-size: 9px; text-transform: uppercase; color: rgba(0,0,0,0.45);
+    padding: 4px 6px; border-bottom: 1px solid #EEE8DC; white-space: nowrap;
+  }
+  .report-table td { padding: 5px 6px; border-bottom: 1px solid #F5F1E8; white-space: nowrap; }
+  .report-table tr:last-child td { border-bottom: none; }
   .totals { font-size: 12px; text-align: right; }
   .totals b { color: #2E9E5B; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
@@ -119,6 +131,12 @@ async function load() {
   }
 }
 
+function fmtDateShortFR(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("fr-CA", { weekday: "short", day: "numeric", month: "short" });
+}
+
 function fmtDateFR(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T12:00:00");
@@ -204,6 +222,31 @@ function render() {
               <div class="employee-stat-value" style="color:#F2994A; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
             </div>
           </div>
+          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">📊 Voir le détail par jour (${e.entries.length})</button>
+          <div class="report-table-wrap" id="report-${e.id}" style="display:none;">
+            ${e.entries.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5); padding:8px 0;">Aucune journée dans cette période.</p>` : `
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Date</th><th>Ventes</th><th>Clients</th><th>%</th><th>Remis</th><th>Net</th><th>Moy./cl.</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${e.entries.map(d => `
+                  <tr>
+                    <td>${fmtDateShortFR(d.date)}</td>
+                    <td>${fmtMoney(d.ventes)}</td>
+                    <td>${d.clients}</td>
+                    <td>${fmtPct(d.pct / 100)}</td>
+                    <td>${fmtMoney(d.remis)}</td>
+                    <td style="color:#2E9E5B; font-weight:700;">${fmtMoney(d.net)}</td>
+                    <td>${fmtMoney(d.moyenne)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+            `}
+          </div>
         </div>
       `;
     });
@@ -251,6 +294,15 @@ function render() {
         body: JSON.stringify({ restaurant_id: rid, name, employee_number: number }),
       });
       await load();
+    });
+  });
+
+  document.querySelectorAll('[data-action="toggleReport"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const wrap = document.getElementById(`report-${btn.dataset.emp}`);
+      const isOpen = wrap.style.display !== "none";
+      wrap.style.display = isOpen ? "none" : "block";
+      btn.textContent = btn.textContent.replace(isOpen ? "▲" : "📊", isOpen ? "📊" : "▲");
     });
   });
 
