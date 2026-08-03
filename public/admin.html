@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Admin — Suivi des pourboires</title>
+<title>Admin — Suivi des pourboires / Tip Tracking</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #FBF7F0; color: #17302D; padding-bottom: 60px; }
-  .header { background: linear-gradient(135deg,#0B5D5C 0%,#0E7C7B 55%,#F2994A 130%); padding: 24px 20px; color: white; }
+  .header { background: linear-gradient(135deg,#0B5D5C 0%,#0E7C7B 55%,#F2994A 130%); padding: 24px 20px; color: white; display:flex; justify-content:space-between; align-items:center; }
   .title { font-size: 22px; font-weight: 800; margin: 0; }
+  .lang-toggle { background: rgba(255,255,255,0.15); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
   .content { padding: 16px; max-width: 900px; margin: 0 auto; }
   .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 14px; }
   .login-box { max-width: 340px; margin: 60px auto; text-align: center; }
@@ -69,6 +70,108 @@ let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
 let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
 
+// ---------- Traductions ----------
+const I18N = {
+  fr: {
+    dashboardTitle: "🍧 Tableau de bord — Coco Frutti",
+    accesAdmin: "Accès admin",
+    motDePasse: "Mot de passe",
+    entrer: "Entrer",
+    motDePasseIncorrect: "Mot de passe incorrect",
+    periodeAffichee: "Période affichée",
+    p2Semaines: "2 dernières semaines",
+    p30Jours: "30 derniers jours",
+    pTout: "Tout l'historique",
+    a: "à",
+    appliquer: "Appliquer",
+    toutesLesDonnees: "Toutes les données, sans limite de date",
+    choisisDate: "Choisis une date de début et de fin",
+    duAu: (s, e) => `Du ${s} au ${e}`,
+    exporter: "📥 Exporter en CSV (pour Numbers/Excel)",
+    ajouterRestaurant: "Ajouter un restaurant",
+    nomRestaurantPlaceholder: "Nom du restaurant (ex: Coco Frutti 016)",
+    ajouter: "+ Ajouter",
+    supprimer: "Supprimer",
+    total: "Total",
+    ventes: "ventes",
+    pourboireNet: "pourboire net",
+    code: "Code",
+    copier: "📋 Copier",
+    copie: "✓ Copié",
+    copieImpossible: "Impossible de copier automatiquement. Lien : ",
+    retirer: "Retirer",
+    ventesTotales: "Ventes totales",
+    pourboireNetTotal: "Pourboire net total",
+    pctMoyenLabel: "% moyen",
+    voirDetail: (n) => `📊 Voir le détail par jour (${n})`,
+    aucuneJournee: "Aucune journée dans cette période.",
+    thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu",
+    nomEmployePlaceholder: "Nom employé",
+    numEmployePlaceholder: "# employé",
+    ajouterEmploye: "+ Employé",
+    confirmRetirerEmploye: "Retirer cet employé et ses données?",
+    confirmSupprimerRestaurant: "Supprimer ce restaurant et toutes ses données?",
+    csvHeaders: ["Restaurant", "Employé", "# Employé", "Date", "Ventes $", "# Clients", "% Pourboire", "Remis employés $", "Pourboire brut $", "Pourboire net $", "Moy./client $"],
+    tout: "tout",
+    locale: "fr-CA",
+  },
+  en: {
+    dashboardTitle: "🍧 Dashboard — Coco Frutti",
+    accesAdmin: "Admin access",
+    motDePasse: "Password",
+    entrer: "Enter",
+    motDePasseIncorrect: "Incorrect password",
+    periodeAffichee: "Period shown",
+    p2Semaines: "Last 2 weeks",
+    p30Jours: "Last 30 days",
+    pTout: "All history",
+    a: "to",
+    appliquer: "Apply",
+    toutesLesDonnees: "All data, no date limit",
+    choisisDate: "Choose a start and end date",
+    duAu: (s, e) => `From ${s} to ${e}`,
+    exporter: "📥 Export CSV (for Numbers/Excel)",
+    ajouterRestaurant: "Add a restaurant",
+    nomRestaurantPlaceholder: "Restaurant name (e.g. Coco Frutti 016)",
+    ajouter: "+ Add",
+    supprimer: "Delete",
+    total: "Total",
+    ventes: "sales",
+    pourboireNet: "net tips",
+    code: "Code",
+    copier: "📋 Copy",
+    copie: "✓ Copied",
+    copieImpossible: "Could not copy automatically. Link: ",
+    retirer: "Remove",
+    ventesTotales: "Total sales",
+    pourboireNetTotal: "Total net tips",
+    pctMoyenLabel: "Avg. %",
+    voirDetail: (n) => `📊 See daily detail (${n})`,
+    aucuneJournee: "No days in this period.",
+    thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt",
+    nomEmployePlaceholder: "Employee name",
+    numEmployePlaceholder: "# employee",
+    ajouterEmploye: "+ Employee",
+    confirmRetirerEmploye: "Remove this employee and their data?",
+    confirmSupprimerRestaurant: "Delete this restaurant and all its data?",
+    csvHeaders: ["Restaurant", "Employee", "# Employee", "Date", "Sales $", "# Customers", "Tip %", "Given to staff $", "Gross tips $", "Net tips $", "Avg./customer $"],
+    tout: "all",
+    locale: "en-CA",
+  },
+};
+
+let lang = localStorage.getItem("coco-lang-admin") || "fr";
+function t(key, ...args) {
+  const val = I18N[lang][key];
+  return typeof val === "function" ? val(...args) : val;
+}
+function setLang(l) {
+  lang = l;
+  localStorage.setItem("coco-lang-admin", l);
+  document.documentElement.lang = l;
+  if (overview) render(); else renderLogin();
+}
+
 function localISO(d) {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -98,14 +201,14 @@ async function api(path, opts) {
   return res.json();
 }
 
-function fmtMoney(n) { n = isFinite(n) ? n : 0; return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" }); }
+function fmtMoney(n) { n = isFinite(n) ? n : 0; return n.toLocaleString(t("locale"), { style: "currency", currency: "CAD" }); }
 function fmtPct(n) { n = isFinite(n) ? n : 0; return (n * 100).toFixed(1) + "%"; }
 
 async function login(password) {
   const r = await fetch("/api/admin/login", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }),
   });
-  if (!r.ok) throw new Error("Mot de passe incorrect");
+  if (!r.ok) throw new Error(t("motDePasseIncorrect"));
   const { token } = await r.json();
   TOKEN = token;
   sessionStorage.setItem("adminToken", token);
@@ -114,11 +217,15 @@ async function login(password) {
 function renderLogin(errorMsg) {
   document.getElementById("app").innerHTML = `
     <div class="login-box">
-      <h2>Accès admin</h2>
-      <input type="password" id="pw" placeholder="Mot de passe" />
-      <button id="loginBtn" style="width:100%">Entrer</button>
+      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+        <button class="lang-toggle" id="langToggle" style="background:#EAE4D8; color:#17302D;">${lang === "fr" ? "EN" : "FR"}</button>
+      </div>
+      <h2>${t("accesAdmin")}</h2>
+      <input type="password" id="pw" placeholder="${t("motDePasse")}" />
+      <button id="loginBtn" style="width:100%">${t("entrer")}</button>
       ${errorMsg ? `<p style="color:#F26D6D; font-size:12px;">${errorMsg}</p>` : ""}
     </div>`;
+  document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
   document.getElementById("loginBtn").addEventListener("click", async () => {
     try {
       await login(document.getElementById("pw").value);
@@ -142,52 +249,55 @@ async function load() {
   }
 }
 
-function fmtDateShortFR(iso) {
+function fmtDateShort(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T12:00:00");
-  return d.toLocaleDateString("fr-CA", { weekday: "short", day: "numeric", month: "short" });
+  return d.toLocaleDateString(t("locale"), { weekday: "short", day: "numeric", month: "short" });
 }
 
-function fmtDateFR(iso) {
+function fmtDateLong(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T12:00:00");
-  return d.toLocaleDateString("fr-CA", { day: "numeric", month: "long", year: "numeric" });
+  return d.toLocaleDateString(t("locale"), { day: "numeric", month: "long", year: "numeric" });
 }
 
 function render() {
   const origin = window.location.origin;
   const { start, end } = resolvePeriod();
   const periodLabel =
-    period.mode === "all" ? "Toutes les données, sans limite de date" :
-    start && end ? `Du ${fmtDateFR(start)} au ${fmtDateFR(end)}` : "Choisis une date de début et de fin";
+    period.mode === "all" ? t("toutesLesDonnees") :
+    start && end ? t("duAu", fmtDateLong(start), fmtDateLong(end)) : t("choisisDate");
 
   let html = `
-    <div class="header"><p class="title">🍧 Tableau de bord — Coco Frutti</p></div>
+    <div class="header">
+      <p class="title">${t("dashboardTitle")}</p>
+      <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+    </div>
     <div class="content">
       <div class="card">
-        <div class="section-label">Période affichée</div>
+        <div class="section-label">${t("periodeAffichee")}</div>
         <div class="period-bar">
-          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">2 dernières semaines</button>
-          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">30 derniers jours</button>
-          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">Tout l'historique</button>
+          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
+          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
+          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
           <div class="period-dates">
             <input type="date" id="customStart" value="${period.mode === "custom" ? period.start || "" : ""}" />
-            <span>à</span>
+            <span>${t("a")}</span>
             <input type="date" id="customEnd" value="${period.mode === "custom" ? period.end || "" : ""}" />
-            <button class="period-btn" id="customApply">Appliquer</button>
+            <button class="period-btn" id="customApply">${t("appliquer")}</button>
           </div>
         </div>
         <div class="period-label">${periodLabel}</div>
-        <button class="export-btn" id="exportBtn">📥 Exporter en CSV (pour Numbers/Excel)</button>
+        <button class="export-btn" id="exportBtn">${t("exporter")}</button>
       </div>
   `;
 
   html += `
       <div class="card">
-        <div class="section-label">Ajouter un restaurant</div>
+        <div class="section-label">${t("ajouterRestaurant")}</div>
         <div class="add-form">
-          <input type="text" id="newRestaurantName" placeholder="Nom du restaurant (ex: Coco Frutti 016)" />
-          <button id="addRestaurantBtn">+ Ajouter</button>
+          <input type="text" id="newRestaurantName" placeholder="${t("nomRestaurantPlaceholder")}" />
+          <button id="addRestaurantBtn">${t("ajouter")}</button>
         </div>
       </div>
   `;
@@ -199,10 +309,10 @@ function render() {
       <div class="card">
         <div class="restaurant-title">
           <span>${r.name}</span>
-          <button class="danger" data-action="delRestaurant" data-id="${r.id}" style="font-size:11px; padding:4px 10px;">Supprimer</button>
+          <button class="danger" data-action="delRestaurant" data-id="${r.id}" style="font-size:11px; padding:4px 10px;">${t("supprimer")}</button>
         </div>
         <div style="font-size:12px; color:rgba(0,0,0,0.55); margin-bottom:8px;">
-          Total : ${fmtMoney(totVentes)} ventes · <b style="color:#2E9E5B">${fmtMoney(totNet)}</b> pourboire net
+          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#2E9E5B">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
         </div>
     `;
     r.employees.forEach((e) => {
@@ -212,41 +322,41 @@ function render() {
           <div class="employee-row">
             <div>
               <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
-              <div class="employee-sub">Code : <b>${e.access_code}</b></div>
+              <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
               <div class="link-row">
                 <div class="link-box">${link}</div>
-                <button class="copy-btn" data-action="copyLink" data-link="${link}">📋 Copier</button>
+                <button class="copy-btn" data-action="copyLink" data-link="${link}">${t("copier")}</button>
               </div>
             </div>
-            <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">Retirer</button>
+            <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
           </div>
           <div class="employee-stats">
             <div>
-              <div class="employee-stat-label">Ventes totales</div>
+              <div class="employee-stat-label">${t("ventesTotales")}</div>
               <div class="employee-stat-value">${fmtMoney(e.totals.ventes)}</div>
             </div>
             <div>
-              <div class="employee-stat-label">Pourboire net total</div>
+              <div class="employee-stat-label">${t("pourboireNetTotal")}</div>
               <div class="employee-stat-value" style="color:#2E9E5B;">${fmtMoney(e.totals.net)}</div>
             </div>
             <div>
-              <div class="employee-stat-label">% moyen</div>
+              <div class="employee-stat-label">${t("pctMoyenLabel")}</div>
               <div class="employee-stat-value" style="color:#F2994A; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
             </div>
           </div>
-          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">📊 Voir le détail par jour (${e.entries.length})</button>
+          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${t("voirDetail", e.entries.length)}</button>
           <div class="report-table-wrap" id="report-${e.id}" style="display:none;">
-            ${e.entries.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5); padding:8px 0;">Aucune journée dans cette période.</p>` : `
+            ${e.entries.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5); padding:8px 0;">${t("aucuneJournee")}</p>` : `
             <table class="report-table">
               <thead>
                 <tr>
-                  <th>Date</th><th>Ventes</th><th>Clients</th><th>%</th><th>Remis</th><th>Net</th><th>Moy./cl.</th><th>Reçu</th>
+                  <th>${t("thDate")}</th><th>${t("thVentes")}</th><th>${t("thClients")}</th><th>${t("thPct")}</th><th>${t("thRemis")}</th><th>${t("thNet")}</th><th>${t("thMoyCl")}</th><th>${t("thRecu")}</th>
                 </tr>
               </thead>
               <tbody>
                 ${e.entries.map(d => `
                   <tr>
-                    <td>${fmtDateShortFR(d.date)}</td>
+                    <td>${fmtDateShort(d.date)}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
                     <td>${fmtPct(d.pct / 100)}</td>
@@ -265,15 +375,19 @@ function render() {
     });
     html += `
         <div class="add-form">
-          <input type="text" placeholder="Nom employé" data-restaurant="${r.id}" class="empName" />
-          <input type="text" placeholder="# employé" data-restaurant="${r.id}" class="empNumber" style="max-width:100px;" />
-          <button data-action="addEmployee" data-id="${r.id}">+ Employé</button>
+          <input type="text" placeholder="${t("nomEmployePlaceholder")}" data-restaurant="${r.id}" class="empName" />
+          <input type="text" placeholder="${t("numEmployePlaceholder")}" data-restaurant="${r.id}" class="empNumber" style="max-width:100px;" />
+          <button data-action="addEmployee" data-id="${r.id}">${t("ajouterEmploye")}</button>
         </div>
       </div>
     `;
   });
 
+  html += `</div>`; // ferme .content
+
   document.getElementById("app").innerHTML = html;
+
+  document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
 
   document.querySelectorAll("[data-period]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -317,13 +431,12 @@ function render() {
       const wrap = document.getElementById(`report-${btn.dataset.emp}`);
       const isOpen = wrap.style.display !== "none";
       wrap.style.display = isOpen ? "none" : "block";
-      btn.textContent = btn.textContent.replace(isOpen ? "▲" : "📊", isOpen ? "📊" : "▲");
     });
   });
 
   document.querySelectorAll('[data-action="delEmployee"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Retirer cet employé et ses données?")) return;
+      if (!confirm(t("confirmRetirerEmploye"))) return;
       await api(`/api/admin/employees/${btn.dataset.id}`, { method: "DELETE" });
       await load();
     });
@@ -346,21 +459,21 @@ function render() {
           document.body.removeChild(ta);
         }
         const original = btn.textContent;
-        btn.textContent = "✓ Copié";
+        btn.textContent = t("copie");
         btn.classList.add("copied");
         setTimeout(() => {
           btn.textContent = original;
           btn.classList.remove("copied");
         }, 1500);
       } catch (e) {
-        alert("Impossible de copier automatiquement. Lien : " + link);
+        alert(t("copieImpossible") + link);
       }
     });
   });
 
   document.querySelectorAll('[data-action="delRestaurant"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Supprimer ce restaurant et toutes ses données?")) return;
+      if (!confirm(t("confirmSupprimerRestaurant"))) return;
       await api(`/api/admin/restaurants/${btn.dataset.id}`, { method: "DELETE" });
       await load();
     });
@@ -376,9 +489,7 @@ function csvEscape(val) {
 }
 
 function exportCSV() {
-  const rows = [
-    ["Restaurant", "Employé", "# Employé", "Date", "Ventes $", "# Clients", "% Pourboire", "Remis employés $", "Pourboire brut $", "Pourboire net $", "Moy./client $"]
-  ];
+  const rows = [t("csvHeaders")];
 
   overview.restaurants.forEach((r) => {
     r.employees.forEach((e) => {
@@ -401,11 +512,10 @@ function exportCSV() {
   });
 
   const csvContent = rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
-  // BOM UTF-8 pour que les accents s'affichent correctement dans Excel/Numbers
   const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const { start, end } = resolvePeriod();
-  const suffix = period.mode === "all" ? "tout" : `${start}_au_${end}`;
+  const suffix = period.mode === "all" ? t("tout") : `${start}_${lang === "fr" ? "au" : "to"}_${end}`;
   const a = document.createElement("a");
   a.href = url;
   a.download = `coco-frutti-pourboires-${suffix}.csv`;

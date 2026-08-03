@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Suivi des pourboires</title>
+<title>Suivi des pourboires / Tip Tracking</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -14,9 +14,11 @@
     background: linear-gradient(135deg,#0B5D5C 0%,#0E7C7B 55%,#F2994A 130%);
     padding: 28px 20px 36px; border-radius: 0 0 28px 28px; color: white;
   }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.75; font-weight: 600; margin: 0; }
   .title { font-size: 24px; font-weight: 800; margin: 4px 0 0; }
   .saved-note { font-size: 11px; opacity: 0.6; margin-top: 8px; }
+  .lang-toggle { background: rgba(255,255,255,0.15); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
   .content { padding: 0 16px; }
   .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
   .card { background: white; border-radius: 16px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); }
@@ -63,6 +65,86 @@
 const CODE = window.location.pathname.split("/").pop();
 let state = null;
 
+// ---------- Traductions ----------
+const I18N = {
+  fr: {
+    savedNote: "Sauvegardé automatiquement",
+    hello: "Salut",
+    ventesTotal: "Ventes totales",
+    pourboiresNets: "Pourboires nets",
+    pctMoyen: "% Pourboire moyen",
+    moyClient: "$ moyen / client",
+    journees: (n) => `Journées (${n})`,
+    ajouter: "+ Ajouter",
+    multiEntryHint: "Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).",
+    ventesLabel: "Ventes $",
+    clientsLabel: "# Clients",
+    pctLabel: "% Pourboire",
+    remisLabel: "Remis employés $",
+    moyClientShort: "Moy./client",
+    pourboires: "Pourboires",
+    net: "Net",
+    aucunePhoto: "Aucune photo",
+    remplacer: "Remplacer",
+    ajouterMot: "Ajouter",
+    releve: "le relevé",
+    envoiEnCours: "⏳ Envoi...",
+    erreurPhoto: "Erreur lors de l'envoi de la photo. Réessaie.",
+    confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
+    periodeAffichee: "Période affichée",
+    p2Semaines: "2 semaines",
+    p30Jours: "30 jours",
+    pTout: "Tout",
+    codeInvalideTitle: "Code invalide",
+    codeInvalideMsg: "Vérifie le lien reçu, ou contacte ton gérant.",
+    locale: "fr-CA",
+  },
+  en: {
+    savedNote: "Auto-saved",
+    hello: "Hi",
+    ventesTotal: "Total sales",
+    pourboiresNets: "Net tips",
+    pctMoyen: "Avg. tip %",
+    moyClient: "$ avg / customer",
+    journees: (n) => `Days (${n})`,
+    ajouter: "+ Add",
+    multiEntryHint: "You can add several entries for the same day (e.g. lunch and dinner separately).",
+    ventesLabel: "Sales $",
+    clientsLabel: "# Customers",
+    pctLabel: "Tip %",
+    remisLabel: "Given to staff $",
+    moyClientShort: "Avg./customer",
+    pourboires: "Tips",
+    net: "Net",
+    aucunePhoto: "No photo",
+    remplacer: "Replace",
+    ajouterMot: "Add",
+    releve: "receipt",
+    envoiEnCours: "⏳ Uploading...",
+    erreurPhoto: "Error uploading photo. Try again.",
+    confirmDelete: "Delete this day? This cannot be undone.",
+    periodeAffichee: "Period shown",
+    p2Semaines: "2 weeks",
+    p30Jours: "30 days",
+    pTout: "All",
+    codeInvalideTitle: "Invalid code",
+    codeInvalideMsg: "Check the link you received, or contact your manager.",
+    locale: "en-CA",
+  },
+};
+
+let lang = localStorage.getItem("coco-lang") || "fr";
+function t(key, ...args) {
+  const val = I18N[lang][key];
+  return typeof val === "function" ? val(...args) : val;
+}
+function setLang(l) {
+  lang = l;
+  localStorage.setItem("coco-lang", l);
+  document.documentElement.lang = l;
+  render();
+}
+
 async function api(path, opts) {
   const res = await fetch(path, {
     ...opts,
@@ -73,7 +155,6 @@ async function api(path, opts) {
 }
 
 // Retourne la date d'AUJOURD'HUI selon l'heure locale de l'appareil, pas UTC.
-// (new Date().toISOString() convertit en UTC, ce qui bascule au lendemain en soirée au Québec — bug à éviter.)
 function todayLocalISO() {
   const d = new Date();
   const year = d.getFullYear();
@@ -97,7 +178,7 @@ function resolvePeriod() {
   return { start: null, end: null }; // all
 }
 
-// Redimensionne et compresse la photo avant l'envoi (économise l'espace de stockage et les données mobiles).
+// Redimensionne et compresse la photo avant l'envoi.
 function compressImage(file, maxDim = 1400, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -122,7 +203,7 @@ function compressImage(file, maxDim = 1400, quality = 0.72) {
 
 function fmtMoney(n) {
   n = isFinite(n) ? n : 0;
-  return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
+  return n.toLocaleString(t("locale"), { style: "currency", currency: "CAD" });
 }
 function fmtPct(n) {
   n = isFinite(n) ? n : 0;
@@ -136,8 +217,8 @@ async function load() {
   } catch (e) {
     document.getElementById("app").innerHTML = `
       <div class="error-box">
-        <h2>Code invalide</h2>
-        <p>Vérifie le lien reçu, ou contacte ton gérant.</p>
+        <h2>${t("codeInvalideTitle")}</h2>
+        <p>${t("codeInvalideMsg")}</p>
       </div>`;
   }
 }
@@ -164,31 +245,36 @@ function render() {
 
   document.getElementById("app").innerHTML = `
     <div class="header">
-      <p class="eyebrow">${restaurant.name}</p>
-      <h1 class="title">Salut ${employee.name.split(" ")[0]} 👋</h1>
-      <p class="saved-note">Sauvegardé automatiquement</p>
+      <div class="header-top">
+        <div>
+          <p class="eyebrow">${restaurant.name}</p>
+          <h1 class="title">${t("hello")} ${employee.name.split(" ")[0]} 👋</h1>
+        </div>
+        <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+      </div>
+      <p class="saved-note">${t("savedNote")}</p>
     </div>
     <div class="content">
       <div class="card period-card">
-        <div class="period-title">Période affichée</div>
+        <div class="period-title">${t("periodeAffichee")}</div>
         <div class="period-bar">
-          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">2 semaines</button>
-          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">30 jours</button>
-          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">Tout</button>
+          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
+          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
+          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
         </div>
       </div>
       <div class="kpi-grid">
-        <div class="card"><div class="kpi-label" style="color:#0B5D5C">💰 Ventes totales</div><div class="kpi-value" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#2E9E5B">📈 Pourboires nets</div><div class="kpi-value" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#F2994A">% Pourboire moyen</div><div class="kpi-value" style="color:#F2994A">${fmtPct(pctMoyen)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#F26D6D">👥 $ moyen / client</div><div class="kpi-value" style="color:#F26D6D">${fmtMoney(parClient)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#0B5D5C">💰 ${t("ventesTotal")}</div><div class="kpi-value" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#2E9E5B">📈 ${t("pourboiresNets")}</div><div class="kpi-value" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#F2994A">${t("pctMoyen")}</div><div class="kpi-value" style="color:#F2994A">${fmtPct(pctMoyen)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#F26D6D">👥 ${t("moyClient")}</div><div class="kpi-value" style="color:#F26D6D">${fmtMoney(parClient)}</div></div>
       </div>
 
       <div class="section-title">
-        <span>Journées (${entries.length})</span>
-        <button class="add-btn" id="addBtn">+ Ajouter</button>
+        <span>${t("journees", entries.length)}</span>
+        <button class="add-btn" id="addBtn">${t("ajouter")}</button>
       </div>
-      <p style="font-size:11px; color:rgba(0,0,0,0.45); margin:-4px 0 12px;">Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).</p>
+      <p style="font-size:11px; color:rgba(0,0,0,0.45); margin:-4px 0 12px;">${t("multiEntryHint")}</p>
       <div id="daysList"></div>
     </div>
   `;
@@ -204,31 +290,35 @@ function render() {
         <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
       </div>
       <div class="field-grid">
-        <div class="field"><label>Ventes $</label>
+        <div class="field"><label>${t("ventesLabel")}</label>
           <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes" /></div>
-        <div class="field"><label># Clients</label>
+        <div class="field"><label>${t("clientsLabel")}</label>
           <input type="number" inputmode="numeric" placeholder="0" value="${e.clients || ""}" data-id="${e.id}" data-field="clients" /></div>
-        <div class="field pct"><label>% Pourboire</label>
+        <div class="field pct"><label>${t("pctLabel")}</label>
           <input type="number" inputmode="decimal" placeholder="10" value="${e.pct || ""}" data-id="${e.id}" data-field="pct" /></div>
-        <div class="field"><label>Remis employés $</label>
+        <div class="field"><label>${t("remisLabel")}</label>
           <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remis || ""}" data-id="${e.id}" data-field="remis" /></div>
       </div>
       <div class="day-summary">
-        <span>Moy./client <b>${fmtMoney(e.moyenne)}</b></span>
-        <span>Pourboires <b>${fmtMoney(e.pourboireBrut)}</b></span>
-        <span class="net">Net <b>${fmtMoney(e.net)}</b></span>
+        <span>${t("moyClientShort")} <b>${fmtMoney(e.moyenne)}</b></span>
+        <span>${t("pourboires")} <b>${fmtMoney(e.pourboireBrut)}</b></span>
+        <span class="net">${t("net")} <b>${fmtMoney(e.net)}</b></span>
       </div>
       <div class="photo-row">
         ${e.photo_filename
-          ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="Relevé Interac" /></a>`
-          : `<span class="photo-empty">Aucune photo</span>`}
+          ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="receipt" /></a>`
+          : `<span class="photo-empty">${t("aucunePhoto")}</span>`}
         <label class="photo-btn">
-          📷 ${e.photo_filename ? "Remplacer" : "Ajouter"} le relevé
+          📷 ${e.photo_filename ? t("remplacer") : t("ajouterMot")} ${t("releve")}
           <input type="file" accept="image/*" capture="environment" data-id="${e.id}" class="photo-input" hidden />
         </label>
       </div>
     `;
     list.appendChild(card);
+  });
+
+  document.getElementById("langToggle").addEventListener("click", () => {
+    setLang(lang === "fr" ? "en" : "fr");
   });
 
   list.querySelectorAll('input[data-field]').forEach((inp) => {
@@ -244,7 +334,7 @@ function render() {
   });
   list.querySelectorAll('[data-action="del"]').forEach((btn) => {
     btn.addEventListener("click", async (ev) => {
-      if (!confirm("Supprimer cette journée? Cette action ne peut pas être annulée.")) return;
+      if (!confirm(t("confirmDelete"))) return;
       await deleteEntry(ev.target.dataset.id);
       await load();
     });
@@ -256,8 +346,8 @@ function render() {
       if (!file) return;
       const id = ev.target.dataset.id;
       const label = ev.target.closest(".photo-btn");
-      const originalText = label.textContent;
-      label.textContent = "⏳ Envoi...";
+      const originalHTML = label.innerHTML;
+      label.textContent = t("envoiEnCours");
       try {
         const compressed = await compressImage(file);
         await api(`/api/employee/${CODE}/entries/${id}/photo`, {
@@ -266,8 +356,8 @@ function render() {
         });
         await load();
       } catch (e) {
-        alert("Erreur lors de l'envoi de la photo. Réessaie.");
-        label.textContent = originalText;
+        alert(t("erreurPhoto"));
+        label.innerHTML = originalHTML;
       }
     });
   });
