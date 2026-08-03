@@ -48,6 +48,25 @@
   .report-table td { padding: 5px 6px; border-bottom: 1px solid #F5F1E8; white-space: nowrap; }
   .report-table tr:last-child td { border-bottom: none; }
   .report-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; border: 1px solid #EEE8DC; vertical-align: middle; }
+  .row-flagged-owed-employee { background: #FDECEC; }
+  .row-flagged-owed-employer { background: #FFF9E8; }
+  .transfer-btn { background: #F26D6D; color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+  .transfer-btn.owed-employer { background: #F2994A; }
+  .transfer-done { color: #2E9E5B; font-weight: 700; font-size: 11px; white-space: nowrap; }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-box { background: white; border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; }
+  .modal-box p { font-size: 13px; color: rgba(0,0,0,0.6); margin: 0 0 14px; }
+  .modal-box input[type=date] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 14px; }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions button { flex: 1; }
+  .pending-banner {
+    background: #FDECEC; border: 1px solid #F5B8B8; color: #7A1F1F; border-radius: 14px;
+    padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px;
+  }
   .totals { font-size: 12px; text-align: right; }
   .totals b { color: #2E9E5B; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
@@ -68,6 +87,17 @@
 <body>
 
 <div id="app"></div>
+<div id="modalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h3 id="modalTitle"></h3>
+    <p id="modalMsg"></p>
+    <input type="date" id="modalDate" />
+    <div class="modal-actions">
+      <button class="secondary" id="modalCancel"></button>
+      <button id="modalConfirm"></button>
+    </div>
+  </div>
+</div>
 
 <script>
 let TOKEN = sessionStorage.getItem("adminToken") || "";
@@ -109,7 +139,23 @@ const I18N = {
     pctMoyenLabel: "% moyen",
     voirDetail: (n) => `📊 Voir le détail par jour (${n})`,
     aucuneJournee: "Aucune journée dans cette période.",
-    thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu",
+    thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement",
+    marquerVire: "Marquer viré",
+    vireOk: (date) => `✓ Viré${date ? " le " + date : ""}`,
+    journeesEnAttente: (owedByMe, owedToMe) => {
+      const parts = [];
+      if (owedByMe > 0) parts.push(`${owedByMe} virement${owedByMe > 1 ? "s" : ""} à faire`);
+      if (owedToMe > 0) parts.push(`${owedToMe} montant${owedToMe > 1 ? "s" : ""} à recevoir`);
+      return "⚠️ " + parts.join(" · ");
+    },
+    remitEmployerOwesShort: "Vous devez",
+    remitEmployeeOwesShort: "Employé doit",
+    confirmTransferTitle: "Confirmer le virement",
+    confirmTransferMsg: "As-tu vraiment envoyé ce virement Interac?",
+    confirmTransferMsgReceived: "As-tu vraiment reçu ce montant de l'employé?",
+    dateDuVirement: "Date du virement",
+    confirmerBtn: "Confirmer",
+    annulerBtn: "Annuler",
     nomEmployePlaceholder: "Nom employé",
     numEmployePlaceholder: "# employé",
     ajouterEmploye: "+ Employé",
@@ -152,7 +198,23 @@ const I18N = {
     pctMoyenLabel: "Avg. %",
     voirDetail: (n) => `📊 See daily detail (${n})`,
     aucuneJournee: "No days in this period.",
-    thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt",
+    thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer",
+    marquerVire: "Mark transferred",
+    vireOk: (date) => `✓ Transferred${date ? " on " + date : ""}`,
+    journeesEnAttente: (owedByMe, owedToMe) => {
+      const parts = [];
+      if (owedByMe > 0) parts.push(`${owedByMe} transfer${owedByMe > 1 ? "s" : ""} to send`);
+      if (owedToMe > 0) parts.push(`${owedToMe} amount${owedToMe > 1 ? "s" : ""} to receive`);
+      return "⚠️ " + parts.join(" · ");
+    },
+    remitEmployerOwesShort: "You owe",
+    remitEmployeeOwesShort: "Employee owes",
+    confirmTransferTitle: "Confirm transfer",
+    confirmTransferMsg: "Did you really send this e-transfer?",
+    confirmTransferMsgReceived: "Did you really receive this amount from the employee?",
+    dateDuVirement: "Transfer date",
+    confirmerBtn: "Confirm",
+    annulerBtn: "Cancel",
     nomEmployePlaceholder: "Employee name",
     numEmployePlaceholder: "# employee",
     ajouterEmploye: "+ Employee",
@@ -272,12 +334,25 @@ function render() {
     period.mode === "all" ? t("toutesLesDonnees") :
     start && end ? t("duAu", fmtDateLong(start), fmtDateLong(end)) : t("choisisDate");
 
+  let owedByMeCount = 0;
+  let owedToMeCount = 0;
+  overview.restaurants.forEach((r) => {
+    r.employees.forEach((e) => {
+      e.entries.forEach((d) => {
+        if (d.remit_direction === "employer_owes" && !d.transferred) owedByMeCount++;
+        if (d.remit_direction === "employee_owes" && !d.transferred) owedToMeCount++;
+      });
+    });
+  });
+  const pendingCount = owedByMeCount + owedToMeCount;
+
   let html = `
     <div class="header">
       <p class="title">${t("dashboardTitle")}</p>
       <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
     </div>
     <div class="content">
+      ${pendingCount > 0 ? `<div class="pending-banner">${t("journeesEnAttente", owedByMeCount, owedToMeCount)}</div>` : ""}
       <div class="card">
         <div class="section-label">${t("periodeAffichee")}</div>
         <div class="period-bar">
@@ -354,12 +429,30 @@ function render() {
             <table class="report-table">
               <thead>
                 <tr>
-                  <th>${t("thDate")}</th><th>${t("thVentes")}</th><th>${t("thClients")}</th><th>${t("thPct")}</th><th>${t("thRemis")}</th><th>${t("thNet")}</th><th>${t("thMoyCl")}</th><th>${t("thRecu")}</th>
+                  <th>${t("thDate")}</th><th>${t("thVentes")}</th><th>${t("thClients")}</th><th>${t("thPct")}</th><th>${t("thRemis")}</th><th>${t("thNet")}</th><th>${t("thMoyCl")}</th><th>${t("thRecu")}</th><th>${t("thVirement")}</th>
                 </tr>
               </thead>
               <tbody>
-                ${e.entries.map(d => `
-                  <tr>
+                ${e.entries.map(d => {
+                  const rowClass = d.remit_direction && !d.transferred
+                    ? (d.remit_direction === "employer_owes" ? "row-flagged-owed-employee" : "row-flagged-owed-employer")
+                    : "";
+                  let virementCell = "—";
+                  if (d.remit_direction) {
+                    if (d.transferred) {
+                      virementCell = `<span class="transfer-done">${t("vireOk", d.transfer_date || "")}</span>`;
+                    } else {
+                      const isEmployerOwes = d.remit_direction === "employer_owes";
+                      const label = isEmployerOwes ? t("remitEmployerOwesShort") : t("remitEmployeeOwesShort");
+                      const btnClass = isEmployerOwes ? "" : "owed-employer";
+                      virementCell = `
+                        <div style="font-size:9px; margin-bottom:3px; color:${isEmployerOwes ? "#7A1F1F" : "#7A5B00"};">${label}</div>
+                        <button class="transfer-btn ${btnClass}" data-action="markTransferred" data-entry="${d.id}" data-direction="${d.remit_direction}">${t("marquerVire")}</button>
+                      `;
+                    }
+                  }
+                  return `
+                  <tr class="${rowClass}">
                     <td>${fmtDateShort(d.date)}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
@@ -368,8 +461,9 @@ function render() {
                     <td style="color:#2E9E5B; font-weight:700;">${fmtMoney(d.net)}</td>
                     <td>${fmtMoney(d.moyenne)}</td>
                     <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
+                    <td>${virementCell}</td>
                   </tr>
-                `).join("")}
+                `;}).join("")}
               </tbody>
             </table>
             `}
@@ -435,6 +529,12 @@ function render() {
       const wrap = document.getElementById(`report-${btn.dataset.emp}`);
       const isOpen = wrap.style.display !== "none";
       wrap.style.display = isOpen ? "none" : "block";
+    });
+  });
+
+  document.querySelectorAll('[data-action="markTransferred"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openTransferModal(btn.dataset.entry, btn.dataset.direction);
     });
   });
 
@@ -527,6 +627,39 @@ function exportCSV() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function openTransferModal(entryId, direction) {
+  const overlay = document.getElementById("modalOverlay");
+  const dateInput = document.getElementById("modalDate");
+  document.getElementById("modalTitle").textContent = t("confirmTransferTitle");
+  document.getElementById("modalMsg").textContent =
+    direction === "employer_owes" ? t("confirmTransferMsg") : t("confirmTransferMsgReceived");
+  dateInput.value = todayISO();
+  document.getElementById("modalCancel").textContent = t("annulerBtn");
+  document.getElementById("modalConfirm").textContent = t("confirmerBtn");
+  overlay.style.display = "flex";
+
+  const cancelBtn = document.getElementById("modalCancel");
+  const confirmBtn = document.getElementById("modalConfirm");
+
+  const close = () => { overlay.style.display = "none"; };
+  const onCancel = () => { close(); cleanup(); };
+  const onConfirm = async () => {
+    await api(`/api/admin/entries/${entryId}/transferred`, {
+      method: "POST",
+      body: JSON.stringify({ transferred: true, transfer_date: dateInput.value }),
+    });
+    close();
+    cleanup();
+    await load();
+  };
+  function cleanup() {
+    cancelBtn.removeEventListener("click", onCancel);
+    confirmBtn.removeEventListener("click", onConfirm);
+  }
+  cancelBtn.addEventListener("click", onCancel);
+  confirmBtn.addEventListener("click", onConfirm);
 }
 
 if (TOKEN) load(); else renderLogin();
