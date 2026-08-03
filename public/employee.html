@@ -172,9 +172,9 @@ function render() {
   });
 
   document.getElementById("addBtn").addEventListener("click", async () => {
-    const last = entries[entries.length - 1];
-    const base = last ? new Date(last.date + "T12:00:00") : new Date();
-    base.setDate(base.getDate() + (last ? 1 : 0));
+    const mostRecent = entries[0];
+    const base = mostRecent ? new Date(mostRecent.date + "T12:00:00") : new Date();
+    base.setDate(base.getDate() + (mostRecent ? 1 : 0));
     const newDate = base.toISOString().slice(0, 10);
     await saveEntry({ date: newDate, ventes: 0, clients: 0, pct: 0, remis: 0 });
     await load();
