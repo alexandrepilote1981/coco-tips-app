@@ -98,6 +98,7 @@ const I18N = {
     remitNone: "Aucun",
     remitEmployerOwes: "⚠️ Vous me devez",
     remitEmployeeOwes: "⚠️ Je vous dois",
+    remitAmountLabel: "Montant $",
     remplacer: "Remplacer",
     ajouterMot: "Ajouter",
     releve: "le relevé",
@@ -134,6 +135,7 @@ const I18N = {
     remitNone: "None",
     remitEmployerOwes: "⚠️ You owe me",
     remitEmployeeOwes: "⚠️ I owe you",
+    remitAmountLabel: "Amount $",
     remplacer: "Replace",
     ajouterMot: "Add",
     releve: "receipt",
@@ -337,6 +339,11 @@ function render() {
           <button type="button" class="remit-btn ${e.remit_direction === "employer_owes" ? "active-owed-employee" : ""}" data-id="${e.id}" data-remit="employer_owes">${t("remitEmployerOwes")}</button>
           <button type="button" class="remit-btn ${e.remit_direction === "employee_owes" ? "active-owed-employer" : ""}" data-id="${e.id}" data-remit="employee_owes">${t("remitEmployeeOwes")}</button>
         </div>
+        ${e.remit_direction ? `
+        <div class="field" style="margin-top:8px;">
+          <label>${t("remitAmountLabel")}</label>
+          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remit_amount || ""}" data-id="${e.id}" class="remit-amount-input" />
+        </div>` : ""}
       </div>
     `;
     list.appendChild(card);
@@ -393,6 +400,17 @@ function render() {
       const entry = entries.find((x) => x.id === id);
       if (!entry) return;
       entry.remit_direction = btn.dataset.remit || null;
+      await saveEntry(entry);
+      await load();
+    });
+  });
+
+  list.querySelectorAll('.remit-amount-input').forEach((inp) => {
+    inp.addEventListener("change", async (ev) => {
+      const id = ev.target.dataset.id;
+      const entry = entries.find((x) => x.id === id);
+      if (!entry) return;
+      entry.remit_amount = parseFloat(ev.target.value) || 0;
       await saveEntry(entry);
       await load();
     });
