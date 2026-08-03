@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS entries (
   remit_amount REAL DEFAULT 0,
   transferred INTEGER DEFAULT 0,
   transfer_date TEXT,
+  is_hotesse INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 `);
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS entries (
 // Migrations sécuritaires : ajoute les colonnes si la base existait déjà (volume persistant)
 // sans ces colonnes. Ignore l'erreur si elles existent déjà.
 // remit_direction : 'employer_owes' (l'employeur doit un virement) | 'employee_owes' (l'employé doit un virement) | NULL
+// is_hotesse : la personne se déclare "hôtesse pour cette journée" — change le formulaire pour cette entrée précise
 for (const col of [
   "photo_filename TEXT",
   "flagged_negative INTEGER DEFAULT 0",
@@ -57,6 +59,7 @@ for (const col of [
   "remit_amount REAL DEFAULT 0",
   "transferred INTEGER DEFAULT 0",
   "transfer_date TEXT",
+  "is_hotesse INTEGER DEFAULT 0",
 ]) {
   try {
     db.exec(`ALTER TABLE entries ADD COLUMN ${col};`);
