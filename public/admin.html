@@ -18,7 +18,11 @@
   button.secondary { background: #EAE4D8; color: #17302D; }
   button.danger { background: #F26D6D; }
   .restaurant-title { font-size: 17px; font-weight: 800; color: #0B5D5C; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
-  .employee-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #F0EBE0; }
+  .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0 6px; border-top: 1px solid #F0EBE0; }
+  .employee-card-block:first-of-type .employee-row { border-top: none; }
+  .employee-stats { display: flex; gap: 20px; flex-wrap: wrap; padding: 4px 0 10px; }
+  .employee-stat-label { font-size: 10px; text-transform: uppercase; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 2px; }
+  .employee-stat-value { font-size: 19px; font-weight: 800; color: #17302D; }
   .employee-name { font-weight: 700; font-size: 14px; }
   .employee-sub { font-size: 11px; color: rgba(0,0,0,0.5); }
   .link-box { font-size: 11px; background: #EAF1DD; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
@@ -138,27 +142,7 @@ function render() {
       </div>
   `;
 
-  const grandVentes = overview.restaurants.reduce(
-    (s, r) => s + r.employees.reduce((s2, e) => s2 + e.totals.ventes, 0), 0
-  );
-  const grandNet = overview.restaurants.reduce(
-    (s, r) => s + r.employees.reduce((s2, e) => s2 + e.totals.net, 0), 0
-  );
-
   html += `
-      <div class="card" style="background:linear-gradient(135deg,#0B5D5C,#0E7C7B); color:white;">
-        <div class="section-label" style="color:rgba(255,255,255,0.75);">Résumé — ${periodLabel}</div>
-        <div style="display:flex; gap:32px; flex-wrap:wrap; margin-top:10px;">
-          <div>
-            <div style="font-size:12px; text-transform:uppercase; opacity:0.75;">Ventes totales</div>
-            <div style="font-size:32px; font-weight:800;">${fmtMoney(grandVentes)}</div>
-          </div>
-          <div>
-            <div style="font-size:12px; text-transform:uppercase; opacity:0.75;">Pourboire net total</div>
-            <div style="font-size:32px; font-weight:800;">${fmtMoney(grandNet)}</div>
-          </div>
-        </div>
-      </div>
       <div class="card">
         <div class="section-label">Ajouter un restaurant</div>
         <div class="add-form">
@@ -184,16 +168,28 @@ function render() {
     r.employees.forEach((e) => {
       const link = `${origin}/e/${e.access_code}`;
       html += `
-        <div class="employee-row">
-          <div>
-            <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
-            <div class="employee-sub">Code : <b>${e.access_code}</b></div>
-            <div class="link-box">${link}</div>
+        <div class="employee-card-block">
+          <div class="employee-row">
+            <div>
+              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
+              <div class="employee-sub">Code : <b>${e.access_code}</b></div>
+              <div class="link-box">${link}</div>
+            </div>
+            <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">Retirer</button>
           </div>
-          <div class="totals">
-            ${fmtMoney(e.totals.ventes)} ventes<br>
-            <b>${fmtMoney(e.totals.net)}</b> net · ${fmtPct(e.totals.pctMoyen)}<br>
-            <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; margin-top:4px;">Retirer</button>
+          <div class="employee-stats">
+            <div>
+              <div class="employee-stat-label">Ventes totales</div>
+              <div class="employee-stat-value">${fmtMoney(e.totals.ventes)}</div>
+            </div>
+            <div>
+              <div class="employee-stat-label">Pourboire net total</div>
+              <div class="employee-stat-value" style="color:#2E9E5B;">${fmtMoney(e.totals.net)}</div>
+            </div>
+            <div>
+              <div class="employee-stat-label">% moyen</div>
+              <div class="employee-stat-value" style="color:#F2994A; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
+            </div>
           </div>
         </div>
       `;
