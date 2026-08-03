@@ -1,9 +1,10 @@
 const express = require("express");
 const path = require("path");
-const { db, nanoid, makeAccessCode } = require("./db");
+const fs = require("fs");
+const { db, nanoid, makeAccessCode, PHOTOS_DIR } = require("./db");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "12mb" })); // les photos en base64 sont plus lourdes que du texte
 app.use(express.static(path.join(__dirname, "public")));
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
@@ -84,6 +85,40 @@ app.delete("/api/employee/:code/entries/:entryId", (req, res) => {
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
   db.prepare("DELETE FROM entries WHERE employee_id = ? AND id = ?").run(emp.id, req.params.entryId);
   res.json({ ok: true });
+});
+
+app.post("/api/employee/:code/entries/:entryId/photo", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  const entry = db
+    .prepare("SELECT * FROM entries WHERE id = ? AND employee_id = ?")
+    .get(req.params.entryId, emp.id);
+  if (!entry) return res.status(404).json({ error: "Journée introuvable" });
+
+  const { photoBase64 } = req.body;
+  if (!photoBase64) return res.status(400).json({ error: "Photo requise" });
+
+  const match = /^data:image\/(\w+);base64,(.+)$/.exec(photoBase64);
+  if (!match) return res.status(400).json({ error: "Format de photo invalide" });
+  const ext = match[1] === "jpeg" ? "jpg" : match[1];
+  const buffer = Buffer.from(match[2], "base64");
+
+  const filename = `${entry.id}.${ext}`;
+  fs.writeFileSync(path.join(PHOTOS_DIR, filename), buffer);
+  db.prepare(`UPDATE entries SET photo_filename=?, updated_at=datetime('now') WHERE id=?`).run(filename, entry.id);
+
+  res.json({ ok: true, photo_filename: filename });
+});
+
+app.get("/api/photos/:filename", (req, res) => {
+  // sécurité de base : empêche de remonter dans l'arborescence via le nom de fichier
+  const safeName = path.basename(req.params.filename);
+  const filePath = path.join(PHOTOS_DIR, safeName);
+  if (!fs.existsSync(filePath)) return res.status(404).send("Photo introuvable");
+  res.sendFile(filePath);
 });
 
 // =========================================================
