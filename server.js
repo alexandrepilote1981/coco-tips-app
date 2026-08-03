@@ -53,31 +53,36 @@ app.post("/api/employee/:code/entries", (req, res) => {
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
 
-  const { date, ventes, clients, pct, remis } = req.body;
+  const { id, date, ventes, clients, pct, remis } = req.body;
   if (!date) return res.status(400).json({ error: "Date requise" });
 
-  const existing = db
-    .prepare("SELECT id FROM entries WHERE employee_id = ? AND date = ?")
-    .get(emp.id, date);
+  // Si un id est fourni et appartient bien à cet employé, on met à jour cette entrée précise.
+  const existing = id
+    ? db.prepare("SELECT id FROM entries WHERE id = ? AND employee_id = ?").get(id, emp.id)
+    : null;
 
   if (existing) {
     db.prepare(
-      `UPDATE entries SET ventes=?, clients=?, pct=?, remis=?, updated_at=datetime('now') WHERE id=?`
-    ).run(ventes || 0, clients || 0, pct || 0, remis || 0, existing.id);
+      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, updated_at=datetime('now') WHERE id=?`
+    ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, existing.id);
+    res.json({ ok: true, id: existing.id });
   } else {
+    // Sinon on crée une NOUVELLE entrée — plusieurs entrées peuvent exister pour la même date
+    // (ex: une serveuse qui rentre ses chiffres 2 fois dans la même journée).
+    const newId = nanoid(10);
     db.prepare(
       `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis) VALUES (?,?,?,?,?,?,?)`
-    ).run(nanoid(10), emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0);
+    ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0);
+    res.json({ ok: true, id: newId });
   }
-  res.json({ ok: true });
 });
 
-app.delete("/api/employee/:code/entries/:date", (req, res) => {
+app.delete("/api/employee/:code/entries/:entryId", (req, res) => {
   const emp = db
     .prepare("SELECT * FROM employees WHERE access_code = ?")
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
-  db.prepare("DELETE FROM entries WHERE employee_id = ? AND date = ?").run(emp.id, req.params.date);
+  db.prepare("DELETE FROM entries WHERE employee_id = ? AND id = ?").run(emp.id, req.params.entryId);
   res.json({ ok: true });
 });
 
