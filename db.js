@@ -38,16 +38,29 @@ CREATE TABLE IF NOT EXISTS entries (
   pct REAL DEFAULT 0,
   remis REAL DEFAULT 0,
   photo_filename TEXT,
+  flagged_negative INTEGER DEFAULT 0,
+  remit_direction TEXT,
+  transferred INTEGER DEFAULT 0,
+  transfer_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
 );
 `);
 
-// Migration sécuritaire : ajoute la colonne photo_filename si la base existait déjà
-// (sur le volume persistant) sans cette colonne. Ignore l'erreur si elle existe déjà.
-try {
-  db.exec(`ALTER TABLE entries ADD COLUMN photo_filename TEXT;`);
-} catch (e) {
-  // colonne déjà présente — rien à faire
+// Migrations sécuritaires : ajoute les colonnes si la base existait déjà (volume persistant)
+// sans ces colonnes. Ignore l'erreur si elles existent déjà.
+// remit_direction : 'employer_owes' (l'employeur doit un virement) | 'employee_owes' (l'employé doit un virement) | NULL
+for (const col of [
+  "photo_filename TEXT",
+  "flagged_negative INTEGER DEFAULT 0",
+  "remit_direction TEXT",
+  "transferred INTEGER DEFAULT 0",
+  "transfer_date TEXT",
+]) {
+  try {
+    db.exec(`ALTER TABLE entries ADD COLUMN ${col};`);
+  } catch (e) {
+    // colonne déjà présente — rien à faire
+  }
 }
 
 function makeAccessCode() {

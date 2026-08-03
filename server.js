@@ -54,8 +54,9 @@ app.post("/api/employee/:code/entries", (req, res) => {
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
 
-  const { id, date, ventes, clients, pct, remis } = req.body;
+  const { id, date, ventes, clients, pct, remis, remit_direction } = req.body;
   if (!date) return res.status(400).json({ error: "Date requise" });
+  const direction = ["employer_owes", "employee_owes"].includes(remit_direction) ? remit_direction : null;
 
   // Si un id est fourni et appartient bien à cet employé, on met à jour cette entrée précise.
   const existing = id
@@ -64,16 +65,16 @@ app.post("/api/employee/:code/entries", (req, res) => {
 
   if (existing) {
     db.prepare(
-      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, updated_at=datetime('now') WHERE id=?`
-    ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, existing.id);
+      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, updated_at=datetime('now') WHERE id=?`
+    ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, existing.id);
     res.json({ ok: true, id: existing.id });
   } else {
     // Sinon on crée une NOUVELLE entrée — plusieurs entrées peuvent exister pour la même date
     // (ex: une serveuse qui rentre ses chiffres 2 fois dans la même journée).
     const newId = nanoid(10);
     db.prepare(
-      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis) VALUES (?,?,?,?,?,?,?)`
-    ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0);
+      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction) VALUES (?,?,?,?,?,?,?,?)`
+    ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction);
     res.json({ ok: true, id: newId });
   }
 });
@@ -198,6 +199,14 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
 app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {
   db.prepare("DELETE FROM entries WHERE employee_id = ?").run(req.params.id);
   db.prepare("DELETE FROM employees WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/entries/:entryId/transferred", requireAdmin, (req, res) => {
+  const value = req.body.transferred ? 1 : 0;
+  const transferDate = req.body.transfer_date || null;
+  db.prepare(`UPDATE entries SET transferred=?, transfer_date=?, updated_at=datetime('now') WHERE id=?`)
+    .run(value, value ? transferDate : null, req.params.entryId);
   res.json({ ok: true });
 });
 
