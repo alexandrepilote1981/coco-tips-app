@@ -142,10 +142,11 @@ const I18N = {
     thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement",
     marquerVire: "Marquer viré",
     vireOk: (date) => `✓ Viré${date ? " le " + date : ""}`,
-    journeesEnAttente: (owedByMe, owedToMe) => {
+    journeesEnAttente: (owedByMe, owedToMe, owedByMeAmt, owedToMeAmt) => {
+      const fmt = (n) => n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
       const parts = [];
-      if (owedByMe > 0) parts.push(`${owedByMe} virement${owedByMe > 1 ? "s" : ""} à faire`);
-      if (owedToMe > 0) parts.push(`${owedToMe} montant${owedToMe > 1 ? "s" : ""} à recevoir`);
+      if (owedByMe > 0) parts.push(`${owedByMe} virement${owedByMe > 1 ? "s" : ""} à faire (${fmt(owedByMeAmt)})`);
+      if (owedToMe > 0) parts.push(`${owedToMe} montant${owedToMe > 1 ? "s" : ""} à recevoir (${fmt(owedToMeAmt)})`);
       return "⚠️ " + parts.join(" · ");
     },
     remitEmployerOwesShort: "Vous devez",
@@ -161,7 +162,8 @@ const I18N = {
     ajouterEmploye: "+ Employé",
     confirmRetirerEmploye: "Retirer cet employé et ses données?",
     confirmSupprimerRestaurant: "Supprimer ce restaurant et toutes ses données?",
-    csvHeaders: ["Restaurant", "Employé", "# Employé", "Date", "Ventes $", "# Clients", "% Pourboire", "Remis employés $", "Pourboire brut $", "Pourboire net $", "Moy./client $"],
+    csvHeaders: ["Restaurant", "Employé", "# Employé", "Date", "Ventes $", "# Clients", "% Pourboire", "Remis employés $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Direction virement", "Montant à remettre $", "Viré?", "Date du virement"],
+    csvNone: "Aucun", csvEmployerOwes: "Vous devez", csvEmployeeOwes: "Employé doit", csvOui: "Oui", csvNon: "Non",
     tout: "tout",
     locale: "fr-CA",
   },
@@ -201,10 +203,11 @@ const I18N = {
     thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer",
     marquerVire: "Mark transferred",
     vireOk: (date) => `✓ Transferred${date ? " on " + date : ""}`,
-    journeesEnAttente: (owedByMe, owedToMe) => {
+    journeesEnAttente: (owedByMe, owedToMe, owedByMeAmt, owedToMeAmt) => {
+      const fmt = (n) => n.toLocaleString("en-CA", { style: "currency", currency: "CAD" });
       const parts = [];
-      if (owedByMe > 0) parts.push(`${owedByMe} transfer${owedByMe > 1 ? "s" : ""} to send`);
-      if (owedToMe > 0) parts.push(`${owedToMe} amount${owedToMe > 1 ? "s" : ""} to receive`);
+      if (owedByMe > 0) parts.push(`${owedByMe} transfer${owedByMe > 1 ? "s" : ""} to send (${fmt(owedByMeAmt)})`);
+      if (owedToMe > 0) parts.push(`${owedToMe} amount${owedToMe > 1 ? "s" : ""} to receive (${fmt(owedToMeAmt)})`);
       return "⚠️ " + parts.join(" · ");
     },
     remitEmployerOwesShort: "You owe",
@@ -220,7 +223,8 @@ const I18N = {
     ajouterEmploye: "+ Employee",
     confirmRetirerEmploye: "Remove this employee and their data?",
     confirmSupprimerRestaurant: "Delete this restaurant and all its data?",
-    csvHeaders: ["Restaurant", "Employee", "# Employee", "Date", "Sales $", "# Customers", "Tip %", "Given to staff $", "Gross tips $", "Net tips $", "Avg./customer $"],
+    csvHeaders: ["Restaurant", "Employee", "# Employee", "Date", "Sales $", "# Customers", "Tip %", "Given to staff $", "Gross tips $", "Net tips $", "Avg./customer $", "Transfer direction", "Amount to remit $", "Transferred?", "Transfer date"],
+    csvNone: "None", csvEmployerOwes: "You owe", csvEmployeeOwes: "Employee owes", csvOui: "Yes", csvNon: "No",
     tout: "all",
     locale: "en-CA",
   },
@@ -336,11 +340,13 @@ function render() {
 
   let owedByMeCount = 0;
   let owedToMeCount = 0;
+  let owedByMeAmount = 0;
+  let owedToMeAmount = 0;
   overview.restaurants.forEach((r) => {
     r.employees.forEach((e) => {
       e.entries.forEach((d) => {
-        if (d.remit_direction === "employer_owes" && !d.transferred) owedByMeCount++;
-        if (d.remit_direction === "employee_owes" && !d.transferred) owedToMeCount++;
+        if (d.remit_direction === "employer_owes" && !d.transferred) { owedByMeCount++; owedByMeAmount += d.remit_amount || 0; }
+        if (d.remit_direction === "employee_owes" && !d.transferred) { owedToMeCount++; owedToMeAmount += d.remit_amount || 0; }
       });
     });
   });
@@ -352,7 +358,7 @@ function render() {
       <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
     </div>
     <div class="content">
-      ${pendingCount > 0 ? `<div class="pending-banner">${t("journeesEnAttente", owedByMeCount, owedToMeCount)}</div>` : ""}
+      ${pendingCount > 0 ? `<div class="pending-banner">${t("journeesEnAttente", owedByMeCount, owedToMeCount, owedByMeAmount, owedToMeAmount)}</div>` : ""}
       <div class="card">
         <div class="section-label">${t("periodeAffichee")}</div>
         <div class="period-bar">
@@ -440,13 +446,14 @@ function render() {
                   let virementCell = "—";
                   if (d.remit_direction) {
                     if (d.transferred) {
-                      virementCell = `<span class="transfer-done">${t("vireOk", d.transfer_date || "")}</span>`;
+                      virementCell = `<span class="transfer-done">${fmtMoney(d.remit_amount)} — ${t("vireOk", d.transfer_date || "")}</span>`;
                     } else {
                       const isEmployerOwes = d.remit_direction === "employer_owes";
                       const label = isEmployerOwes ? t("remitEmployerOwesShort") : t("remitEmployeeOwesShort");
                       const btnClass = isEmployerOwes ? "" : "owed-employer";
                       virementCell = `
-                        <div style="font-size:9px; margin-bottom:3px; color:${isEmployerOwes ? "#7A1F1F" : "#7A5B00"};">${label}</div>
+                        <div style="font-size:9px; margin-bottom:1px; color:${isEmployerOwes ? "#7A1F1F" : "#7A5B00"};">${label}</div>
+                        <div style="font-size:12px; font-weight:800; margin-bottom:3px; color:${isEmployerOwes ? "#7A1F1F" : "#7A5B00"};">${fmtMoney(d.remit_amount)}</div>
                         <button class="transfer-btn ${btnClass}" data-action="markTransferred" data-entry="${d.id}" data-direction="${d.remit_direction}">${t("marquerVire")}</button>
                       `;
                     }
@@ -598,6 +605,10 @@ function exportCSV() {
   overview.restaurants.forEach((r) => {
     r.employees.forEach((e) => {
       e.entries.forEach((d) => {
+        const directionLabel =
+          d.remit_direction === "employer_owes" ? t("csvEmployerOwes") :
+          d.remit_direction === "employee_owes" ? t("csvEmployeeOwes") :
+          t("csvNone");
         rows.push([
           r.name,
           e.name,
@@ -610,6 +621,10 @@ function exportCSV() {
           d.pourboireBrut.toFixed(2),
           d.net.toFixed(2),
           d.moyenne.toFixed(2),
+          directionLabel,
+          d.remit_direction ? (d.remit_amount || 0).toFixed(2) : "",
+          d.remit_direction ? (d.transferred ? t("csvOui") : t("csvNon")) : "",
+          d.transferred ? (d.transfer_date || "") : "",
         ]);
       });
     });
