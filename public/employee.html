@@ -75,6 +75,7 @@
   .period-btn.active {
     background: linear-gradient(135deg,#0B5D5C,#0E7C7B); color: white;
   }
+  .save-pulse { transition: opacity .2s; }
 </style>
 </head>
 <body>
@@ -84,6 +85,7 @@
 <script>
 const CODE = window.location.pathname.split("/").pop();
 let state = null;
+let currentEntries = []; // liste actuellement affichée (filtrée par période) — source unique pour les mises à jour ciblées
 
 // ---------- Traductions ----------
 const I18N = {
@@ -120,6 +122,7 @@ const I18N = {
     releve: "le relevé",
     envoiEnCours: "⏳ Envoi...",
     erreurPhoto: "Erreur lors de l'envoi de la photo. Réessaie.",
+    erreurSauvegarde: "Erreur de sauvegarde. Vérifie ta connexion et réessaie.",
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
     periodeAffichee: "Période affichée",
     p2Semaines: "2 semaines",
@@ -162,6 +165,7 @@ const I18N = {
     releve: "receipt",
     envoiEnCours: "⏳ Uploading...",
     erreurPhoto: "Error uploading photo. Try again.",
+    erreurSauvegarde: "Save error. Check your connection and try again.",
     confirmDelete: "Delete this day? This cannot be undone.",
     periodeAffichee: "Period shown",
     p2Semaines: "2 weeks",
@@ -250,6 +254,22 @@ function fmtPct(n) {
   return n.toFixed(1) + "%";
 }
 
+// Recalcule les champs dérivés d'une entrée LOCALEMENT (miroir exact du calcul serveur),
+// pour pouvoir mettre à jour l'affichage instantanément sans attendre le serveur.
+function recomputeEntry(entry) {
+  const ventes = parseFloat(entry.ventes) || 0;
+  const clients = parseFloat(entry.clients) || 0;
+  const pct = parseFloat(entry.pct) || 0;
+  const remis = parseFloat(entry.remis) || 0;
+  entry.ventes = ventes;
+  entry.clients = clients;
+  entry.pct = pct;
+  entry.remis = remis;
+  entry.pourboireBrut = ventes * (pct / 100);
+  entry.net = entry.pourboireBrut - remis;
+  entry.moyenne = clients > 0 ? ventes / clients : 0;
+}
+
 async function load() {
   try {
     state = await api(`/api/employee/${CODE}`);
@@ -271,10 +291,221 @@ async function deleteEntry(entryId) {
   await api(`/api/employee/${CODE}/entries/${entryId}`, { method: "DELETE" });
 }
 
+// ---------- Mises à jour ciblées (pas de reconstruction complète de l'écran) ----------
+
+function refreshTotals() {
+  const totVentes = currentEntries.reduce((s, e) => s + e.ventes, 0);
+  const totClients = currentEntries.reduce((s, e) => s + e.clients, 0);
+  const totBrut = currentEntries.reduce((s, e) => s + e.pourboireBrut, 0);
+  const totNet = currentEntries.reduce((s, e) => s + e.net, 0);
+  const pctMoyen = totVentes > 0 ? (totBrut / totVentes) * 100 : 0;
+  const parClient = totClients > 0 ? totNet / totClients : 0;
+
+  const kv = document.getElementById("kpi-ventes");
+  const kn = document.getElementById("kpi-net");
+  const kp = document.getElementById("kpi-pct");
+  const kc = document.getElementById("kpi-client");
+  if (kv) kv.textContent = fmtMoney(totVentes);
+  if (kn) kn.textContent = fmtMoney(totNet);
+  if (kp) kp.textContent = fmtPct(pctMoyen);
+  if (kc) kc.textContent = fmtMoney(parClient);
+  const dc = document.getElementById("days-count");
+  if (dc) dc.textContent = t("journees", currentEntries.length);
+}
+
+function refreshCardSummary(entry) {
+  if (entry.is_hotesse) {
+    const el = document.getElementById(`sum-declare-${entry.id}`);
+    if (el) el.textContent = fmtMoney(entry.net);
+  } else {
+    const moy = document.getElementById(`sum-moy-${entry.id}`);
+    const pou = document.getElementById(`sum-pourb-${entry.id}`);
+    const net = document.getElementById(`sum-net-${entry.id}`);
+    if (moy) moy.textContent = fmtMoney(entry.moyenne);
+    if (pou) pou.textContent = fmtMoney(entry.pourboireBrut);
+    if (net) net.textContent = fmtMoney(entry.net);
+  }
+}
+
+function flashSaved() {
+  const note = document.querySelector(".saved-note");
+  if (!note) return;
+  note.textContent = "✓";
+  setTimeout(() => { note.textContent = t("savedNote"); }, 900);
+}
+
+// Construit un item de type "carte" (jour) complet, avec tous ses écouteurs déjà attachés.
+// Utilisé autant pour la construction initiale de la liste que pour remplacer UNE seule carte
+// (ex: quand on bascule le mode hôtesse, qui change la mise en page du formulaire).
+function buildCardElement(e) {
+  const card = document.createElement("div");
+  card.className = "card day-card";
+  const dayIsHotesse = !!e.is_hotesse;
+  const formHtml = dayIsHotesse ? `
+    <div class="field-grid" style="grid-template-columns: 1fr;">
+      <div class="field"><label>${t("montantRecuLabel")}</label>
+        <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes-hotesse" /></div>
+    </div>
+    <div class="day-summary">
+      <span class="net">${t("montantDeclare")} <b id="sum-declare-${e.id}">${fmtMoney(e.net)}</b></span>
+    </div>
+  ` : `
+    <div class="field-grid">
+      <div class="field"><label>${t("ventesLabel")}</label>
+        <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes" /></div>
+      <div class="field"><label>${t("clientsLabel")}</label>
+        <input type="number" inputmode="numeric" placeholder="0" value="${e.clients || ""}" data-id="${e.id}" data-field="clients" /></div>
+      <div class="field pct"><label>${t("pctLabel")}</label>
+        <input type="number" inputmode="decimal" placeholder="10" value="${e.pct || ""}" data-id="${e.id}" data-field="pct" /></div>
+      <div class="field"><label>${t("remisLabel")}</label>
+        <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remis || ""}" data-id="${e.id}" data-field="remis" /></div>
+    </div>
+    <div class="day-summary">
+      <span>${t("moyClientShort")} <b id="sum-moy-${e.id}">${fmtMoney(e.moyenne)}</b></span>
+      <span>${t("pourboires")} <b id="sum-pourb-${e.id}">${fmtMoney(e.pourboireBrut)}</b></span>
+      <span class="net">${t("net")} <b id="sum-net-${e.id}">${fmtMoney(e.net)}</b></span>
+    </div>
+  `;
+  card.innerHTML = `
+    <div class="day-head">
+      <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
+      <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
+    </div>
+    <label class="hotesse-toggle ${dayIsHotesse ? "active" : ""}">
+      <input type="checkbox" ${dayIsHotesse ? "checked" : ""} data-id="${e.id}" class="hotesse-checkbox" />
+      🎀 ${t("hotesseTodayLabel")}
+    </label>
+    ${formHtml}
+    <div class="photo-row">
+      ${e.photo_filename
+        ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="receipt" /></a>`
+        : `<span class="photo-empty">${t("aucunePhoto")}</span>`}
+      <label class="photo-btn">
+        📷 ${e.photo_filename ? t("remplacer") : t("ajouterMot")} ${t("releve")}
+        <input type="file" accept="image/*" capture="environment" data-id="${e.id}" class="photo-input" hidden />
+      </label>
+    </div>
+    <div class="remit-section">
+      ${e.remit_direction && e.transferred ? `
+      <div class="remit-confirmed">
+        ✅ ${e.remit_direction === "employer_owes" ? t("payeLe", e.transfer_date || "") : t("recuConfirmeLe", e.transfer_date || "")}
+        <div class="remit-confirmed-amount">${fmtMoney(e.remit_amount)}</div>
+      </div>
+      ` : `
+      <div class="remit-label">${t("remitLabel")}</div>
+      <div class="remit-options">
+        <button type="button" class="remit-btn ${!e.remit_direction ? "active" : ""}" data-id="${e.id}" data-remit="">${t("remitNone")}</button>
+        <button type="button" class="remit-btn ${e.remit_direction === "employer_owes" ? "active-owed-employee" : ""}" data-id="${e.id}" data-remit="employer_owes">${t("remitEmployerOwes")}</button>
+        <button type="button" class="remit-btn ${e.remit_direction === "employee_owes" ? "active-owed-employer" : ""}" data-id="${e.id}" data-remit="employee_owes">${t("remitEmployeeOwes")}</button>
+      </div>
+      ${e.remit_direction ? `
+      <div class="field" style="margin-top:8px;">
+        <label>${t("remitAmountLabel")}</label>
+        <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remit_amount || ""}" data-id="${e.id}" class="remit-amount-input" />
+      </div>` : ""}
+      `}
+    </div>
+  `;
+  attachCardListeners(card, e);
+  return card;
+}
+
+// Attache tous les écouteurs d'UNE carte. Les modifications de champs simples ne font QUE
+// mettre à jour cette carte + les totaux, sans jamais reconstruire toute la liste — c'est ce
+// qui évite les bogues d'interaction sur mobile (double-tap, date qui revient en arrière).
+function attachCardListeners(card, e) {
+  card.querySelectorAll('input[data-field]').forEach((inp) => {
+    inp.addEventListener("change", async (ev) => {
+      const field = ev.target.dataset.field;
+      if (field === "ventes-hotesse") {
+        e.ventes = parseFloat(ev.target.value) || 0;
+        e.pct = 100; e.remis = 0; e.clients = 0;
+      } else if (field === "date") {
+        e.date = ev.target.value; // pas de recalcul de montants, juste la date
+      } else {
+        e[field] = parseFloat(ev.target.value) || 0;
+      }
+      recomputeEntry(e);
+      refreshCardSummary(e);
+      refreshTotals();
+      try {
+        await saveEntry(e);
+        flashSaved();
+      } catch (err) {
+        alert(t("erreurSauvegarde"));
+      }
+    });
+  });
+
+  card.querySelector('.hotesse-checkbox').addEventListener("change", async (ev) => {
+    e.is_hotesse = ev.target.checked;
+    if (ev.target.checked) { e.pct = 100; e.remis = 0; e.clients = 0; }
+    recomputeEntry(e);
+    const newCard = buildCardElement(e); // la mise en page du formulaire change, donc on reconstruit CETTE carte seulement
+    card.replaceWith(newCard);
+    refreshTotals();
+    await saveEntry(e);
+    flashSaved();
+  });
+
+  card.querySelector('[data-action="del"]').addEventListener("click", async () => {
+    if (!confirm(t("confirmDelete"))) return;
+    card.remove();
+    currentEntries = currentEntries.filter((x) => x.id !== e.id);
+    state.entries = state.entries.filter((x) => x.id !== e.id);
+    refreshTotals();
+    await deleteEntry(e.id);
+  });
+
+  const photoInput = card.querySelector('.photo-input');
+  if (photoInput) {
+    photoInput.addEventListener("change", async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const label = ev.target.closest(".photo-btn");
+      const originalHTML = label.innerHTML;
+      label.textContent = t("envoiEnCours");
+      try {
+        const compressed = await compressImage(file);
+        const res = await api(`/api/employee/${CODE}/entries/${e.id}/photo`, {
+          method: "POST",
+          body: JSON.stringify({ photoBase64: compressed }),
+        });
+        e.photo_filename = res.photo_filename;
+        const newCard = buildCardElement(e); // la vignette photo change la mise en page, on reconstruit cette carte
+        card.replaceWith(newCard);
+      } catch (err) {
+        alert(t("erreurPhoto"));
+        label.innerHTML = originalHTML;
+      }
+    });
+  }
+
+  card.querySelectorAll('.remit-btn').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      e.remit_direction = btn.dataset.remit || null;
+      const newCard = buildCardElement(e); // affiche/cache le champ montant selon la direction choisie
+      card.replaceWith(newCard);
+      await saveEntry(e);
+      flashSaved();
+    });
+  });
+
+  const remitAmountInput = card.querySelector('.remit-amount-input');
+  if (remitAmountInput) {
+    remitAmountInput.addEventListener("change", async (ev) => {
+      e.remit_amount = parseFloat(ev.target.value) || 0;
+      await saveEntry(e);
+      flashSaved();
+    });
+  }
+}
+
 function render() {
   const { employee, restaurant, entries: allEntries } = state;
   const { start, end } = resolvePeriod();
-  const entries = allEntries.filter((e) => (!start || e.date >= start) && (!end || e.date <= end));
+  currentEntries = allEntries.filter((e) => (!start || e.date >= start) && (!end || e.date <= end));
+  const entries = currentEntries;
 
   const totVentes = entries.reduce((s, e) => s + e.ventes, 0);
   const totClients = entries.reduce((s, e) => s + e.clients, 0);
@@ -304,14 +535,14 @@ function render() {
         </div>
       </div>
       <div class="kpi-grid">
-        <div class="card"><div class="kpi-label" style="color:#0B5D5C">💰 ${t("ventesTotal")}</div><div class="kpi-value" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#2E9E5B">📈 ${t("pourboiresNets")}</div><div class="kpi-value" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#F2994A">${t("pctMoyen")}</div><div class="kpi-value" style="color:#F2994A">${fmtPct(pctMoyen)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#F26D6D">👥 ${t("moyClient")}</div><div class="kpi-value" style="color:#F26D6D">${fmtMoney(parClient)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#0B5D5C">💰 ${t("ventesTotal")}</div><div class="kpi-value" id="kpi-ventes" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#2E9E5B">📈 ${t("pourboiresNets")}</div><div class="kpi-value" id="kpi-net" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#F2994A">${t("pctMoyen")}</div><div class="kpi-value" id="kpi-pct" style="color:#F2994A">${fmtPct(pctMoyen)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#F26D6D">👥 ${t("moyClient")}</div><div class="kpi-value" id="kpi-client" style="color:#F26D6D">${fmtMoney(parClient)}</div></div>
       </div>
 
       <div class="section-title">
-        <span>${t("journees", entries.length)}</span>
+        <span id="days-count">${t("journees", entries.length)}</span>
         <button class="add-btn" id="addBtn">${t("ajouter")}</button>
       </div>
       <p style="font-size:11px; color:rgba(0,0,0,0.45); margin:-4px 0 12px;">${t("multiEntryHint")}</p>
@@ -321,167 +552,10 @@ function render() {
 
   const list = document.getElementById("daysList");
   list.innerHTML = "";
-  entries.forEach((e) => {
-    const card = document.createElement("div");
-    card.className = "card day-card";
-    const dayIsHotesse = !!e.is_hotesse;
-    const formHtml = dayIsHotesse ? `
-      <div class="field-grid" style="grid-template-columns: 1fr;">
-        <div class="field"><label>${t("montantRecuLabel")}</label>
-          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes-hotesse" /></div>
-      </div>
-      <div class="day-summary">
-        <span class="net">${t("montantDeclare")} <b>${fmtMoney(e.net)}</b></span>
-      </div>
-    ` : `
-      <div class="field-grid">
-        <div class="field"><label>${t("ventesLabel")}</label>
-          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes" /></div>
-        <div class="field"><label>${t("clientsLabel")}</label>
-          <input type="number" inputmode="numeric" placeholder="0" value="${e.clients || ""}" data-id="${e.id}" data-field="clients" /></div>
-        <div class="field pct"><label>${t("pctLabel")}</label>
-          <input type="number" inputmode="decimal" placeholder="10" value="${e.pct || ""}" data-id="${e.id}" data-field="pct" /></div>
-        <div class="field"><label>${t("remisLabel")}</label>
-          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remis || ""}" data-id="${e.id}" data-field="remis" /></div>
-      </div>
-      <div class="day-summary">
-        <span>${t("moyClientShort")} <b>${fmtMoney(e.moyenne)}</b></span>
-        <span>${t("pourboires")} <b>${fmtMoney(e.pourboireBrut)}</b></span>
-        <span class="net">${t("net")} <b>${fmtMoney(e.net)}</b></span>
-      </div>
-    `;
-    card.innerHTML = `
-      <div class="day-head">
-        <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
-        <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
-      </div>
-      <label class="hotesse-toggle ${dayIsHotesse ? "active" : ""}">
-        <input type="checkbox" ${dayIsHotesse ? "checked" : ""} data-id="${e.id}" class="hotesse-checkbox" />
-        🎀 ${t("hotesseTodayLabel")}
-      </label>
-      ${formHtml}
-      <div class="photo-row">
-        ${e.photo_filename
-          ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="receipt" /></a>`
-          : `<span class="photo-empty">${t("aucunePhoto")}</span>`}
-        <label class="photo-btn">
-          📷 ${e.photo_filename ? t("remplacer") : t("ajouterMot")} ${t("releve")}
-          <input type="file" accept="image/*" capture="environment" data-id="${e.id}" class="photo-input" hidden />
-        </label>
-      </div>
-      <div class="remit-section">
-        ${e.remit_direction && e.transferred ? `
-        <div class="remit-confirmed">
-          ✅ ${e.remit_direction === "employer_owes" ? t("payeLe", e.transfer_date || "") : t("recuConfirmeLe", e.transfer_date || "")}
-          <div class="remit-confirmed-amount">${fmtMoney(e.remit_amount)}</div>
-        </div>
-        ` : `
-        <div class="remit-label">${t("remitLabel")}</div>
-        <div class="remit-options">
-          <button type="button" class="remit-btn ${!e.remit_direction ? "active" : ""}" data-id="${e.id}" data-remit="">${t("remitNone")}</button>
-          <button type="button" class="remit-btn ${e.remit_direction === "employer_owes" ? "active-owed-employee" : ""}" data-id="${e.id}" data-remit="employer_owes">${t("remitEmployerOwes")}</button>
-          <button type="button" class="remit-btn ${e.remit_direction === "employee_owes" ? "active-owed-employer" : ""}" data-id="${e.id}" data-remit="employee_owes">${t("remitEmployeeOwes")}</button>
-        </div>
-        ${e.remit_direction ? `
-        <div class="field" style="margin-top:8px;">
-          <label>${t("remitAmountLabel")}</label>
-          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remit_amount || ""}" data-id="${e.id}" class="remit-amount-input" />
-        </div>` : ""}
-        `}
-      </div>
-    `;
-    list.appendChild(card);
-  });
+  entries.forEach((e) => list.appendChild(buildCardElement(e)));
 
   document.getElementById("langToggle").addEventListener("click", () => {
     setLang(lang === "fr" ? "en" : "fr");
-  });
-
-  list.querySelectorAll('.hotesse-checkbox').forEach((inp) => {
-    inp.addEventListener("change", async (ev) => {
-      const id = ev.target.dataset.id;
-      const entry = entries.find((x) => x.id === id);
-      if (!entry) return;
-      entry.is_hotesse = ev.target.checked;
-      if (ev.target.checked) {
-        // en passant en mode hôtesse, on réinitialise les champs serveur pour rester cohérent
-        entry.pct = 100;
-        entry.remis = 0;
-        entry.clients = 0;
-      }
-      await saveEntry(entry);
-      await load();
-    });
-  });
-
-  list.querySelectorAll('input[data-field]').forEach((inp) => {
-    inp.addEventListener("change", async (ev) => {
-      const id = ev.target.dataset.id;
-      const entry = entries.find((x) => x.id === id);
-      if (!entry) return;
-      const field = ev.target.dataset.field;
-      if (field === "ventes-hotesse") {
-        entry.ventes = parseFloat(ev.target.value) || 0;
-        entry.pct = 100;
-        entry.remis = 0;
-        entry.clients = 0;
-      } else {
-        entry[field] = field === "date" ? ev.target.value : (parseFloat(ev.target.value) || 0);
-      }
-      await saveEntry(entry);
-      await load();
-    });
-  });
-  list.querySelectorAll('[data-action="del"]').forEach((btn) => {
-    btn.addEventListener("click", async (ev) => {
-      if (!confirm(t("confirmDelete"))) return;
-      await deleteEntry(ev.target.dataset.id);
-      await load();
-    });
-  });
-
-  list.querySelectorAll('.photo-input').forEach((inp) => {
-    inp.addEventListener("change", async (ev) => {
-      const file = ev.target.files[0];
-      if (!file) return;
-      const id = ev.target.dataset.id;
-      const label = ev.target.closest(".photo-btn");
-      const originalHTML = label.innerHTML;
-      label.textContent = t("envoiEnCours");
-      try {
-        const compressed = await compressImage(file);
-        await api(`/api/employee/${CODE}/entries/${id}/photo`, {
-          method: "POST",
-          body: JSON.stringify({ photoBase64: compressed }),
-        });
-        await load();
-      } catch (e) {
-        alert(t("erreurPhoto"));
-        label.innerHTML = originalHTML;
-      }
-    });
-  });
-
-  list.querySelectorAll('.remit-btn').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const id = btn.dataset.id;
-      const entry = entries.find((x) => x.id === id);
-      if (!entry) return;
-      entry.remit_direction = btn.dataset.remit || null;
-      await saveEntry(entry);
-      await load();
-    });
-  });
-
-  list.querySelectorAll('.remit-amount-input').forEach((inp) => {
-    inp.addEventListener("change", async (ev) => {
-      const id = ev.target.dataset.id;
-      const entry = entries.find((x) => x.id === id);
-      if (!entry) return;
-      entry.remit_amount = parseFloat(ev.target.value) || 0;
-      await saveEntry(entry);
-      await load();
-    });
   });
 
   document.querySelectorAll('[data-period]').forEach((btn) => {
@@ -493,8 +567,13 @@ function render() {
 
   document.getElementById("addBtn").addEventListener("click", async () => {
     const today = todayLocalISO();
-    await saveEntry({ date: today, ventes: 0, clients: 0, pct: 0, remis: 0, is_hotesse: false });
-    await load();
+    const payload = { date: today, ventes: 0, clients: 0, pct: 0, remis: 0, is_hotesse: false };
+    const res = await saveEntry(payload);
+    const newEntry = { ...payload, id: res.id, pourboireBrut: 0, net: 0, moyenne: 0, photo_filename: null, remit_direction: null, remit_amount: 0, transferred: 0, transfer_date: null };
+    state.entries.push(newEntry);
+    currentEntries.unshift(newEntry);
+    document.getElementById("daysList").prepend(buildCardElement(newEntry));
+    refreshTotals();
   });
 }
 
