@@ -26,6 +26,10 @@
   .employee-name { font-weight: 700; font-size: 14px; }
   .employee-sub { font-size: 11px; color: rgba(0,0,0,0.5); }
   .link-box { font-size: 11px; background: #EAF1DD; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
+  .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .link-row .link-box { flex: 1; margin-top: 0; }
+  .copy-btn { background: #0B5D5C; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn.copied { background: #2E9E5B; }
   .totals { font-size: 12px; text-align: right; }
   .totals b { color: #2E9E5B; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
@@ -179,7 +183,10 @@ function render() {
             <div>
               <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
               <div class="employee-sub">Code : <b>${e.access_code}</b></div>
-              <div class="link-box">${link}</div>
+              <div class="link-row">
+                <div class="link-box">${link}</div>
+                <button class="copy-btn" data-action="copyLink" data-link="${link}">📋 Copier</button>
+              </div>
             </div>
             <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">Retirer</button>
           </div>
@@ -252,6 +259,35 @@ function render() {
       if (!confirm("Retirer cet employé et ses données?")) return;
       await api(`/api/admin/employees/${btn.dataset.id}`, { method: "DELETE" });
       await load();
+    });
+  });
+
+  document.querySelectorAll('[data-action="copyLink"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const link = btn.dataset.link;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(link);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = link;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        const original = btn.textContent;
+        btn.textContent = "✓ Copié";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.classList.remove("copied");
+        }, 1500);
+      } catch (e) {
+        alert("Impossible de copier automatiquement. Lien : " + link);
+      }
     });
   });
 
