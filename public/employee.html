@@ -48,6 +48,11 @@
     padding: 8px 12px; border-radius: 10px; cursor: pointer; white-space: nowrap; margin-left: auto;
   }
   .remit-section { margin-top: 10px; }
+  .remit-confirmed {
+    background: #EAF7EE; color: #1E6B3C; border-radius: 10px; padding: 10px 12px;
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .remit-confirmed-amount { font-size: 14px; font-weight: 800; }
   .remit-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 6px; }
   .remit-options { display: flex; gap: 6px; flex-wrap: wrap; }
   .remit-btn { background: #F1EEE6; color: rgba(0,0,0,0.55); font-size: 11px; font-weight: 700; padding: 8px 10px; border-radius: 10px; flex: 1; min-width: 90px; text-align: center; }
@@ -99,6 +104,8 @@ const I18N = {
     remitEmployerOwes: "⚠️ Vous me devez",
     remitEmployeeOwes: "⚠️ Je vous dois",
     remitAmountLabel: "Montant $",
+    payeLe: (date) => `Payé${date ? " le " + date : ""}`,
+    recuConfirmeLe: (date) => `Reçu confirmé${date ? " le " + date : ""}`,
     remplacer: "Remplacer",
     ajouterMot: "Ajouter",
     releve: "le relevé",
@@ -136,6 +143,8 @@ const I18N = {
     remitEmployerOwes: "⚠️ You owe me",
     remitEmployeeOwes: "⚠️ I owe you",
     remitAmountLabel: "Amount $",
+    payeLe: (date) => `Paid${date ? " on " + date : ""}`,
+    recuConfirmeLe: (date) => `Reception confirmed${date ? " on " + date : ""}`,
     remplacer: "Replace",
     ajouterMot: "Add",
     releve: "receipt",
@@ -333,6 +342,12 @@ function render() {
         </label>
       </div>
       <div class="remit-section">
+        ${e.remit_direction && e.transferred ? `
+        <div class="remit-confirmed">
+          ✅ ${e.remit_direction === "employer_owes" ? t("payeLe", e.transfer_date || "") : t("recuConfirmeLe", e.transfer_date || "")}
+          <div class="remit-confirmed-amount">${fmtMoney(e.remit_amount)}</div>
+        </div>
+        ` : `
         <div class="remit-label">${t("remitLabel")}</div>
         <div class="remit-options">
           <button type="button" class="remit-btn ${!e.remit_direction ? "active" : ""}" data-id="${e.id}" data-remit="">${t("remitNone")}</button>
@@ -344,6 +359,7 @@ function render() {
           <label>${t("remitAmountLabel")}</label>
           <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remit_amount || ""}" data-id="${e.id}" class="remit-amount-input" />
         </div>` : ""}
+        `}
       </div>
     `;
     list.appendChild(card);
