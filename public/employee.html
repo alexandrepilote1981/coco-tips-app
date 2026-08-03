@@ -244,6 +244,7 @@ function render() {
   });
   list.querySelectorAll('[data-action="del"]').forEach((btn) => {
     btn.addEventListener("click", async (ev) => {
+      if (!confirm("Supprimer cette journée? Cette action ne peut pas être annulée.")) return;
       await deleteEntry(ev.target.dataset.id);
       await load();
     });
