@@ -67,6 +67,22 @@
     background: #FDECEC; border: 1px solid #F5B8B8; color: #7A1F1F; border-radius: 14px;
     padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px;
   }
+  .messages-toggle {
+    background: none; border: none; padding: 0; color: #0B5D5C; font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  }
+  .unread-badge {
+    background: #F26D6D; color: white; font-size: 11px; font-weight: 800; border-radius: 999px;
+    padding: 2px 8px; min-width: 18px; text-align: center; display: inline-block;
+  }
+  .message-item { border-top: 1px solid #F0EBE0; padding: 10px 0; }
+  .message-item:first-child { border-top: none; }
+  .message-item.message-unread { background: #FFF9E8; margin: 0 -8px; padding: 10px 8px; border-radius: 8px; }
+  .message-meta { font-size: 11px; color: rgba(0,0,0,0.5); margin-bottom: 4px; }
+  .message-body { font-size: 13px; color: #17302D; white-space: pre-wrap; margin-bottom: 8px; }
+  .message-actions { display: flex; gap: 8px; }
+  .message-action-btn { background: #F1EEE6; color: #0B5D5C; font-size: 11px; padding: 5px 10px; border-radius: 8px; }
+  .message-action-btn.danger { background: #FDECEC; color: #7A1F1F; }
   .pending-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .pending-chip {
     background: white; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px;
@@ -111,6 +127,7 @@
 <script>
 let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
+let messages = [];
 let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
 
 // ---------- Traductions ----------
@@ -147,6 +164,12 @@ const I18N = {
     pourboireNetTotal: "Pourboire net total",
     pctMoyenLabel: "% moyen",
     enAttenteLabel: "En attente",
+    messagesTitle: "Messages des employés",
+    aucunMessage: "Aucun message pour l'instant.",
+    marquerLu: "Marquer lu",
+    marquerNonLu: "Marquer non lu",
+    supprimerMessage: "Supprimer",
+    confirmSupprimerMessage: "Supprimer ce message?",
     voirDetail: (n) => `📊 Voir le détail par jour (${n})`,
     aucuneJournee: "Aucune journée dans cette période.",
     thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement",
@@ -215,6 +238,12 @@ const I18N = {
     pourboireNetTotal: "Total net tips",
     pctMoyenLabel: "Avg. %",
     enAttenteLabel: "Pending",
+    messagesTitle: "Messages from employees",
+    aucunMessage: "No messages yet.",
+    marquerLu: "Mark read",
+    marquerNonLu: "Mark unread",
+    supprimerMessage: "Delete",
+    confirmSupprimerMessage: "Delete this message?",
     voirDetail: (n) => `📊 See daily detail (${n})`,
     aucuneJournee: "No days in this period.",
     thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer",
@@ -336,6 +365,12 @@ async function load() {
     if (start) params.set("startDate", start);
     if (end) params.set("endDate", end);
     overview = await api(`/api/admin/overview?${params.toString()}`);
+    try {
+      const res = await api("/api/admin/messages");
+      messages = res.messages;
+    } catch (e) {
+      messages = [];
+    }
     render();
   } catch (e) {
     renderLogin();
@@ -411,6 +446,9 @@ function render() {
           `).join("")}
         </div>
       </div>` : ""}
+      <div class="card" id="messagesInboxCard">
+        <div id="messagesInbox"></div>
+      </div>
       <div class="card">
         <div class="section-label">${t("periodeAffichee")}</div>
         <div class="period-bar">
@@ -552,6 +590,8 @@ function render() {
 
   document.getElementById("app").innerHTML = html;
 
+  renderMessagesInbox();
+
   document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
 
   document.querySelectorAll("[data-period]").forEach((btn) => {
@@ -661,6 +701,68 @@ function render() {
       if (!confirm(t("confirmSupprimerRestaurant"))) return;
       await api(`/api/admin/restaurants/${btn.dataset.id}`, { method: "DELETE" });
       await load();
+    });
+  });
+}
+
+function fmtMsgDate(iso) {
+  if (!iso) return "";
+  // iso vient de SQLite au format 'YYYY-MM-DD HH:MM:SS' (UTC) — on le rend lisible.
+  const d = new Date(iso.replace(" ", "T") + "Z");
+  return d.toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderMessagesInbox() {
+  const container = document.getElementById("messagesInbox");
+  if (!container) return;
+  const unreadCount = messages.filter((m) => !m.is_read).length;
+
+  container.innerHTML = `
+    <button class="messages-toggle" id="messagesToggleBtn">
+      📬 ${t("messagesTitle")} ${unreadCount > 0 ? `<span class="unread-badge">${unreadCount}</span>` : ""}
+    </button>
+    <div id="messagesList" style="display:none; margin-top:12px;">
+      ${messages.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5);">${t("aucunMessage")}</p>` : messages.map((m) => `
+        <div class="message-item ${m.is_read ? "" : "message-unread"}">
+          <div class="message-meta">
+            <b>${m.employee_name}</b> · ${m.restaurant_name} · ${fmtMsgDate(m.created_at)}
+          </div>
+          <div class="message-body">${m.body.replace(/</g, "&lt;")}</div>
+          <div class="message-actions">
+            <button class="message-action-btn" data-action="toggleRead" data-id="${m.id}">${m.is_read ? t("marquerNonLu") : t("marquerLu")}</button>
+            <button class="message-action-btn danger" data-action="deleteMessage" data-id="${m.id}">${t("supprimerMessage")}</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  document.getElementById("messagesToggleBtn").addEventListener("click", () => {
+    const list = document.getElementById("messagesList");
+    list.style.display = list.style.display === "none" ? "block" : "none";
+  });
+
+  container.querySelectorAll('[data-action="toggleRead"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const msg = messages.find((m) => m.id === btn.dataset.id);
+      if (!msg) return;
+      const newValue = !msg.is_read;
+      await api(`/api/admin/messages/${msg.id}/read`, { method: "POST", body: JSON.stringify({ is_read: newValue }) });
+      msg.is_read = newValue;
+      renderMessagesInbox();
+      const list = document.getElementById("messagesList");
+      if (list) list.style.display = "block";
+    });
+  });
+
+  container.querySelectorAll('[data-action="deleteMessage"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(t("confirmSupprimerMessage"))) return;
+      await api(`/api/admin/messages/${btn.dataset.id}`, { method: "DELETE" });
+      messages = messages.filter((m) => m.id !== btn.dataset.id);
+      renderMessagesInbox();
+      const list = document.getElementById("messagesList");
+      if (list) list.style.display = "block";
     });
   });
 }

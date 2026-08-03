@@ -65,6 +65,13 @@
   .remit-btn.active-owed-employee { background: #FDECEC; color: #7A1F1F; }
   .remit-btn.active-owed-employer { background: #FFF2CC; color: #7A5B00; }
   .error-box { margin: 40px 20px; text-align: center; color: #7A1F1F; }
+  .message-card { margin-top: 20px; }
+  .section-label-inline { font-size: 13px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.55); margin-bottom: 10px; }
+  .message-textarea {
+    width: 100%; min-height: 80px; border: none; border-radius: 10px; padding: 10px;
+    font-size: 14px; font-family: inherit; background: #F1EEE6; color: #17302D; outline: none; resize: vertical;
+  }
+  .message-confirm { color: #2E9E5B; font-weight: 700; font-size: 12px; margin: 8px 0 0; }
   .period-card { margin-top: -20px; margin-bottom: 12px; padding: 12px 14px; }
   .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(0,0,0,0.4); margin-bottom: 8px; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -123,6 +130,10 @@ const I18N = {
     envoiEnCours: "⏳ Envoi...",
     erreurPhoto: "Erreur lors de l'envoi de la photo. Réessaie.",
     erreurSauvegarde: "Erreur de sauvegarde. Vérifie ta connexion et réessaie.",
+    messageTitle: "Écrire un message au gérant",
+    messagePlaceholder: "Question, problème, ou n'importe quoi que tu veux signaler...",
+    messageSend: "Envoyer",
+    messageSent: "Message envoyé!",
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
     periodeAffichee: "Période affichée",
     p2Semaines: "2 semaines",
@@ -166,6 +177,10 @@ const I18N = {
     envoiEnCours: "⏳ Uploading...",
     erreurPhoto: "Error uploading photo. Try again.",
     erreurSauvegarde: "Save error. Check your connection and try again.",
+    messageTitle: "Write a message to your manager",
+    messagePlaceholder: "Question, issue, or anything you'd like to flag...",
+    messageSend: "Send",
+    messageSent: "Message sent!",
     confirmDelete: "Delete this day? This cannot be undone.",
     periodeAffichee: "Period shown",
     p2Semaines: "2 weeks",
@@ -547,12 +562,41 @@ function render() {
       </div>
       <p style="font-size:11px; color:rgba(0,0,0,0.45); margin:-4px 0 12px;">${t("multiEntryHint")}</p>
       <div id="daysList"></div>
+
+      <div class="card message-card">
+        <div class="section-label-inline">✉️ ${t("messageTitle")}</div>
+        <textarea id="messageBody" class="message-textarea" placeholder="${t("messagePlaceholder")}"></textarea>
+        <button class="add-btn" id="sendMessageBtn" style="margin-top:8px;">${t("messageSend")}</button>
+        <p id="messageConfirm" class="message-confirm" style="display:none;">✓ ${t("messageSent")}</p>
+      </div>
     </div>
   `;
 
   const list = document.getElementById("daysList");
   list.innerHTML = "";
   entries.forEach((e) => list.appendChild(buildCardElement(e)));
+
+  document.getElementById("sendMessageBtn").addEventListener("click", async () => {
+    const textarea = document.getElementById("messageBody");
+    const body = textarea.value.trim();
+    if (!body) return;
+    const btn = document.getElementById("sendMessageBtn");
+    const originalText = btn.textContent;
+    btn.textContent = t("envoiEnCours");
+    btn.disabled = true;
+    try {
+      await api(`/api/employee/${CODE}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+      textarea.value = "";
+      const confirm = document.getElementById("messageConfirm");
+      confirm.style.display = "block";
+      setTimeout(() => { confirm.style.display = "none"; }, 3000);
+    } catch (err) {
+      alert(t("erreurSauvegarde"));
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById("langToggle").addEventListener("click", () => {
     setLang(lang === "fr" ? "en" : "fr");
