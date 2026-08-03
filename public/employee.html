@@ -78,11 +78,11 @@ async function load() {
 }
 
 async function saveEntry(entry) {
-  await api(`/api/employee/${CODE}/entries`, { method: "POST", body: JSON.stringify(entry) });
+  return api(`/api/employee/${CODE}/entries`, { method: "POST", body: JSON.stringify(entry) });
 }
 
-async function deleteEntry(date) {
-  await api(`/api/employee/${CODE}/entries/${date}`, { method: "DELETE" });
+async function deleteEntry(entryId) {
+  await api(`/api/employee/${CODE}/entries/${entryId}`, { method: "DELETE" });
 }
 
 function render() {
@@ -112,6 +112,7 @@ function render() {
         <span>Journées (${entries.length})</span>
         <button class="add-btn" id="addBtn">+ Ajouter</button>
       </div>
+      <p style="font-size:11px; color:rgba(0,0,0,0.45); margin:-4px 0 12px;">Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).</p>
       <div id="daysList"></div>
     </div>
   `;
@@ -123,18 +124,18 @@ function render() {
     card.className = "card day-card";
     card.innerHTML = `
       <div class="day-head">
-        <input type="date" value="${e.date}" data-date="${e.date}" data-field="date" />
-        <button class="del-btn" data-date="${e.date}" data-action="del">🗑</button>
+        <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
+        <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
       </div>
       <div class="field-grid">
         <div class="field"><label>Ventes $</label>
-          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-date="${e.date}" data-field="ventes" /></div>
+          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes" /></div>
         <div class="field"><label># Clients</label>
-          <input type="number" inputmode="numeric" placeholder="0" value="${e.clients || ""}" data-date="${e.date}" data-field="clients" /></div>
+          <input type="number" inputmode="numeric" placeholder="0" value="${e.clients || ""}" data-id="${e.id}" data-field="clients" /></div>
         <div class="field pct"><label>% Pourboire</label>
-          <input type="number" inputmode="decimal" placeholder="10" value="${e.pct || ""}" data-date="${e.date}" data-field="pct" /></div>
+          <input type="number" inputmode="decimal" placeholder="10" value="${e.pct || ""}" data-id="${e.id}" data-field="pct" /></div>
         <div class="field"><label>Remis employés $</label>
-          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remis || ""}" data-date="${e.date}" data-field="remis" /></div>
+          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.remis || ""}" data-id="${e.id}" data-field="remis" /></div>
       </div>
       <div class="day-summary">
         <span>Moy./client <b>${fmtMoney(e.moyenne)}</b></span>
@@ -145,38 +146,27 @@ function render() {
     list.appendChild(card);
   });
 
-  list.querySelectorAll('input[data-field]:not([data-field="date"])').forEach((inp) => {
+  list.querySelectorAll('input[data-field]').forEach((inp) => {
     inp.addEventListener("change", async (ev) => {
-      const date = ev.target.dataset.date;
-      const entry = entries.find((x) => x.date === date) || { date };
-      entry[ev.target.dataset.field] = parseFloat(ev.target.value) || 0;
+      const id = ev.target.dataset.id;
+      const entry = entries.find((x) => x.id === id);
+      if (!entry) return;
+      const field = ev.target.dataset.field;
+      entry[field] = field === "date" ? ev.target.value : (parseFloat(ev.target.value) || 0);
       await saveEntry(entry);
-      await load();
-    });
-  });
-  list.querySelectorAll('input[data-field="date"]').forEach((inp) => {
-    inp.addEventListener("change", async (ev) => {
-      const oldDate = ev.target.dataset.date;
-      const entry = entries.find((x) => x.date === oldDate);
-      const newDate = ev.target.value;
-      await deleteEntry(oldDate);
-      await saveEntry({ ...entry, date: newDate });
       await load();
     });
   });
   list.querySelectorAll('[data-action="del"]').forEach((btn) => {
     btn.addEventListener("click", async (ev) => {
-      await deleteEntry(ev.target.dataset.date);
+      await deleteEntry(ev.target.dataset.id);
       await load();
     });
   });
 
   document.getElementById("addBtn").addEventListener("click", async () => {
-    const mostRecent = entries[0];
-    const base = mostRecent ? new Date(mostRecent.date + "T12:00:00") : new Date();
-    base.setDate(base.getDate() + (mostRecent ? 1 : 0));
-    const newDate = base.toISOString().slice(0, 10);
-    await saveEntry({ date: newDate, ventes: 0, clients: 0, pct: 0, remis: 0 });
+    const today = new Date().toISOString().slice(0, 10);
+    await saveEntry({ date: today, ventes: 0, clients: 0, pct: 0, remis: 0 });
     await load();
   });
 }
