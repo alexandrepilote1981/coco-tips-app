@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS entries (
   photo_filename TEXT,
   flagged_negative INTEGER DEFAULT 0,
   remit_direction TEXT,
+  remit_amount REAL DEFAULT 0,
   transferred INTEGER DEFAULT 0,
   transfer_date TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
@@ -53,6 +54,7 @@ for (const col of [
   "photo_filename TEXT",
   "flagged_negative INTEGER DEFAULT 0",
   "remit_direction TEXT",
+  "remit_amount REAL DEFAULT 0",
   "transferred INTEGER DEFAULT 0",
   "transfer_date TEXT",
 ]) {

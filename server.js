@@ -54,9 +54,10 @@ app.post("/api/employee/:code/entries", (req, res) => {
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
 
-  const { id, date, ventes, clients, pct, remis, remit_direction } = req.body;
+  const { id, date, ventes, clients, pct, remis, remit_direction, remit_amount } = req.body;
   if (!date) return res.status(400).json({ error: "Date requise" });
   const direction = ["employer_owes", "employee_owes"].includes(remit_direction) ? remit_direction : null;
+  const amount = direction ? (parseFloat(remit_amount) || 0) : 0;
 
   // Si un id est fourni et appartient bien à cet employé, on met à jour cette entrée précise.
   const existing = id
@@ -65,16 +66,16 @@ app.post("/api/employee/:code/entries", (req, res) => {
 
   if (existing) {
     db.prepare(
-      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, updated_at=datetime('now') WHERE id=?`
-    ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, existing.id);
+      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?, updated_at=datetime('now') WHERE id=?`
+    ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, existing.id);
     res.json({ ok: true, id: existing.id });
   } else {
     // Sinon on crée une NOUVELLE entrée — plusieurs entrées peuvent exister pour la même date
     // (ex: une serveuse qui rentre ses chiffres 2 fois dans la même journée).
     const newId = nanoid(10);
     db.prepare(
-      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction) VALUES (?,?,?,?,?,?,?,?)`
-    ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction);
+      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction, remit_amount) VALUES (?,?,?,?,?,?,?,?,?)`
+    ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount);
     res.json({ ok: true, id: newId });
   }
 });
