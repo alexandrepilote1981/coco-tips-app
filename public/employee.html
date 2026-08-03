@@ -36,6 +36,9 @@
   .day-summary b { color: rgba(0,0,0,0.75); }
   .day-summary .net b { color: #2E9E5B; }
   .error-box { margin: 40px 20px; text-align: center; color: #7A1F1F; }
+  .period-bar { display: flex; gap: 8px; margin: -12px 0 14px; }
+  .period-btn { background: #EAE4D8; color: #17302D; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 999px; flex: 1; }
+  .period-btn.active { background: #0B5D5C; color: white; }
 </style>
 </head>
 <body>
@@ -63,6 +66,21 @@ function todayLocalISO() {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+function isoDaysAgoLocal(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+let period = { mode: "2w" }; // '2w' | 'month' | 'all'
+function resolvePeriod() {
+  if (period.mode === "2w") return { start: isoDaysAgoLocal(13), end: todayLocalISO() };
+  if (period.mode === "month") return { start: isoDaysAgoLocal(29), end: todayLocalISO() };
+  return { start: null, end: null }; // all
 }
 
 function fmtMoney(n) {
@@ -96,7 +114,10 @@ async function deleteEntry(entryId) {
 }
 
 function render() {
-  const { employee, restaurant, entries } = state;
+  const { employee, restaurant, entries: allEntries } = state;
+  const { start, end } = resolvePeriod();
+  const entries = allEntries.filter((e) => (!start || e.date >= start) && (!end || e.date <= end));
+
   const totVentes = entries.reduce((s, e) => s + e.ventes, 0);
   const totClients = entries.reduce((s, e) => s + e.clients, 0);
   const totBrut = entries.reduce((s, e) => s + e.pourboireBrut, 0);
@@ -111,6 +132,11 @@ function render() {
       <p class="saved-note">Sauvegardé automatiquement</p>
     </div>
     <div class="content">
+      <div class="period-bar">
+        <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">2 semaines</button>
+        <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">30 jours</button>
+        <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">Tout</button>
+      </div>
       <div class="kpi-grid">
         <div class="card"><div class="kpi-label" style="color:#0B5D5C">💰 Ventes totales</div><div class="kpi-value" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
         <div class="card"><div class="kpi-label" style="color:#2E9E5B">📈 Pourboires nets</div><div class="kpi-value" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
@@ -171,6 +197,13 @@ function render() {
     btn.addEventListener("click", async (ev) => {
       await deleteEntry(ev.target.dataset.id);
       await load();
+    });
+  });
+
+  document.querySelectorAll('[data-period]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      period = { mode: btn.dataset.period };
+      render();
     });
   });
 
