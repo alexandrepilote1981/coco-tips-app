@@ -46,6 +46,14 @@ CREATE TABLE IF NOT EXISTS entries (
   is_hotesse INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  body TEXT NOT NULL,
+  is_read INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
 // Migrations sécuritaires : ajoute les colonnes si la base existait déjà (volume persistant)

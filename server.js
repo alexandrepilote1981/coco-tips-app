@@ -124,6 +124,21 @@ app.get("/api/photos/:filename", (req, res) => {
   res.sendFile(filePath);
 });
 
+app.post("/api/employee/:code/messages", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  const body = (req.body.body || "").trim();
+  if (!body) return res.status(400).json({ error: "Message vide" });
+  if (body.length > 2000) return res.status(400).json({ error: "Message trop long" });
+
+  const id = nanoid(10);
+  db.prepare("INSERT INTO messages (id, employee_id, body) VALUES (?,?,?)").run(id, emp.id, body);
+  res.json({ ok: true, id });
+});
+
 // =========================================================
 //  API ADMIN (Alex) — vue sur tous les restaurants/employés
 // =========================================================
@@ -219,6 +234,28 @@ app.delete("/api/admin/restaurants/:id", requireAdmin, (req, res) => {
   }
   db.prepare("DELETE FROM employees WHERE restaurant_id = ?").run(req.params.id);
   db.prepare("DELETE FROM restaurants WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/messages", requireAdmin, (req, res) => {
+  const messages = db.prepare(`
+    SELECT m.id, m.body, m.is_read, m.created_at, e.name AS employee_name, e.restaurant_id, r.name AS restaurant_name
+    FROM messages m
+    JOIN employees e ON e.id = m.employee_id
+    JOIN restaurants r ON r.id = e.restaurant_id
+    ORDER BY m.created_at DESC
+  `).all();
+  res.json({ messages });
+});
+
+app.post("/api/admin/messages/:id/read", requireAdmin, (req, res) => {
+  const value = req.body.is_read === false ? 0 : 1;
+  db.prepare("UPDATE messages SET is_read=? WHERE id=?").run(value, req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/messages/:id", requireAdmin, (req, res) => {
+  db.prepare("DELETE FROM messages WHERE id=?").run(req.params.id);
   res.json({ ok: true });
 });
 
