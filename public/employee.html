@@ -48,6 +48,12 @@
     padding: 8px 12px; border-radius: 10px; cursor: pointer; white-space: nowrap; margin-left: auto;
   }
   .remit-section { margin-top: 10px; }
+  .hotesse-toggle {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px 10px;
+    border-radius: 10px; background: #F1EEE6; color: rgba(0,0,0,0.6); font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .hotesse-toggle.active { background: #FFF2CC; color: #7A5B00; }
+  .hotesse-toggle input { width: 16px; height: 16px; }
   .remit-confirmed {
     background: #EAF7EE; color: #1E6B3C; border-radius: 10px; padding: 10px 12px;
     font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -91,6 +97,9 @@ const I18N = {
     journees: (n) => `Journées (${n})`,
     ajouter: "+ Ajouter",
     multiEntryHint: "Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).",
+    hotesseTodayLabel: "Aujourd'hui je suis hôtesse",
+    montantRecuLabel: "Montant reçu des serveuses $",
+    montantDeclare: "Montant déclaré",
     ventesLabel: "Ventes $",
     clientsLabel: "# Clients",
     pctLabel: "% Pourboire",
@@ -130,6 +139,9 @@ const I18N = {
     journees: (n) => `Days (${n})`,
     ajouter: "+ Add",
     multiEntryHint: "You can add several entries for the same day (e.g. lunch and dinner separately).",
+    hotesseTodayLabel: "Today I am the hostess",
+    montantRecuLabel: "Amount received from servers $",
+    montantDeclare: "Amount declared",
     ventesLabel: "Sales $",
     clientsLabel: "# Customers",
     pctLabel: "Tip %",
@@ -312,11 +324,16 @@ function render() {
   entries.forEach((e) => {
     const card = document.createElement("div");
     card.className = "card day-card";
-    card.innerHTML = `
-      <div class="day-head">
-        <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
-        <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
+    const dayIsHotesse = !!e.is_hotesse;
+    const formHtml = dayIsHotesse ? `
+      <div class="field-grid" style="grid-template-columns: 1fr;">
+        <div class="field"><label>${t("montantRecuLabel")}</label>
+          <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes-hotesse" /></div>
       </div>
+      <div class="day-summary">
+        <span class="net">${t("montantDeclare")} <b>${fmtMoney(e.net)}</b></span>
+      </div>
+    ` : `
       <div class="field-grid">
         <div class="field"><label>${t("ventesLabel")}</label>
           <input type="number" inputmode="decimal" placeholder="0.00" value="${e.ventes || ""}" data-id="${e.id}" data-field="ventes" /></div>
@@ -332,6 +349,17 @@ function render() {
         <span>${t("pourboires")} <b>${fmtMoney(e.pourboireBrut)}</b></span>
         <span class="net">${t("net")} <b>${fmtMoney(e.net)}</b></span>
       </div>
+    `;
+    card.innerHTML = `
+      <div class="day-head">
+        <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
+        <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
+      </div>
+      <label class="hotesse-toggle ${dayIsHotesse ? "active" : ""}">
+        <input type="checkbox" ${dayIsHotesse ? "checked" : ""} data-id="${e.id}" class="hotesse-checkbox" />
+        🎀 ${t("hotesseTodayLabel")}
+      </label>
+      ${formHtml}
       <div class="photo-row">
         ${e.photo_filename
           ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="receipt" /></a>`
@@ -369,13 +397,37 @@ function render() {
     setLang(lang === "fr" ? "en" : "fr");
   });
 
+  list.querySelectorAll('.hotesse-checkbox').forEach((inp) => {
+    inp.addEventListener("change", async (ev) => {
+      const id = ev.target.dataset.id;
+      const entry = entries.find((x) => x.id === id);
+      if (!entry) return;
+      entry.is_hotesse = ev.target.checked;
+      if (ev.target.checked) {
+        // en passant en mode hôtesse, on réinitialise les champs serveur pour rester cohérent
+        entry.pct = 100;
+        entry.remis = 0;
+        entry.clients = 0;
+      }
+      await saveEntry(entry);
+      await load();
+    });
+  });
+
   list.querySelectorAll('input[data-field]').forEach((inp) => {
     inp.addEventListener("change", async (ev) => {
       const id = ev.target.dataset.id;
       const entry = entries.find((x) => x.id === id);
       if (!entry) return;
       const field = ev.target.dataset.field;
-      entry[field] = field === "date" ? ev.target.value : (parseFloat(ev.target.value) || 0);
+      if (field === "ventes-hotesse") {
+        entry.ventes = parseFloat(ev.target.value) || 0;
+        entry.pct = 100;
+        entry.remis = 0;
+        entry.clients = 0;
+      } else {
+        entry[field] = field === "date" ? ev.target.value : (parseFloat(ev.target.value) || 0);
+      }
       await saveEntry(entry);
       await load();
     });
@@ -441,7 +493,7 @@ function render() {
 
   document.getElementById("addBtn").addEventListener("click", async () => {
     const today = todayLocalISO();
-    await saveEntry({ date: today, ventes: 0, clients: 0, pct: 0, remis: 0 });
+    await saveEntry({ date: today, ventes: 0, clients: 0, pct: 0, remis: 0, is_hotesse: false });
     await load();
   });
 }

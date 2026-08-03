@@ -171,6 +171,7 @@ const I18N = {
     confirmerBtn: "Confirmer",
     annulerBtn: "Annuler",
     nomEmployePlaceholder: "Nom employé",
+    roleHotesse: "Hôtesse",
     numEmployePlaceholder: "# employé",
     ajouterEmploye: "+ Employé",
     confirmRetirerEmploye: "Retirer cet employé et ses données?",
@@ -236,6 +237,7 @@ const I18N = {
     confirmerBtn: "Confirm",
     annulerBtn: "Cancel",
     nomEmployePlaceholder: "Employee name",
+    roleHotesse: "Hostess",
     numEmployePlaceholder: "# employee",
     ajouterEmploye: "+ Employee",
     confirmRetirerEmploye: "Remove this employee and their data?",
@@ -514,7 +516,7 @@ function render() {
                   }
                   return `
                   <tr class="${rowClass}">
-                    <td>${fmtDateShort(d.date)}</td>
+                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#7A5B00; font-size:9px; font-weight:700;">🎀${t("roleHotesse")}</span>` : ""}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
                     <td>${fmtPct(d.pct / 100)}</td>
