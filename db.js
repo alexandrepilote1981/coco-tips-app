@@ -32,8 +32,7 @@ CREATE TABLE IF NOT EXISTS entries (
   clients REAL DEFAULT 0,
   pct REAL DEFAULT 0,
   remis REAL DEFAULT 0,
-  updated_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(employee_id, date)
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 `);
 
