@@ -83,6 +83,19 @@
   }
   .modal-box { background: white; border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; }
   .modal-box h3 { margin: 0 0 12px; font-size: 16px; }
+  .reply-banner {
+    background: linear-gradient(135deg,#0B5D5C,#0E7C7B); color: white; border-radius: 14px;
+    padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px; cursor: pointer;
+  }
+  .conversation-history {
+    max-height: 220px; overflow-y: auto; margin-bottom: 12px; padding-right: 2px;
+  }
+  .conversation-empty { font-size: 12px; color: rgba(0,0,0,0.4); text-align: center; padding: 12px 0; }
+  .conv-bubble { max-width: 85%; margin-bottom: 8px; padding: 8px 10px; border-radius: 12px; }
+  .conv-bubble.conv-employee { background: #DDEBF7; margin-left: auto; border-bottom-right-radius: 4px; }
+  .conv-bubble.conv-admin { background: #F1EEE6; margin-right: auto; border-bottom-left-radius: 4px; }
+  .conv-sender { font-size: 9px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 2px; }
+  .conv-body { font-size: 13px; color: #17302D; white-space: pre-wrap; }
   .modal-actions { display: flex; gap: 8px; margin-top: 10px; }
   .modal-actions button { flex: 1; }
   .modal-actions button.secondary { background: #EAE4D8; color: #17302D; }
@@ -148,6 +161,10 @@ const I18N = {
     messagePlaceholder: "Question, problème, ou n'importe quoi que tu veux signaler...",
     messageSend: "Envoyer",
     messageSent: "Message envoyé!",
+    nouvelleReponse: (n) => n > 1 ? `${n} nouvelles réponses du gérant` : "Nouvelle réponse du gérant",
+    aucunEchange: "Aucun échange pour l'instant.",
+    gerant: "Gérant",
+    moi: "Toi",
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
     periodeAffichee: "Période affichée",
     p2Semaines: "2 semaines",
@@ -197,6 +214,10 @@ const I18N = {
     messagePlaceholder: "Question, issue, or anything you'd like to flag...",
     messageSend: "Send",
     messageSent: "Message sent!",
+    nouvelleReponse: (n) => n > 1 ? `${n} new replies from your manager` : "New reply from your manager",
+    aucunEchange: "No messages yet.",
+    gerant: "Manager",
+    moi: "You",
     confirmDelete: "Delete this day? This cannot be undone.",
     periodeAffichee: "Period shown",
     p2Semaines: "2 weeks",
@@ -301,9 +322,17 @@ function recomputeEntry(entry) {
   entry.moyenne = clients > 0 ? ventes / clients : 0;
 }
 
+let conversation = [];
+
 async function load() {
   try {
     state = await api(`/api/employee/${CODE}`);
+    try {
+      const res = await api(`/api/employee/${CODE}/messages`);
+      conversation = res.messages;
+    } catch (e) {
+      conversation = [];
+    }
     render();
   } catch (e) {
     document.getElementById("app").innerHTML = `
@@ -545,6 +574,8 @@ function render() {
   const pctMoyen = totVentes > 0 ? (totBrut / totVentes) * 100 : 0;
   const parClient = totClients > 0 ? totNet / totClients : 0;
 
+  const unreadReplies = conversation.filter((m) => m.sender === "admin" && !m.is_read).length;
+
   document.getElementById("app").innerHTML = `
     <div class="header">
       <div class="header-top">
@@ -557,6 +588,10 @@ function render() {
       <p class="saved-note">${t("savedNote")}</p>
     </div>
     <div class="content">
+      ${unreadReplies > 0 ? `
+      <div class="reply-banner" id="replyBanner">
+        📩 ${t("nouvelleReponse", unreadReplies)}
+      </div>` : ""}
       <div class="card period-card">
         <div class="period-title-row">
           <div class="period-title">${t("periodeAffichee")}</div>
@@ -586,6 +621,14 @@ function render() {
     <div id="messageModalOverlay" class="modal-overlay" style="display:none;">
       <div class="modal-box">
         <h3>✉️ ${t("messageTitle")}</h3>
+        <div id="conversationHistory" class="conversation-history">
+          ${conversation.length === 0 ? `<p class="conversation-empty">${t("aucunEchange")}</p>` : conversation.map((m) => `
+            <div class="conv-bubble ${m.sender === "admin" ? "conv-admin" : "conv-employee"}">
+              <div class="conv-sender">${m.sender === "admin" ? t("gerant") : t("moi")}</div>
+              <div class="conv-body">${m.body.replace(/</g, "&lt;")}</div>
+            </div>
+          `).join("")}
+        </div>
         <textarea id="messageBody" class="message-textarea" placeholder="${t("messagePlaceholder")}"></textarea>
         <p id="messageConfirm" class="message-confirm" style="display:none;">✓ ${t("messageSent")}</p>
         <div class="modal-actions">
@@ -601,10 +644,26 @@ function render() {
   entries.forEach((e) => list.appendChild(buildCardElement(e)));
 
   const messageOverlay = document.getElementById("messageModalOverlay");
-  document.getElementById("openMessageModalBtn").addEventListener("click", () => {
+
+  async function openMessageModal() {
     messageOverlay.style.display = "flex";
     document.getElementById("messageBody").focus();
-  });
+    const history = document.getElementById("conversationHistory");
+    if (history) history.scrollTop = history.scrollHeight;
+    if (conversation.some((m) => m.sender === "admin" && !m.is_read)) {
+      try {
+        await api(`/api/employee/${CODE}/messages/mark-read`, { method: "POST", body: "{}" });
+        conversation.forEach((m) => { if (m.sender === "admin") m.is_read = 1; });
+        const banner = document.getElementById("replyBanner");
+        if (banner) banner.remove();
+      } catch (e) { /* pas grave si ça échoue, pas bloquant */ }
+    }
+  }
+
+  document.getElementById("openMessageModalBtn").addEventListener("click", openMessageModal);
+  const replyBanner = document.getElementById("replyBanner");
+  if (replyBanner) replyBanner.addEventListener("click", openMessageModal);
+
   document.getElementById("closeMessageModalBtn").addEventListener("click", () => {
     messageOverlay.style.display = "none";
   });
@@ -619,13 +678,21 @@ function render() {
     btn.disabled = true;
     try {
       await api(`/api/employee/${CODE}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+      conversation.push({ body, sender: "employee", is_read: 0, created_at: new Date().toISOString() });
       textarea.value = "";
+      const history = document.getElementById("conversationHistory");
+      if (history) {
+        history.innerHTML = conversation.map((m) => `
+          <div class="conv-bubble ${m.sender === "admin" ? "conv-admin" : "conv-employee"}">
+            <div class="conv-sender">${m.sender === "admin" ? t("gerant") : t("moi")}</div>
+            <div class="conv-body">${m.body.replace(/</g, "&lt;")}</div>
+          </div>
+        `).join("");
+        history.scrollTop = history.scrollHeight;
+      }
       const confirm = document.getElementById("messageConfirm");
       confirm.style.display = "block";
-      setTimeout(() => {
-        confirm.style.display = "none";
-        messageOverlay.style.display = "none";
-      }, 1200);
+      setTimeout(() => { confirm.style.display = "none"; }, 1200);
     } catch (err) {
       alert(t("erreurSauvegarde"));
     } finally {
