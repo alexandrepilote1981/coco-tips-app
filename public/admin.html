@@ -178,6 +178,8 @@ const I18N = {
     confirmSupprimerRestaurant: "Supprimer ce restaurant et toutes ses données?",
     csvHeaders: ["Restaurant", "Employé", "# Employé", "Date", "Ventes $", "# Clients", "% Pourboire", "Remis employés $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Direction virement", "Montant à remettre $", "Viré?", "Date du virement"],
     csvNone: "Aucun", csvEmployerOwes: "Vous devez", csvEmployeeOwes: "Employé doit", csvOui: "Oui", csvNon: "Non",
+    csvSousTotal: "SOUS-TOTAL",
+    csvTotalRestaurant: "TOTAL RESTAURANT",
     tout: "tout",
     locale: "fr-CA",
   },
@@ -244,6 +246,8 @@ const I18N = {
     confirmSupprimerRestaurant: "Delete this restaurant and all its data?",
     csvHeaders: ["Restaurant", "Employee", "# Employee", "Date", "Sales $", "# Customers", "Tip %", "Given to staff $", "Gross tips $", "Net tips $", "Avg./customer $", "Transfer direction", "Amount to remit $", "Transferred?", "Transfer date"],
     csvNone: "None", csvEmployerOwes: "You owe", csvEmployeeOwes: "Employee owes", csvOui: "Yes", csvNon: "No",
+    csvSousTotal: "SUBTOTAL",
+    csvTotalRestaurant: "RESTAURANT TOTAL",
     tout: "all",
     locale: "en-CA",
   },
@@ -673,7 +677,11 @@ function exportCSV() {
   const rows = [t("csvHeaders")];
 
   overview.restaurants.forEach((r) => {
+    const restoTotals = { ventes: 0, clients: 0, remis: 0, brut: 0, net: 0 };
+
     r.employees.forEach((e) => {
+      const empTotals = { ventes: 0, clients: 0, remis: 0, brut: 0, net: 0 };
+
       e.entries.forEach((d) => {
         const directionLabel =
           d.remit_direction === "employer_owes" ? t("csvEmployerOwes") :
@@ -696,8 +704,50 @@ function exportCSV() {
           d.remit_direction ? (d.transferred ? t("csvOui") : t("csvNon")) : "",
           d.transferred ? (d.transfer_date || "") : "",
         ]);
+        empTotals.ventes += d.ventes;
+        empTotals.clients += d.clients;
+        empTotals.remis += d.remis;
+        empTotals.brut += d.pourboireBrut;
+        empTotals.net += d.net;
       });
+
+      // Sous-total de l'employé (une seule ligne, après toutes ses journées)
+      const empPctMoyen = empTotals.ventes > 0 ? (empTotals.brut / empTotals.ventes) * 100 : 0;
+      const empMoyClient = empTotals.clients > 0 ? empTotals.net / empTotals.clients : 0;
+      rows.push([
+        "", t("csvSousTotal") + " " + e.name, "", "",
+        empTotals.ventes.toFixed(2),
+        empTotals.clients,
+        empPctMoyen.toFixed(1),
+        empTotals.remis.toFixed(2),
+        empTotals.brut.toFixed(2),
+        empTotals.net.toFixed(2),
+        empMoyClient.toFixed(2),
+        "", "", "", "",
+      ]);
+
+      restoTotals.ventes += empTotals.ventes;
+      restoTotals.clients += empTotals.clients;
+      restoTotals.remis += empTotals.remis;
+      restoTotals.brut += empTotals.brut;
+      restoTotals.net += empTotals.net;
     });
+
+    // Total du restaurant au complet (tous les employés additionnés)
+    const restoPctMoyen = restoTotals.ventes > 0 ? (restoTotals.brut / restoTotals.ventes) * 100 : 0;
+    const restoMoyClient = restoTotals.clients > 0 ? restoTotals.net / restoTotals.clients : 0;
+    rows.push([
+      r.name, t("csvTotalRestaurant"), "", "",
+      restoTotals.ventes.toFixed(2),
+      restoTotals.clients,
+      restoPctMoyen.toFixed(1),
+      restoTotals.remis.toFixed(2),
+      restoTotals.brut.toFixed(2),
+      restoTotals.net.toFixed(2),
+      restoMoyClient.toFixed(2),
+      "", "", "", "",
+    ]);
+    rows.push([]); // ligne vide pour bien séparer visuellement chaque restaurant
   });
 
   const csvContent = rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
