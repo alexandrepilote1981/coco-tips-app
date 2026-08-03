@@ -40,7 +40,7 @@ app.get("/api/employee/:code", (req, res) => {
 
   const restaurant = db.prepare("SELECT * FROM restaurants WHERE id = ?").get(emp.restaurant_id);
   const entries = db
-    .prepare("SELECT * FROM entries WHERE employee_id = ? ORDER BY date DESC, updated_at DESC")
+    .prepare("SELECT * FROM entries WHERE employee_id = ? ORDER BY date DESC, updated_at DESC, rowid DESC")
     .all(emp.id)
     .map(computeEntry);
 
@@ -115,7 +115,7 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
           query += " AND date <= ?";
           params.push(endDate);
         }
-        query += " ORDER BY date DESC, updated_at DESC";
+        query += " ORDER BY date DESC, updated_at DESC, rowid DESC";
         const entries = db.prepare(query).all(...params).map(computeEntry);
         const totals = entries.reduce(
           (acc, e) => {
