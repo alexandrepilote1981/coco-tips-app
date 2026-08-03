@@ -65,15 +65,27 @@
   .remit-btn.active-owed-employee { background: #FDECEC; color: #7A1F1F; }
   .remit-btn.active-owed-employer { background: #FFF2CC; color: #7A5B00; }
   .error-box { margin: 40px 20px; text-align: center; color: #7A1F1F; }
-  .message-card { margin-top: 20px; }
-  .section-label-inline { font-size: 13px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.55); margin-bottom: 10px; }
   .message-textarea {
     width: 100%; min-height: 80px; border: none; border-radius: 10px; padding: 10px;
     font-size: 14px; font-family: inherit; background: #F1EEE6; color: #17302D; outline: none; resize: vertical;
   }
   .message-confirm { color: #2E9E5B; font-weight: 700; font-size: 12px; margin: 8px 0 0; }
   .period-card { margin-top: -20px; margin-bottom: 12px; padding: 12px 14px; }
-  .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(0,0,0,0.4); margin-bottom: 8px; }
+  .period-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(0,0,0,0.4); margin-bottom: 0; }
+  .message-tab-btn {
+    background: #F1EEE6; color: #0B5D5C; font-size: 11px; font-weight: 700;
+    padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+  }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-box { background: white; border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; }
+  .modal-box h3 { margin: 0 0 12px; font-size: 16px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .modal-actions button { flex: 1; }
+  .modal-actions button.secondary { background: #EAE4D8; color: #17302D; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; }
   .period-btn {
     background: #F1EEE6; color: #17302D; font-size: 12px; font-weight: 700;
@@ -131,6 +143,8 @@ const I18N = {
     erreurPhoto: "Erreur lors de l'envoi de la photo. Réessaie.",
     erreurSauvegarde: "Erreur de sauvegarde. Vérifie ta connexion et réessaie.",
     messageTitle: "Écrire un message au gérant",
+    messageTab: "Message",
+    annulerBtn: "Annuler",
     messagePlaceholder: "Question, problème, ou n'importe quoi que tu veux signaler...",
     messageSend: "Envoyer",
     messageSent: "Message envoyé!",
@@ -178,6 +192,8 @@ const I18N = {
     erreurPhoto: "Error uploading photo. Try again.",
     erreurSauvegarde: "Save error. Check your connection and try again.",
     messageTitle: "Write a message to your manager",
+    messageTab: "Message",
+    annulerBtn: "Cancel",
     messagePlaceholder: "Question, issue, or anything you'd like to flag...",
     messageSend: "Send",
     messageSent: "Message sent!",
@@ -542,7 +558,10 @@ function render() {
     </div>
     <div class="content">
       <div class="card period-card">
-        <div class="period-title">${t("periodeAffichee")}</div>
+        <div class="period-title-row">
+          <div class="period-title">${t("periodeAffichee")}</div>
+          <button class="message-tab-btn" id="openMessageModalBtn">✉️ ${t("messageTab")}</button>
+        </div>
         <div class="period-bar">
           <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
           <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
@@ -562,12 +581,17 @@ function render() {
       </div>
       <p style="font-size:11px; color:rgba(0,0,0,0.45); margin:-4px 0 12px;">${t("multiEntryHint")}</p>
       <div id="daysList"></div>
+    </div>
 
-      <div class="card message-card">
-        <div class="section-label-inline">✉️ ${t("messageTitle")}</div>
+    <div id="messageModalOverlay" class="modal-overlay" style="display:none;">
+      <div class="modal-box">
+        <h3>✉️ ${t("messageTitle")}</h3>
         <textarea id="messageBody" class="message-textarea" placeholder="${t("messagePlaceholder")}"></textarea>
-        <button class="add-btn" id="sendMessageBtn" style="margin-top:8px;">${t("messageSend")}</button>
         <p id="messageConfirm" class="message-confirm" style="display:none;">✓ ${t("messageSent")}</p>
+        <div class="modal-actions">
+          <button class="secondary" id="closeMessageModalBtn">${t("annulerBtn")}</button>
+          <button id="sendMessageBtn">${t("messageSend")}</button>
+        </div>
       </div>
     </div>
   `;
@@ -575,6 +599,15 @@ function render() {
   const list = document.getElementById("daysList");
   list.innerHTML = "";
   entries.forEach((e) => list.appendChild(buildCardElement(e)));
+
+  const messageOverlay = document.getElementById("messageModalOverlay");
+  document.getElementById("openMessageModalBtn").addEventListener("click", () => {
+    messageOverlay.style.display = "flex";
+    document.getElementById("messageBody").focus();
+  });
+  document.getElementById("closeMessageModalBtn").addEventListener("click", () => {
+    messageOverlay.style.display = "none";
+  });
 
   document.getElementById("sendMessageBtn").addEventListener("click", async () => {
     const textarea = document.getElementById("messageBody");
@@ -589,7 +622,10 @@ function render() {
       textarea.value = "";
       const confirm = document.getElementById("messageConfirm");
       confirm.style.display = "block";
-      setTimeout(() => { confirm.style.display = "none"; }, 3000);
+      setTimeout(() => {
+        confirm.style.display = "none";
+        messageOverlay.style.display = "none";
+      }, 1200);
     } catch (err) {
       alert(t("erreurSauvegarde"));
     } finally {
