@@ -36,7 +36,7 @@
   .period-btn.active { background: #0B5D5C; color: white; }
   .period-dates { display: flex; gap: 6px; align-items: center; font-size: 12px; }
   .period-dates input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; margin-bottom: 0; }
-  .period-label { font-size: 11px; color: rgba(0,0,0,0.5); margin-top: -6px; margin-bottom: 12px; }
+  .period-label { font-size: 15px; font-weight: 700; color: #0B5D5C; margin-top: 4px; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -115,12 +115,18 @@ async function load() {
   }
 }
 
+function fmtDateFR(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("fr-CA", { day: "numeric", month: "long", year: "numeric" });
+}
+
 function render() {
   const origin = window.location.origin;
   const { start, end } = resolvePeriod();
   const periodLabel =
-    period.mode === "all" ? "Toutes les données" :
-    start && end ? `Du ${start} au ${end}` : "Sélectionne une plage";
+    period.mode === "all" ? "Toutes les données, sans limite de date" :
+    start && end ? `Du ${fmtDateFR(start)} au ${fmtDateFR(end)}` : "Choisis une date de début et de fin";
 
   let html = `
     <div class="header"><p class="title">🍧 Tableau de bord — Coco Frutti</p></div>
