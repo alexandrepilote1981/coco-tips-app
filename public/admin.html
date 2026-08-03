@@ -42,6 +42,7 @@
   }
   .report-table td { padding: 5px 6px; border-bottom: 1px solid #F5F1E8; white-space: nowrap; }
   .report-table tr:last-child td { border-bottom: none; }
+  .report-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; border: 1px solid #EEE8DC; vertical-align: middle; }
   .totals { font-size: 12px; text-align: right; }
   .totals b { color: #2E9E5B; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
@@ -239,7 +240,7 @@ function render() {
             <table class="report-table">
               <thead>
                 <tr>
-                  <th>Date</th><th>Ventes</th><th>Clients</th><th>%</th><th>Remis</th><th>Net</th><th>Moy./cl.</th>
+                  <th>Date</th><th>Ventes</th><th>Clients</th><th>%</th><th>Remis</th><th>Net</th><th>Moy./cl.</th><th>Reçu</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,6 +253,7 @@ function render() {
                     <td>${fmtMoney(d.remis)}</td>
                     <td style="color:#2E9E5B; font-weight:700;">${fmtMoney(d.net)}</td>
                     <td>${fmtMoney(d.moyenne)}</td>
+                    <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
                   </tr>
                 `).join("")}
               </tbody>
