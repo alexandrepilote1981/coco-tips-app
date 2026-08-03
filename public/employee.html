@@ -55,6 +55,16 @@ async function api(path, opts) {
   return res.json();
 }
 
+// Retourne la date d'AUJOURD'HUI selon l'heure locale de l'appareil, pas UTC.
+// (new Date().toISOString() convertit en UTC, ce qui bascule au lendemain en soirée au Québec — bug à éviter.)
+function todayLocalISO() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function fmtMoney(n) {
   n = isFinite(n) ? n : 0;
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
@@ -165,7 +175,7 @@ function render() {
   });
 
   document.getElementById("addBtn").addEventListener("click", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     await saveEntry({ date: today, ventes: 0, clients: 0, pct: 0, remis: 0 });
     await load();
   });

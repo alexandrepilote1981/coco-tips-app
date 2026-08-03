@@ -64,11 +64,17 @@ let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
 let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
 
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+function localISO(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function todayISO() { return localISO(new Date()); }
 function isoDaysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localISO(d);
 }
 
 function resolvePeriod() {
