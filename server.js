@@ -283,6 +283,11 @@ app.post("/api/admin/employees/:id/messages", requireAdmin, (req, res) => {
   res.json({ ok: true, id });
 });
 
+app.post("/api/admin/employees/:id/messages/mark-read", requireAdmin, (req, res) => {
+  db.prepare("UPDATE messages SET is_read=1 WHERE employee_id=? AND sender='employee'").run(req.params.id);
+  res.json({ ok: true });
+});
+
 app.post("/api/admin/messages/:id/read", requireAdmin, (req, res) => {
   const value = req.body.is_read === false ? 0 : 1;
   db.prepare("UPDATE messages SET is_read=? WHERE id=?").run(value, req.params.id);
