@@ -59,6 +59,9 @@
   }
   .modal-box { background: white; border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; }
   .modal-box h3 { margin: 0 0 10px; font-size: 16px; }
+  .modal-header-row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .modal-header-row h3 { margin: 0; }
+  .modal-close-x { background: none; border: none; font-size: 18px; color: rgba(0,0,0,0.4); padding: 0 0 0 10px; line-height: 1; cursor: pointer; }
   .modal-box p { font-size: 13px; color: rgba(0,0,0,0.6); margin: 0 0 14px; }
   .modal-box input[type=date] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 14px; }
   .modal-actions { display: flex; gap: 8px; }
@@ -75,21 +78,31 @@
     background: #F26D6D; color: white; font-size: 11px; font-weight: 800; border-radius: 999px;
     padding: 2px 8px; min-width: 18px; text-align: center; display: inline-block;
   }
-  .message-item { border-top: 1px solid #F0EBE0; padding: 10px 0; }
-  .message-item:first-child { border-top: none; }
-  .message-item.message-unread { background: #FFF9E8; margin: 0 -8px; padding: 10px 8px; border-radius: 8px; }
-  .message-meta { font-size: 11px; color: rgba(0,0,0,0.5); margin-bottom: 4px; }
-  .message-body { font-size: 13px; color: #17302D; white-space: pre-wrap; margin-bottom: 8px; }
-  .message-actions { display: flex; gap: 8px; }
-  .message-action-btn { background: #F1EEE6; color: #0B5D5C; font-size: 11px; padding: 5px 10px; border-radius: 8px; }
-  .message-action-btn.danger { background: #FDECEC; color: #7A1F1F; }
-  .message-body-admin { font-style: italic; color: #0B5D5C; }
-  .reply-box { margin-top: 8px; }
+  .thread-row {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    border-top: 1px solid #F0EBE0; padding: 10px 0;
+  }
+  .thread-row:first-child { border-top: none; }
+  .thread-row-top { display: flex; justify-content: space-between; align-items: center; }
+  .thread-name { font-size: 13px; font-weight: 700; color: #17302D; }
+  .thread-resto { font-size: 11px; font-weight: 400; color: rgba(0,0,0,0.45); }
+  .thread-preview { font-size: 12px; color: rgba(0,0,0,0.6); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread-date { font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 2px; }
+  .thread-modal-box { max-width: 400px; }
+  .conversation-history { max-height: 280px; overflow-y: auto; margin-bottom: 12px; padding-right: 2px; }
+  .conv-bubble { max-width: 88%; margin-bottom: 8px; padding: 8px 10px; border-radius: 12px; position: relative; }
+  .conv-bubble.conv-employee { background: #F1EEE6; margin-right: auto; border-bottom-left-radius: 4px; }
+  .conv-bubble.conv-admin { background: #DDEBF7; margin-left: auto; border-bottom-right-radius: 4px; }
+  .conv-sender { font-size: 9px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 2px; }
+  .conv-body { font-size: 13px; color: #17302D; white-space: pre-wrap; }
+  .conv-delete-btn {
+    background: none; border: none; color: rgba(0,0,0,0.3); font-size: 10px; padding: 4px 0 0;
+    text-decoration: underline; cursor: pointer;
+  }
   .reply-textarea {
     width: 100%; min-height: 60px; border: none; border-radius: 8px; padding: 8px;
     font-size: 13px; font-family: inherit; background: #F1EEE6; color: #17302D; outline: none; resize: vertical; margin-bottom: 6px;
   }
-  .reply-send-btn { background: #0B5D5C; color: white; }
   .pending-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .pending-chip {
     background: white; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px;
@@ -127,6 +140,21 @@
     <div class="modal-actions">
       <button class="secondary" id="modalCancel"></button>
       <button id="modalConfirm"></button>
+    </div>
+  </div>
+</div>
+
+<div id="threadModalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box thread-modal-box">
+    <div class="modal-header-row">
+      <h3 id="threadModalTitle"></h3>
+      <button class="modal-close-x" id="threadModalCloseX">✕</button>
+    </div>
+    <div id="threadMessages" class="conversation-history"></div>
+    <textarea id="threadReplyBody" class="reply-textarea" placeholder=""></textarea>
+    <div class="modal-actions">
+      <button class="secondary" id="threadModalCloseBtn"></button>
+      <button id="threadReplySendBtn"></button>
     </div>
   </div>
 </div>
@@ -173,13 +201,11 @@ const I18N = {
     enAttenteLabel: "En attente",
     messagesTitle: "Messages des employés",
     aucunMessage: "Aucun message pour l'instant.",
-    marquerLu: "Marquer lu",
-    marquerNonLu: "Marquer non lu",
-    supprimerMessage: "Supprimer",
     confirmSupprimerMessage: "Supprimer ce message?",
-    repondre: "Répondre",
+    supprimerMessage: "Supprimer",
     repondrePlaceholder: "Écris ta réponse...",
     toiVers: "Toi →",
+    toiLabel: "Toi",
     erreurEnvoiReponse: "Erreur lors de l'envoi de la réponse. Réessaie.",
     messageSend: "Envoyer",
     voirDetail: (n) => `📊 Voir le détail par jour (${n})`,
@@ -252,13 +278,11 @@ const I18N = {
     enAttenteLabel: "Pending",
     messagesTitle: "Messages from employees",
     aucunMessage: "No messages yet.",
-    marquerLu: "Mark read",
-    marquerNonLu: "Mark unread",
-    supprimerMessage: "Delete",
     confirmSupprimerMessage: "Delete this message?",
-    repondre: "Reply",
+    supprimerMessage: "Delete",
     repondrePlaceholder: "Write your reply...",
     toiVers: "You →",
+    toiLabel: "You",
     erreurEnvoiReponse: "Error sending reply. Try again.",
     messageSend: "Send",
     voirDetail: (n) => `📊 See daily detail (${n})`,
@@ -729,38 +753,50 @@ function fmtMsgDate(iso) {
   return d.toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+function groupMessagesByEmployee() {
+  const byEmployee = {};
+  messages.forEach((m) => {
+    if (!byEmployee[m.employee_id]) {
+      byEmployee[m.employee_id] = {
+        employeeId: m.employee_id,
+        employeeName: m.employee_name,
+        restaurantName: m.restaurant_name,
+        messages: [],
+      };
+    }
+    byEmployee[m.employee_id].messages.push(m);
+  });
+  const threads = Object.values(byEmployee);
+  // chaque messages[] vient déjà trié DESC (le plus récent en premier) depuis le serveur
+  threads.forEach((t) => {
+    t.lastMessage = t.messages[0];
+    t.unreadCount = t.messages.filter((m) => m.sender === "employee" && !m.is_read).length;
+  });
+  threads.sort((a, b) => new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at));
+  return threads;
+}
+
 function renderMessagesInbox() {
   const container = document.getElementById("messagesInbox");
   if (!container) return;
-  const unreadCount = messages.filter((m) => m.sender === "employee" && !m.is_read).length;
+  const threads = groupMessagesByEmployee();
+  const totalUnread = threads.reduce((s, t) => s + t.unreadCount, 0);
 
   container.innerHTML = `
     <button class="messages-toggle" id="messagesToggleBtn">
-      📬 ${t("messagesTitle")} ${unreadCount > 0 ? `<span class="unread-badge">${unreadCount}</span>` : ""}
+      📬 ${t("messagesTitle")} ${totalUnread > 0 ? `<span class="unread-badge">${totalUnread}</span>` : ""}
     </button>
     <div id="messagesList" style="display:none; margin-top:12px;">
-      ${messages.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5);">${t("aucunMessage")}</p>` : messages.map((m) => {
-        const isAdminMsg = m.sender === "admin";
-        return `
-        <div class="message-item ${!isAdminMsg && !m.is_read ? "message-unread" : ""}">
-          <div class="message-meta">
-            ${isAdminMsg ? `<b>${t("toiVers")} ${m.employee_name}</b>` : `<b>${m.employee_name}</b> · ${m.restaurant_name}`} · ${fmtMsgDate(m.created_at)}
+      ${threads.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5);">${t("aucunMessage")}</p>` : threads.map((th) => `
+        <button class="thread-row" data-action="openThread" data-emp="${th.employeeId}">
+          <div class="thread-row-top">
+            <span class="thread-name">${th.employeeName} <span class="thread-resto">· ${th.restaurantName}</span></span>
+            ${th.unreadCount > 0 ? `<span class="unread-badge">${th.unreadCount}</span>` : ""}
           </div>
-          <div class="message-body ${isAdminMsg ? "message-body-admin" : ""}">${m.body.replace(/</g, "&lt;")}</div>
-          <div class="message-actions">
-            ${!isAdminMsg ? `
-            <button class="message-action-btn" data-action="toggleRead" data-id="${m.id}">${m.is_read ? t("marquerNonLu") : t("marquerLu")}</button>
-            <button class="message-action-btn" data-action="showReply" data-id="${m.id}" data-emp="${m.employee_id}">${t("repondre")}</button>
-            ` : ""}
-            <button class="message-action-btn danger" data-action="deleteMessage" data-id="${m.id}">${t("supprimerMessage")}</button>
-          </div>
-          <div class="reply-box" id="replyBox-${m.id}" style="display:none;">
-            <textarea class="reply-textarea" id="replyText-${m.id}" placeholder="${t("repondrePlaceholder")}"></textarea>
-            <button class="message-action-btn reply-send-btn" data-action="sendReply" data-id="${m.id}" data-emp="${m.employee_id}">${t("messageSend")}</button>
-          </div>
-        </div>
-      `;
-      }).join("")}
+          <div class="thread-preview">${th.lastMessage.sender === "admin" ? t("toiVers") + " " : ""}${th.lastMessage.body.replace(/</g, "&lt;")}</div>
+          <div class="thread-date">${fmtMsgDate(th.lastMessage.created_at)}</div>
+        </button>
+      `).join("")}
     </div>
   `;
 
@@ -769,65 +805,59 @@ function renderMessagesInbox() {
     list.style.display = list.style.display === "none" ? "block" : "none";
   });
 
-  container.querySelectorAll('[data-action="toggleRead"]').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const msg = messages.find((m) => m.id === btn.dataset.id);
-      if (!msg) return;
-      const newValue = !msg.is_read;
-      await api(`/api/admin/messages/${msg.id}/read`, { method: "POST", body: JSON.stringify({ is_read: newValue }) });
-      msg.is_read = newValue;
+  container.querySelectorAll('[data-action="openThread"]').forEach((btn) => {
+    btn.addEventListener("click", () => openThreadModal(btn.dataset.emp));
+  });
+}
+
+async function openThreadModal(employeeId) {
+  const overlay = document.getElementById("threadModalOverlay");
+  overlay.style.display = "flex";
+  overlay.dataset.emp = employeeId;
+  document.getElementById("threadReplyBody").value = "";
+  document.getElementById("threadReplyBody").placeholder = t("repondrePlaceholder");
+  document.getElementById("threadModalCloseBtn").textContent = t("annulerBtn");
+  document.getElementById("threadReplySendBtn").textContent = t("messageSend");
+  renderThreadMessages(employeeId);
+
+  const threads = groupMessagesByEmployee();
+  const thread = threads.find((t) => t.employeeId === employeeId);
+  if (thread) {
+    document.getElementById("threadModalTitle").textContent = `${thread.employeeName} · ${thread.restaurantName}`;
+  }
+
+  if (thread && thread.unreadCount > 0) {
+    try {
+      await api(`/api/admin/employees/${employeeId}/messages/mark-read`, { method: "POST", body: "{}" });
+      messages.forEach((m) => { if (m.employee_id === employeeId && m.sender === "employee") m.is_read = 1; });
       renderMessagesInbox();
-      const list = document.getElementById("messagesList");
-      if (list) list.style.display = "block";
-    });
-  });
+    } catch (e) { /* pas grave si ça échoue */ }
+  }
+}
 
-  container.querySelectorAll('[data-action="showReply"]').forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const box = document.getElementById(`replyBox-${btn.dataset.id}`);
-      if (box) {
-        box.style.display = box.style.display === "none" ? "block" : "none";
-        if (box.style.display === "block") document.getElementById(`replyText-${btn.dataset.id}`).focus();
-      }
-    });
-  });
+function closeThreadModal() {
+  document.getElementById("threadModalOverlay").style.display = "none";
+}
 
-  container.querySelectorAll('[data-action="sendReply"]').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const textarea = document.getElementById(`replyText-${btn.dataset.id}`);
-      const body = textarea.value.trim();
-      if (!body) return;
-      const originalText = btn.textContent;
-      btn.textContent = "…";
-      btn.disabled = true;
-      try {
-        await api(`/api/admin/employees/${btn.dataset.emp}/messages`, { method: "POST", body: JSON.stringify({ body }) });
-        // marque aussi le message original comme lu, puisqu'on vient d'y répondre
-        const original = messages.find((m) => m.id === btn.dataset.id);
-        if (original && !original.is_read) {
-          await api(`/api/admin/messages/${original.id}/read`, { method: "POST", body: JSON.stringify({ is_read: true }) });
-        }
-        const res = await api("/api/admin/messages");
-        messages = res.messages;
-        renderMessagesInbox();
-        const list = document.getElementById("messagesList");
-        if (list) list.style.display = "block";
-      } catch (err) {
-        alert(t("erreurEnvoiReponse"));
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }
-    });
-  });
+function renderThreadMessages(employeeId) {
+  const wrap = document.getElementById("threadMessages");
+  const empMessages = messages.filter((m) => m.employee_id === employeeId).slice().reverse(); // ordre chronologique ASC pour l'affichage
+  wrap.innerHTML = empMessages.map((m) => `
+    <div class="conv-bubble ${m.sender === "admin" ? "conv-admin" : "conv-employee"}">
+      <div class="conv-sender">${m.sender === "admin" ? t("toiLabel") : m.employee_name}</div>
+      <div class="conv-body">${m.body.replace(/</g, "&lt;")}</div>
+      <button class="conv-delete-btn" data-action="deleteThreadMessage" data-id="${m.id}">${t("supprimerMessage")}</button>
+    </div>
+  `).join("");
+  wrap.scrollTop = wrap.scrollHeight;
 
-  container.querySelectorAll('[data-action="deleteMessage"]').forEach((btn) => {
+  wrap.querySelectorAll('[data-action="deleteThreadMessage"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm(t("confirmSupprimerMessage"))) return;
       await api(`/api/admin/messages/${btn.dataset.id}`, { method: "DELETE" });
       messages = messages.filter((m) => m.id !== btn.dataset.id);
+      renderThreadMessages(employeeId);
       renderMessagesInbox();
-      const list = document.getElementById("messagesList");
-      if (list) list.style.display = "block";
     });
   });
 }
@@ -964,6 +994,39 @@ function openTransferModal(entryId, direction) {
   cancelBtn.addEventListener("click", onCancel);
   confirmBtn.addEventListener("click", onConfirm);
 }
+
+function setupThreadModal() {
+  const overlay = document.getElementById("threadModalOverlay");
+  document.getElementById("threadModalCloseX").addEventListener("click", closeThreadModal);
+  document.getElementById("threadModalCloseBtn").addEventListener("click", closeThreadModal);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) closeThreadModal();
+  });
+  document.getElementById("threadReplySendBtn").addEventListener("click", async () => {
+    const employeeId = overlay.dataset.emp;
+    const textarea = document.getElementById("threadReplyBody");
+    const body = textarea.value.trim();
+    if (!body || !employeeId) return;
+    const btn = document.getElementById("threadReplySendBtn");
+    const originalText = btn.textContent;
+    btn.textContent = "…";
+    btn.disabled = true;
+    try {
+      await api(`/api/admin/employees/${employeeId}/messages`, { method: "POST", body: JSON.stringify({ body }) });
+      const res = await api("/api/admin/messages");
+      messages = res.messages;
+      textarea.value = "";
+      renderThreadMessages(employeeId);
+      renderMessagesInbox();
+    } catch (err) {
+      alert(t("erreurEnvoiReponse"));
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  });
+}
+setupThreadModal();
 
 if (TOKEN) load(); else renderLogin();
 </script>

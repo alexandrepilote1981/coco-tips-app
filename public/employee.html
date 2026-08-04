@@ -75,14 +75,20 @@
   .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(0,0,0,0.4); margin-bottom: 0; }
   .message-tab-btn {
     background: #F1EEE6; color: #0B5D5C; font-size: 11px; font-weight: 700;
-    padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+    padding: 6px 12px; border-radius: 999px; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+  }
+  .msg-badge {
+    background: #F26D6D; color: white; font-size: 10px; font-weight: 800; border-radius: 999px;
+    padding: 1px 6px; min-width: 15px; text-align: center; display: inline-block;
   }
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
     display: flex; align-items: center; justify-content: center; padding: 20px;
   }
   .modal-box { background: white; border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; }
-  .modal-box h3 { margin: 0 0 12px; font-size: 16px; }
+  .modal-box h3 { margin: 0; font-size: 16px; }
+  .modal-header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .modal-close-x { background: none; border: none; font-size: 18px; color: rgba(0,0,0,0.4); padding: 0 0 0 10px; line-height: 1; cursor: pointer; }
   .reply-banner {
     background: linear-gradient(135deg,#0B5D5C,#0E7C7B); color: white; border-radius: 14px;
     padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px; cursor: pointer;
@@ -595,7 +601,7 @@ function render() {
       <div class="card period-card">
         <div class="period-title-row">
           <div class="period-title">${t("periodeAffichee")}</div>
-          <button class="message-tab-btn" id="openMessageModalBtn">✉️ ${t("messageTab")}</button>
+          <button class="message-tab-btn" id="openMessageModalBtn">✉️ ${t("messageTab")} ${unreadReplies > 0 ? `<span class="msg-badge">${unreadReplies}</span>` : ""}</button>
         </div>
         <div class="period-bar">
           <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
@@ -620,7 +626,10 @@ function render() {
 
     <div id="messageModalOverlay" class="modal-overlay" style="display:none;">
       <div class="modal-box">
-        <h3>✉️ ${t("messageTitle")}</h3>
+        <div class="modal-header-row">
+          <h3>✉️ ${t("messageTitle")}</h3>
+          <button class="modal-close-x" id="closeMessageModalX">✕</button>
+        </div>
         <div id="conversationHistory" class="conversation-history">
           ${conversation.length === 0 ? `<p class="conversation-empty">${t("aucunEchange")}</p>` : conversation.map((m) => `
             <div class="conv-bubble ${m.sender === "admin" ? "conv-admin" : "conv-employee"}">
@@ -664,8 +673,14 @@ function render() {
   const replyBanner = document.getElementById("replyBanner");
   if (replyBanner) replyBanner.addEventListener("click", openMessageModal);
 
-  document.getElementById("closeMessageModalBtn").addEventListener("click", () => {
+  function closeMessageModal() {
     messageOverlay.style.display = "none";
+  }
+
+  document.getElementById("closeMessageModalBtn").addEventListener("click", closeMessageModal);
+  document.getElementById("closeMessageModalX").addEventListener("click", closeMessageModal);
+  messageOverlay.addEventListener("click", (ev) => {
+    if (ev.target === messageOverlay) closeMessageModal(); // clic sur le fond sombre, pas sur la boîte elle-même
   });
 
   document.getElementById("sendMessageBtn").addEventListener("click", async () => {
