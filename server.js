@@ -161,6 +161,16 @@ app.post("/api/employee/:code/messages/mark-read", (req, res) => {
   res.json({ ok: true });
 });
 
+app.delete("/api/employee/:code/messages", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  db.prepare("DELETE FROM messages WHERE employee_id=?").run(emp.id);
+  res.json({ ok: true });
+});
+
 // =========================================================
 //  API ADMIN (Alex) — vue sur tous les restaurants/employés
 // =========================================================
@@ -296,6 +306,11 @@ app.post("/api/admin/messages/:id/read", requireAdmin, (req, res) => {
 
 app.delete("/api/admin/messages/:id", requireAdmin, (req, res) => {
   db.prepare("DELETE FROM messages WHERE id=?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/employees/:id/messages", requireAdmin, (req, res) => {
+  db.prepare("DELETE FROM messages WHERE employee_id=?").run(req.params.id);
   res.json({ ok: true });
 });
 
