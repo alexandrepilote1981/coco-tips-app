@@ -122,6 +122,25 @@
 <div id="app"></div>
 
 <script>
+// ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
+const ICON_PATHS = {
+  trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/><path d="M10 11v6M14 11v6"/>',
+  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/>',
+  dollar: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  trending: '<path d="M23 6 13.5 15.5l-5-5L1 18"/><path d="M17 6h6v6"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 8.97 6.28a2 2 0 0 0 2.06 0L22 7"/>',
+  alert: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  tag: '<path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42Z"/><path d="M7 7h.01"/>',
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
+};
+function icon(name, size, extraStyle) {
+  return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
+}
+
 const CODE = window.location.pathname.split("/").pop();
 let state = null;
 let currentEntries = []; // liste actuellement affichée (filtrée par période) — source unique pour les mises à jour ciblées
@@ -151,8 +170,8 @@ const I18N = {
     aucunePhoto: "Aucune photo",
     remitLabel: "Montant à remettre (selon mon relevé)",
     remitNone: "Aucun",
-    remitEmployerOwes: "⚠️ Vous me devez",
-    remitEmployeeOwes: "⚠️ Je vous dois",
+    remitEmployerOwes: "Vous me devez",
+    remitEmployeeOwes: "Je vous dois",
     remitAmountLabel: "Montant $",
     payeLe: (date) => `Payé${date ? " le " + date : ""}`,
     recuConfirmeLe: (date) => `Reçu confirmé${date ? " le " + date : ""}`,
@@ -205,8 +224,8 @@ const I18N = {
     aucunePhoto: "No photo",
     remitLabel: "Amount to remit (per my statement)",
     remitNone: "None",
-    remitEmployerOwes: "⚠️ You owe me",
-    remitEmployeeOwes: "⚠️ I owe you",
+    remitEmployerOwes: "You owe me",
+    remitEmployeeOwes: "I owe you",
     remitAmountLabel: "Amount $",
     payeLe: (date) => `Paid${date ? " on " + date : ""}`,
     recuConfirmeLe: (date) => `Reception confirmed${date ? " on " + date : ""}`,
@@ -438,11 +457,11 @@ function buildCardElement(e) {
   card.innerHTML = `
     <div class="day-head">
       <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
-      <button class="del-btn" data-id="${e.id}" data-action="del">🗑</button>
+      <button class="del-btn" data-id="${e.id}" data-action="del">${icon("trash", 15)}</button>
     </div>
     <label class="hotesse-toggle ${dayIsHotesse ? "active" : ""}">
       <input type="checkbox" ${dayIsHotesse ? "checked" : ""} data-id="${e.id}" class="hotesse-checkbox" />
-      🎀 ${t("hotesseTodayLabel")}
+      ${icon("tag", 14)} ${t("hotesseTodayLabel")}
     </label>
     ${formHtml}
     <div class="photo-row">
@@ -450,22 +469,22 @@ function buildCardElement(e) {
         ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="receipt" /></a>`
         : `<span class="photo-empty">${t("aucunePhoto")}</span>`}
       <label class="photo-btn">
-        📷 ${e.photo_filename ? t("remplacer") : t("ajouterMot")} ${t("releve")}
+        ${icon("camera", 14)} ${e.photo_filename ? t("remplacer") : t("ajouterMot")} ${t("releve")}
         <input type="file" accept="image/*" capture="environment" data-id="${e.id}" class="photo-input" hidden />
       </label>
     </div>
     <div class="remit-section">
       ${e.remit_direction && e.transferred ? `
       <div class="remit-confirmed">
-        ✅ ${e.remit_direction === "employer_owes" ? t("payeLe", e.transfer_date || "") : t("recuConfirmeLe", e.transfer_date || "")}
+        ${icon("check", 15)} ${e.remit_direction === "employer_owes" ? t("payeLe", e.transfer_date || "") : t("recuConfirmeLe", e.transfer_date || "")}
         <div class="remit-confirmed-amount">${fmtMoney(e.remit_amount)}</div>
       </div>
       ` : `
       <div class="remit-label">${t("remitLabel")}</div>
       <div class="remit-options">
         <button type="button" class="remit-btn ${!e.remit_direction ? "active" : ""}" data-id="${e.id}" data-remit="">${t("remitNone")}</button>
-        <button type="button" class="remit-btn ${e.remit_direction === "employer_owes" ? "active-owed-employee" : ""}" data-id="${e.id}" data-remit="employer_owes">${t("remitEmployerOwes")}</button>
-        <button type="button" class="remit-btn ${e.remit_direction === "employee_owes" ? "active-owed-employer" : ""}" data-id="${e.id}" data-remit="employee_owes">${t("remitEmployeeOwes")}</button>
+        <button type="button" class="remit-btn ${e.remit_direction === "employer_owes" ? "active-owed-employee" : ""}" data-id="${e.id}" data-remit="employer_owes">${icon("alert", 13)} ${t("remitEmployerOwes")}</button>
+        <button type="button" class="remit-btn ${e.remit_direction === "employee_owes" ? "active-owed-employer" : ""}" data-id="${e.id}" data-remit="employee_owes">${icon("alert", 13)} ${t("remitEmployeeOwes")}</button>
       </div>
       ${e.remit_direction ? `
       <div class="field" style="margin-top:8px;">
@@ -590,7 +609,7 @@ function render() {
       <div class="header-top">
         <div>
           <p class="eyebrow">${restaurant.name}</p>
-          <h1 class="title">${t("hello")} ${employee.name.split(" ")[0]} 👋</h1>
+          <h1 class="title">${t("hello")} ${employee.name.split(" ")[0]}</h1>
         </div>
         <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
       </div>
@@ -599,12 +618,12 @@ function render() {
     <div class="content">
       ${unreadReplies > 0 ? `
       <div class="reply-banner" id="replyBanner">
-        📩 ${t("nouvelleReponse", unreadReplies)}
+        ${icon("bell", 15)} ${t("nouvelleReponse", unreadReplies)}
       </div>` : ""}
       <div class="card period-card">
         <div class="period-title-row">
           <div class="period-title">${t("periodeAffichee")}</div>
-          <button class="message-tab-btn" id="openMessageModalBtn">✉️ ${t("messageTab")} ${unreadReplies > 0 ? `<span class="msg-badge">${unreadReplies}</span>` : ""}</button>
+          <button class="message-tab-btn" id="openMessageModalBtn">${icon("mail", 14)} ${t("messageTab")} ${unreadReplies > 0 ? `<span class="msg-badge">${unreadReplies}</span>` : ""}</button>
         </div>
         <div class="period-bar">
           <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
@@ -613,10 +632,10 @@ function render() {
         </div>
       </div>
       <div class="kpi-grid">
-        <div class="card"><div class="kpi-label" style="color:#0B5D5C">💰 ${t("ventesTotal")}</div><div class="kpi-value" id="kpi-ventes" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#2E9E5B">📈 ${t("pourboiresNets")}</div><div class="kpi-value" id="kpi-net" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#0B5D5C">${icon("dollar", 13)} ${t("ventesTotal")}</div><div class="kpi-value" id="kpi-ventes" style="color:#0B5D5C">${fmtMoney(totVentes)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#2E9E5B">${icon("trending", 13)} ${t("pourboiresNets")}</div><div class="kpi-value" id="kpi-net" style="color:#2E9E5B">${fmtMoney(totNet)}</div></div>
         <div class="card"><div class="kpi-label" style="color:#F2994A">${t("pctMoyen")}</div><div class="kpi-value" id="kpi-pct" style="color:#F2994A">${fmtPct(pctMoyen)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#F26D6D">👥 ${t("moyClient")}</div><div class="kpi-value" id="kpi-client" style="color:#F26D6D">${fmtMoney(parClient)}</div></div>
+        <div class="card"><div class="kpi-label" style="color:#F26D6D">${icon("users", 13)} ${t("moyClient")}</div><div class="kpi-value" id="kpi-client" style="color:#F26D6D">${fmtMoney(parClient)}</div></div>
       </div>
 
       <div class="section-title">
@@ -630,7 +649,7 @@ function render() {
     <div id="messageModalOverlay" class="modal-overlay" style="display:none;">
       <div class="modal-box">
         <div class="modal-header-row">
-          <h3>✉️ ${t("messageTitle")}</h3>
+          <h3>${icon("mail", 17)} ${t("messageTitle")}</h3>
           <button class="modal-close-x" id="closeMessageModalX">✕</button>
         </div>
         <div id="conversationHistory" class="conversation-history">

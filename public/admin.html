@@ -179,6 +179,25 @@
 </div>
 
 <script>
+// ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
+const ICON_PATHS = {
+  dollar: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  alert: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/>',
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 8.97 6.28a2 2 0 0 0 2.06 0L22 7"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>',
+  tag: '<path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42Z"/><path d="M7 7h.01"/>',
+  logo: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+};
+function icon(name, size, extraStyle) {
+  return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
+}
+
 let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
 let messages = [];
@@ -187,7 +206,7 @@ let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | '
 // ---------- Traductions ----------
 const I18N = {
   fr: {
-    dashboardTitle: "🍧 Tableau de bord — Déclaration Pourboire",
+    dashboardTitle: "Tableau de bord — Déclaration Pourboire",
     accesAdmin: "Accès admin",
     motDePasse: "Mot de passe",
     entrer: "Entrer",
@@ -201,7 +220,7 @@ const I18N = {
     toutesLesDonnees: "Toutes les données, sans limite de date",
     choisisDate: "Choisis une date de début et de fin",
     duAu: (s, e) => `Du ${s} au ${e}`,
-    exporter: "📥 Exporter en CSV (pour Numbers/Excel)",
+    exporter: "Exporter en CSV (pour Numbers/Excel)",
     ajouterRestaurant: "Ajouter un restaurant",
     nomRestaurantPlaceholder: "Nom du restaurant (ex: Coco Frutti 016)",
     ajouter: "+ Ajouter",
@@ -210,7 +229,7 @@ const I18N = {
     ventes: "ventes",
     pourboireNet: "pourboire net",
     code: "Code",
-    copier: "📋 Copier",
+    copier: "Copier",
     copie: "✓ Copié",
     copieImpossible: "Impossible de copier automatiquement. Lien : ",
     retirer: "Retirer",
@@ -230,7 +249,7 @@ const I18N = {
     toiLabel: "Toi",
     erreurEnvoiReponse: "Erreur lors de l'envoi de la réponse. Réessaie.",
     messageSend: "Envoyer",
-    voirDetail: (n) => `📊 Voir le détail par jour (${n})`,
+    voirDetail: (n) => `Voir le détail par jour (${n})`,
     aucuneJournee: "Aucune journée dans cette période.",
     thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement", thDelai: "Délai",
     delaiOk: "À temps",
@@ -240,7 +259,7 @@ const I18N = {
       const parts = [];
       if (late > 0) parts.push(`${late} déclaration${late > 1 ? "s" : ""} en retard`);
       if (mod > 0) parts.push(`${mod} modifiée${mod > 1 ? "s" : ""} après coup`);
-      return "🔎 " + parts.join(" · ");
+      return parts.join(" · ");
     },
     mettreDeCote: "Mettre de côté",
     marquerVire: "Marquer viré",
@@ -252,7 +271,7 @@ const I18N = {
       const parts = [];
       if (owedByMe > 0) parts.push(`${owedByMe} virement${owedByMe > 1 ? "s" : ""} à faire (${fmt(owedByMeAmt)})`);
       if (owedToMe > 0) parts.push(`${owedToMe} montant${owedToMe > 1 ? "s" : ""} à recevoir (${fmt(owedToMeAmt)})`);
-      return "⚠️ " + parts.join(" · ");
+      return parts.join(" · ");
     },
     remitEmployerOwesShort: "Vous devez",
     remitEmployeeOwesShort: "Employé doit",
@@ -277,7 +296,7 @@ const I18N = {
     locale: "fr-CA",
   },
   en: {
-    dashboardTitle: "🍧 Dashboard — Tip Declaration",
+    dashboardTitle: "Dashboard — Tip Declaration",
     accesAdmin: "Admin access",
     motDePasse: "Password",
     entrer: "Enter",
@@ -291,7 +310,7 @@ const I18N = {
     toutesLesDonnees: "All data, no date limit",
     choisisDate: "Choose a start and end date",
     duAu: (s, e) => `From ${s} to ${e}`,
-    exporter: "📥 Export CSV (for Numbers/Excel)",
+    exporter: "Export CSV (for Numbers/Excel)",
     ajouterRestaurant: "Add a restaurant",
     nomRestaurantPlaceholder: "Restaurant name (e.g. Coco Frutti 016)",
     ajouter: "+ Add",
@@ -300,7 +319,7 @@ const I18N = {
     ventes: "sales",
     pourboireNet: "net tips",
     code: "Code",
-    copier: "📋 Copy",
+    copier: "Copy",
     copie: "✓ Copied",
     copieImpossible: "Could not copy automatically. Link: ",
     retirer: "Remove",
@@ -320,7 +339,7 @@ const I18N = {
     toiLabel: "You",
     erreurEnvoiReponse: "Error sending reply. Try again.",
     messageSend: "Send",
-    voirDetail: (n) => `📊 See daily detail (${n})`,
+    voirDetail: (n) => `See daily detail (${n})`,
     aucuneJournee: "No days in this period.",
     thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer", thDelai: "Delay",
     delaiOk: "On time",
@@ -330,7 +349,7 @@ const I18N = {
       const parts = [];
       if (late > 0) parts.push(`${late} late declaration${late > 1 ? "s" : ""}`);
       if (mod > 0) parts.push(`${mod} modified after the fact`);
-      return "🔎 " + parts.join(" · ");
+      return parts.join(" · ");
     },
     mettreDeCote: "Dismiss",
     marquerVire: "Mark transferred",
@@ -342,7 +361,7 @@ const I18N = {
       const parts = [];
       if (owedByMe > 0) parts.push(`${owedByMe} transfer${owedByMe > 1 ? "s" : ""} to send (${fmt(owedByMeAmt)})`);
       if (owedToMe > 0) parts.push(`${owedToMe} amount${owedToMe > 1 ? "s" : ""} to receive (${fmt(owedToMeAmt)})`);
-      return "⚠️ " + parts.join(" · ");
+      return parts.join(" · ");
     },
     remitEmployerOwesShort: "You owe",
     remitEmployeeOwesShort: "Employee owes",
@@ -574,18 +593,18 @@ function render() {
 
   let html = `
     <div class="header">
-      <p class="title">${t("dashboardTitle")}</p>
+      <p class="title">${icon("logo", 20, "margin-right:8px;")}${t("dashboardTitle")}</p>
       <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
     </div>
     <div class="content">
       ${flaggedTotal > 0 ? `
       <div class="pending-banner banner-delay">
-        <div>${t("journeesRetardModif", lateCount, modifiedCount)}</div>
+        <div>${icon("search", 15, "margin-right:6px;")}${t("journeesRetardModif", lateCount, modifiedCount)}</div>
         <div class="pending-chips">
           ${flaggedEntries.map(f => `
             <span class="pending-chip-wrap">
               <button class="pending-chip ${f.type === "late" ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEntry" data-emp="${f.empId}" data-entry="${f.entryId}">
-                ${f.name} · ${fmtDateShort(f.date)} ${f.type === "late" ? "⏱️" : "✏️"}
+                ${f.name} · ${fmtDateShort(f.date)} ${f.type === "late" ? icon("clock", 12) : icon("edit", 12)}
               </button>
               <button class="chip-dismiss-x" data-action="dismissFlag" data-entry="${f.entryId}" data-type="${f.type}" title="${t("mettreDeCote")}">✕</button>
             </span>
@@ -594,7 +613,7 @@ function render() {
       </div>` : ""}
       ${pendingCount > 0 ? `
       <div class="pending-banner">
-        <div>${t("journeesEnAttente", owedByMeCount, owedToMeCount, owedByMeAmount, owedToMeAmount)}</div>
+        <div>${icon("alert", 15, "margin-right:6px;")}${t("journeesEnAttente", owedByMeCount, owedToMeCount, owedByMeAmount, owedToMeAmount)}</div>
         <div class="pending-chips">
           ${pendingByEmployee.map(p => `
             <button class="pending-chip ${p.direction === "employer_owes" ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEmployee" data-emp="${p.empId}">
@@ -620,7 +639,7 @@ function render() {
           </div>
         </div>
         <div class="period-label">${periodLabel}</div>
-        <button class="export-btn" id="exportBtn">${t("exporter")}</button>
+        <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
       </div>
   `;
 
@@ -658,11 +677,11 @@ function render() {
               <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
               <div class="link-row">
                 <div class="link-box">${link}</div>
-                <button class="copy-btn" data-action="copyLink" data-link="${link}">${t("copier")}</button>
+                <button class="copy-btn" data-action="copyLink" data-link="${link}">${icon("copy", 13)} ${t("copier")}</button>
               </div>
             </div>
             <div class="employee-row-actions">
-              <button class="secondary-btn" data-action="messageEmployee" data-id="${e.id}" data-name="${e.name}" data-resto="${r.name}">✉️ ${t("messageTab")}</button>
+              <button class="secondary-btn" data-action="messageEmployee" data-id="${e.id}" data-name="${e.name}" data-resto="${r.name}">${icon("mail", 12)} ${t("messageTab")}</button>
               <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
             </div>
           </div>
@@ -685,7 +704,7 @@ function render() {
               <div class="employee-stat-value" style="color:${empPending.direction === "employer_owes" ? "#F26D6D" : "#F2994A"}; font-size:16px;">${fmtMoney(empPending.amount)}</div>
             </div>` : ""}
           </div>
-          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${t("voirDetail", e.entries.length)}</button>
+          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${icon("chart", 13)} ${t("voirDetail", e.entries.length)}</button>
           <div class="report-table-wrap" id="report-${e.id}" style="display:none;">
             ${e.entries.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5); padding:8px 0;">${t("aucuneJournee")}</p>` : `
             <table class="report-table">
@@ -721,11 +740,11 @@ function render() {
                     ? `<span class="delay-badge delay-ok">${t("delaiOk")}</span>`
                     : `<span class="delay-badge ${delayDays >= 3 ? "delay-bad" : "delay-warn"}">${t("delaiJours", delayDays)}</span>`;
                   const modifiedBadge = wasModified(d)
-                    ? `<div class="modified-badge">✏️ ${t("modifieLe", fmtModifiedDate(d.data_updated_at))}</div>`
+                    ? `<div class="modified-badge">${icon("edit", 11)} ${t("modifieLe", fmtModifiedDate(d.data_updated_at))}</div>`
                     : "";
                   return `
                   <tr class="${rowClass}" id="row-${d.id}">
-                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#7A5B00; font-size:9px; font-weight:700;">🎀${t("roleHotesse")}</span>` : ""}${modifiedBadge}</td>
+                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#7A5B00; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}</td>
                     <td>${delayCell}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
@@ -962,7 +981,7 @@ function renderMessagesInbox() {
 
   container.innerHTML = `
     <button class="messages-toggle" id="messagesToggleBtn">
-      📬 ${t("messagesTitle")} ${totalUnread > 0 ? `<span class="unread-badge">${totalUnread}</span>` : ""}
+      ${icon("inbox", 16, "margin-right:6px;")}${t("messagesTitle")} ${totalUnread > 0 ? `<span class="unread-badge">${totalUnread}</span>` : ""}
     </button>
     <div id="messagesList" style="display:none; margin-top:12px;">
       ${threads.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5);">${t("aucunMessage")}</p>` : threads.map((th) => `
