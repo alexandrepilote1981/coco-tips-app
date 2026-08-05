@@ -50,6 +50,13 @@
   .report-table td { padding: 5px 6px; border-bottom: 1px solid #F5F1E8; white-space: nowrap; }
   .report-table tr:last-child td { border-bottom: none; }
   .report-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; border: 1px solid #EEE8DC; vertical-align: middle; }
+  .delay-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+  .delay-badge.delay-ok { background: #EAF7EE; color: #1E6B3C; }
+  .delay-badge.delay-warn { background: #FFF2CC; color: #7A5B00; }
+  .delay-badge.delay-bad { background: #FDECEC; color: #7A1F1F; }
+  .modified-badge { font-size: 9px; color: #0B5D5C; margin-top: 2px; white-space: nowrap; }
+  tr.row-jump-highlight { animation: rowJumpFlash 1.6s ease; }
+  @keyframes rowJumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
   .row-flagged-owed-employee { background: #FDECEC; }
   .row-flagged-owed-employer { background: #FFF9E8; }
   .transfer-btn { background: #F26D6D; color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
@@ -72,6 +79,9 @@
   .pending-banner {
     background: #FDECEC; border: 1px solid #F5B8B8; color: #7A1F1F; border-radius: 14px;
     padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px;
+  }
+  .pending-banner.banner-delay {
+    background: #FFF9E8; border: 1px solid #F5E5A8; color: #7A5B00;
   }
   .messages-toggle {
     background: none; border: none; padding: 0; color: #0B5D5C; font-size: 14px; font-weight: 700;
@@ -216,7 +226,16 @@ const I18N = {
     messageSend: "Envoyer",
     voirDetail: (n) => `📊 Voir le détail par jour (${n})`,
     aucuneJournee: "Aucune journée dans cette période.",
-    thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement",
+    thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement", thDelai: "Délai",
+    delaiOk: "À temps",
+    delaiJours: (n) => `${n} j.`,
+    modifieLe: (date) => `Modifié${date ? " le " + date : ""}`,
+    journeesRetardModif: (late, mod) => {
+      const parts = [];
+      if (late > 0) parts.push(`${late} déclaration${late > 1 ? "s" : ""} en retard`);
+      if (mod > 0) parts.push(`${mod} modifiée${mod > 1 ? "s" : ""} après coup`);
+      return "🔎 " + parts.join(" · ");
+    },
     marquerVire: "Marquer viré",
     marquerRecu: "Marquer reçu",
     vireOk: (date) => `✓ Viré${date ? " le " + date : ""}`,
@@ -296,7 +315,16 @@ const I18N = {
     messageSend: "Send",
     voirDetail: (n) => `📊 See daily detail (${n})`,
     aucuneJournee: "No days in this period.",
-    thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer",
+    thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer", thDelai: "Delay",
+    delaiOk: "On time",
+    delaiJours: (n) => `${n} d.`,
+    modifieLe: (date) => `Modified${date ? " on " + date : ""}`,
+    journeesRetardModif: (late, mod) => {
+      const parts = [];
+      if (late > 0) parts.push(`${late} late declaration${late > 1 ? "s" : ""}`);
+      if (mod > 0) parts.push(`${mod} modified after the fact`);
+      return "🔎 " + parts.join(" · ");
+    },
     marquerVire: "Mark transferred",
     marquerRecu: "Mark received",
     vireOk: (date) => `✓ Transferred${date ? " on " + date : ""}`,
@@ -439,6 +467,28 @@ function fmtDateLong(iso) {
   return d.toLocaleDateString(t("locale"), { day: "numeric", month: "long", year: "numeric" });
 }
 
+// Compare la date de création figée (jamais touchée par une modification) à la date déclarée,
+// pour savoir combien de jours de retard il y a eu à la déclarer.
+function computeDelayDays(entry) {
+  if (!entry.created_at || !entry.date) return 0;
+  const createdDateOnly = entry.created_at.slice(0, 10); // 'YYYY-MM-DD' à partir de 'YYYY-MM-DD HH:MM:SS'
+  const d1 = new Date(createdDateOnly + "T00:00:00Z");
+  const d2 = new Date(entry.date + "T00:00:00Z");
+  const diffDays = Math.round((d1 - d2) / (1000 * 60 * 60 * 24));
+  return diffDays > 0 ? diffDays : 0;
+}
+
+// Une entrée est "modifiée" si elle a été sauvegardée au moins une fois après sa création initiale.
+function wasModified(entry) {
+  return !!(entry.created_at && entry.updated_at && entry.created_at !== entry.updated_at);
+}
+
+function fmtModifiedDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.replace(" ", "T") + "Z");
+  return d.toLocaleDateString(t("locale"), { day: "numeric", month: "short" });
+}
+
 function render() {
   const origin = window.location.origin;
   const { start, end } = resolvePeriod();
@@ -479,12 +529,43 @@ function render() {
   });
   const pendingCount = owedByMeCount + owedToMeCount;
 
+  let lateCount = 0;
+  let modifiedCount = 0;
+  const flaggedEntries = []; // { empId, name, entryId, date, type: 'late' | 'modified' }
+  overview.restaurants.forEach((r) => {
+    r.employees.forEach((e) => {
+      e.entries.forEach((d) => {
+        const delay = computeDelayDays(d);
+        if (delay > 0) {
+          lateCount++;
+          flaggedEntries.push({ empId: e.id, name: e.name, entryId: d.id, date: d.date, type: "late", delay });
+        }
+        if (wasModified(d)) {
+          modifiedCount++;
+          flaggedEntries.push({ empId: e.id, name: e.name, entryId: d.id, date: d.date, type: "modified" });
+        }
+      });
+    });
+  });
+  const flaggedTotal = lateCount + modifiedCount;
+
   let html = `
     <div class="header">
       <p class="title">${t("dashboardTitle")}</p>
       <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
     </div>
     <div class="content">
+      ${flaggedTotal > 0 ? `
+      <div class="pending-banner banner-delay">
+        <div>${t("journeesRetardModif", lateCount, modifiedCount)}</div>
+        <div class="pending-chips">
+          ${flaggedEntries.map(f => `
+            <button class="pending-chip ${f.type === "late" ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEntry" data-emp="${f.empId}" data-entry="${f.entryId}">
+              ${f.name} · ${fmtDateShort(f.date)} ${f.type === "late" ? "⏱️" : "✏️"}
+            </button>
+          `).join("")}
+        </div>
+      </div>` : ""}
       ${pendingCount > 0 ? `
       <div class="pending-banner">
         <div>${t("journeesEnAttente", owedByMeCount, owedToMeCount, owedByMeAmount, owedToMeAmount)}</div>
@@ -584,7 +665,7 @@ function render() {
             <table class="report-table">
               <thead>
                 <tr>
-                  <th>${t("thDate")}</th><th>${t("thVentes")}</th><th>${t("thClients")}</th><th>${t("thPct")}</th><th>${t("thRemis")}</th><th>${t("thNet")}</th><th>${t("thMoyCl")}</th><th>${t("thRecu")}</th><th>${t("thVirement")}</th>
+                  <th>${t("thDate")}</th><th>${t("thDelai")}</th><th>${t("thVentes")}</th><th>${t("thClients")}</th><th>${t("thPct")}</th><th>${t("thRemis")}</th><th>${t("thNet")}</th><th>${t("thMoyCl")}</th><th>${t("thRecu")}</th><th>${t("thVirement")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -609,9 +690,17 @@ function render() {
                       `;
                     }
                   }
+                  const delayDays = computeDelayDays(d);
+                  const delayCell = delayDays === 0
+                    ? `<span class="delay-badge delay-ok">${t("delaiOk")}</span>`
+                    : `<span class="delay-badge ${delayDays >= 3 ? "delay-bad" : "delay-warn"}">${t("delaiJours", delayDays)}</span>`;
+                  const modifiedBadge = wasModified(d)
+                    ? `<div class="modified-badge">✏️ ${t("modifieLe", fmtModifiedDate(d.updated_at))}</div>`
+                    : "";
                   return `
-                  <tr class="${rowClass}">
-                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#7A5B00; font-size:9px; font-weight:700;">🎀${t("roleHotesse")}</span>` : ""}</td>
+                  <tr class="${rowClass}" id="row-${d.id}">
+                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#7A5B00; font-size:9px; font-weight:700;">🎀${t("roleHotesse")}</span>` : ""}${modifiedBadge}</td>
+                    <td>${delayCell}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
                     <td>${fmtPct(d.pct / 100)}</td>
@@ -703,6 +792,27 @@ function render() {
         card.classList.add("jump-highlight");
         setTimeout(() => card.classList.remove("jump-highlight"), 1600);
       }
+    });
+  });
+
+  document.querySelectorAll('[data-action="jumpToEntry"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const empId = btn.dataset.emp;
+      const entryId = btn.dataset.entry;
+      const wrap = document.getElementById(`report-${empId}`);
+      if (wrap) wrap.style.display = "block";
+      // on laisse le temps au tableau de s'afficher avant de défiler jusqu'à la ligne précise
+      setTimeout(() => {
+        const row = document.getElementById(`row-${entryId}`);
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "center" });
+          row.classList.add("row-jump-highlight");
+          setTimeout(() => row.classList.remove("row-jump-highlight"), 1600);
+        } else {
+          const card = document.getElementById(`emp-card-${empId}`);
+          if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 50);
     });
   });
 
