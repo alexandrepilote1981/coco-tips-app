@@ -123,6 +123,12 @@
   }
   .pending-chip.chip-owed-employee { color: #7A1F1F; }
   .pending-chip.chip-owed-employer { color: #7A5B00; }
+  .pending-chip-wrap { display: inline-flex; align-items: stretch; border-radius: 999px; overflow: hidden; }
+  .pending-chip-wrap .pending-chip { border-radius: 999px 0 0 999px; border-right: none; }
+  .chip-dismiss-x {
+    background: white; border: 1px solid rgba(0,0,0,0.08); border-left: 1px solid rgba(0,0,0,0.08);
+    color: rgba(0,0,0,0.35); font-size: 11px; padding: 6px 9px; border-radius: 0 999px 999px 0;
+  }
   .employee-card-block.jump-highlight { animation: jumpFlash 1.6s ease; }
   @keyframes jumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
   .totals { font-size: 12px; text-align: right; }
@@ -236,6 +242,7 @@ const I18N = {
       if (mod > 0) parts.push(`${mod} modifiée${mod > 1 ? "s" : ""} après coup`);
       return "🔎 " + parts.join(" · ");
     },
+    mettreDeCote: "Mettre de côté",
     marquerVire: "Marquer viré",
     marquerRecu: "Marquer reçu",
     vireOk: (date) => `✓ Viré${date ? " le " + date : ""}`,
@@ -325,6 +332,7 @@ const I18N = {
       if (mod > 0) parts.push(`${mod} modified after the fact`);
       return "🔎 " + parts.join(" · ");
     },
+    mettreDeCote: "Dismiss",
     marquerVire: "Mark transferred",
     marquerRecu: "Mark received",
     vireOk: (date) => `✓ Transferred${date ? " on " + date : ""}`,
@@ -490,12 +498,12 @@ function computeDelayDays(entry) {
   return diffDays > 0 ? diffDays : 0;
 }
 
-// "Modifiée après coup" = sauvegardée un AUTRE jour que sa création — pas juste le fait de
-// remplir les champs un par un à la création (ce qui déclenche plusieurs sauvegardes de suite
-// et ne devrait jamais compter comme une vraie modification ultérieure).
+// "Modifiée après coup" = les DONNÉES DÉCLARÉES (pas une action admin comme confirmer un
+// virement) ont été sauvegardées un AUTRE jour que la création — pas juste le fait de
+// remplir les champs un par un à la création (plusieurs sauvegardes de suite le même jour).
 function wasModified(entry) {
-  if (!entry.created_at || !entry.updated_at) return false;
-  return utcToLocalDateStr(entry.created_at) !== utcToLocalDateStr(entry.updated_at);
+  if (!entry.created_at || !entry.data_updated_at) return false;
+  return utcToLocalDateStr(entry.created_at) !== utcToLocalDateStr(entry.data_updated_at);
 }
 
 function fmtModifiedDate(iso) {
@@ -551,11 +559,11 @@ function render() {
     r.employees.forEach((e) => {
       e.entries.forEach((d) => {
         const delay = computeDelayDays(d);
-        if (delay > 0) {
+        if (delay > 0 && !d.delay_dismissed) {
           lateCount++;
           flaggedEntries.push({ empId: e.id, name: e.name, entryId: d.id, date: d.date, type: "late", delay });
         }
-        if (wasModified(d)) {
+        if (wasModified(d) && !d.modified_dismissed) {
           modifiedCount++;
           flaggedEntries.push({ empId: e.id, name: e.name, entryId: d.id, date: d.date, type: "modified" });
         }
@@ -575,9 +583,12 @@ function render() {
         <div>${t("journeesRetardModif", lateCount, modifiedCount)}</div>
         <div class="pending-chips">
           ${flaggedEntries.map(f => `
-            <button class="pending-chip ${f.type === "late" ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEntry" data-emp="${f.empId}" data-entry="${f.entryId}">
-              ${f.name} · ${fmtDateShort(f.date)} ${f.type === "late" ? "⏱️" : "✏️"}
-            </button>
+            <span class="pending-chip-wrap">
+              <button class="pending-chip ${f.type === "late" ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEntry" data-emp="${f.empId}" data-entry="${f.entryId}">
+                ${f.name} · ${fmtDateShort(f.date)} ${f.type === "late" ? "⏱️" : "✏️"}
+              </button>
+              <button class="chip-dismiss-x" data-action="dismissFlag" data-entry="${f.entryId}" data-type="${f.type}" title="${t("mettreDeCote")}">✕</button>
+            </span>
           `).join("")}
         </div>
       </div>` : ""}
@@ -710,7 +721,7 @@ function render() {
                     ? `<span class="delay-badge delay-ok">${t("delaiOk")}</span>`
                     : `<span class="delay-badge ${delayDays >= 3 ? "delay-bad" : "delay-warn"}">${t("delaiJours", delayDays)}</span>`;
                   const modifiedBadge = wasModified(d)
-                    ? `<div class="modified-badge">✏️ ${t("modifieLe", fmtModifiedDate(d.updated_at))}</div>`
+                    ? `<div class="modified-badge">✏️ ${t("modifieLe", fmtModifiedDate(d.data_updated_at))}</div>`
                     : "";
                   return `
                   <tr class="${rowClass}" id="row-${d.id}">
@@ -828,6 +839,30 @@ function render() {
           if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       }, 50);
+    });
+  });
+
+  document.querySelectorAll('[data-action="dismissFlag"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const entryId = btn.dataset.entry;
+      const flagType = btn.dataset.type;
+      const wrap = btn.closest(".pending-chip-wrap");
+      btn.disabled = true;
+      try {
+        await api(`/api/admin/entries/${entryId}/dismiss-flag`, { method: "POST", body: JSON.stringify({ type: flagType }) });
+        // met à jour la copie locale pour que le compteur/bandeau restent justes sans tout recharger
+        overview.restaurants.forEach((r) => r.employees.forEach((e) => e.entries.forEach((d) => {
+          if (d.id === entryId) {
+            if (flagType === "late") d.delay_dismissed = 1;
+            if (flagType === "modified") d.modified_dismissed = 1;
+          }
+        })));
+        if (wrap) wrap.remove();
+        // si c'était la dernière puce du bandeau, on relance un render() pour le faire disparaître au complet
+        if (!document.querySelector(".pending-chip-wrap")) render();
+      } catch (err) {
+        btn.disabled = false;
+      }
     });
   });
 
