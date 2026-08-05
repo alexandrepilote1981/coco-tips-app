@@ -467,20 +467,35 @@ function fmtDateLong(iso) {
   return d.toLocaleDateString(t("locale"), { day: "numeric", month: "long", year: "numeric" });
 }
 
+// Convertit un timestamp SQLite (stocké en UTC, ex: '2026-08-04 23:42:00') en date locale
+// 'YYYY-MM-DD' selon le fuseau horaire de l'appareil qui consulte — sinon toute déclaration
+// faite en soirée au Québec (UTC-4/-5) semble "en retard" à tort, puisqu'on serait déjà
+// rendu au lendemain en UTC.
+function utcToLocalDateStr(sqliteDatetime) {
+  const d = new Date(sqliteDatetime.replace(" ", "T") + "Z");
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // Compare la date de création figée (jamais touchée par une modification) à la date déclarée,
 // pour savoir combien de jours de retard il y a eu à la déclarer.
 function computeDelayDays(entry) {
   if (!entry.created_at || !entry.date) return 0;
-  const createdDateOnly = entry.created_at.slice(0, 10); // 'YYYY-MM-DD' à partir de 'YYYY-MM-DD HH:MM:SS'
-  const d1 = new Date(createdDateOnly + "T00:00:00Z");
+  const createdLocalDate = utcToLocalDateStr(entry.created_at);
+  const d1 = new Date(createdLocalDate + "T00:00:00Z");
   const d2 = new Date(entry.date + "T00:00:00Z");
   const diffDays = Math.round((d1 - d2) / (1000 * 60 * 60 * 24));
   return diffDays > 0 ? diffDays : 0;
 }
 
-// Une entrée est "modifiée" si elle a été sauvegardée au moins une fois après sa création initiale.
+// "Modifiée après coup" = sauvegardée un AUTRE jour que sa création — pas juste le fait de
+// remplir les champs un par un à la création (ce qui déclenche plusieurs sauvegardes de suite
+// et ne devrait jamais compter comme une vraie modification ultérieure).
 function wasModified(entry) {
-  return !!(entry.created_at && entry.updated_at && entry.created_at !== entry.updated_at);
+  if (!entry.created_at || !entry.updated_at) return false;
+  return utcToLocalDateStr(entry.created_at) !== utcToLocalDateStr(entry.updated_at);
 }
 
 function fmtModifiedDate(iso) {
