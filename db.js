@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS entries (
   transferred INTEGER DEFAULT 0,
   transfer_date TEXT,
   is_hotesse INTEGER DEFAULT 0,
+  delay_dismissed INTEGER DEFAULT 0,
+  modified_dismissed INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
+  data_updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -79,6 +82,9 @@ for (const col of [
   "transfer_date TEXT",
   "is_hotesse INTEGER DEFAULT 0",
   "created_at TEXT",
+  "delay_dismissed INTEGER DEFAULT 0",
+  "modified_dismissed INTEGER DEFAULT 0",
+  "data_updated_at TEXT",
 ]) {
   try {
     db.exec(`ALTER TABLE entries ADD COLUMN ${col};`);
@@ -91,6 +97,7 @@ for (const col of [
 // approximation raisonnable de la date de création (mieux que rien; on ne le refait
 // jamais après, donc les vraies nouvelles journées auront toujours la bonne date figée).
 db.exec(`UPDATE entries SET created_at = updated_at WHERE created_at IS NULL;`);
+db.exec(`UPDATE entries SET data_updated_at = updated_at WHERE data_updated_at IS NULL;`);
 
 function makeAccessCode() {
   // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus

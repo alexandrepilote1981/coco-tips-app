@@ -67,7 +67,7 @@ app.post("/api/employee/:code/entries", (req, res) => {
 
   if (existing) {
     db.prepare(
-      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?, is_hotesse=?, updated_at=datetime('now') WHERE id=?`
+      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?, is_hotesse=?, updated_at=datetime('now'), data_updated_at=datetime('now') WHERE id=?`
     ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse, existing.id);
     res.json({ ok: true, id: existing.id });
   } else {
@@ -75,7 +75,7 @@ app.post("/api/employee/:code/entries", (req, res) => {
     // (ex: une serveuse qui rentre ses chiffres 2 fois dans la même journée).
     const newId = nanoid(10);
     db.prepare(
-      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction, remit_amount, is_hotesse, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))`
+      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction, remit_amount, is_hotesse, created_at, data_updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`
     ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse);
     res.json({ ok: true, id: newId });
   }
@@ -256,6 +256,20 @@ app.post("/api/admin/entries/:entryId/transferred", requireAdmin, (req, res) => 
   const transferDate = req.body.transfer_date || null;
   db.prepare(`UPDATE entries SET transferred=?, transfer_date=?, updated_at=datetime('now') WHERE id=?`)
     .run(value, value ? transferDate : null, req.params.entryId);
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/entries/:entryId/dismiss-flag", requireAdmin, (req, res) => {
+  const type = req.body.type;
+  // IMPORTANT : on ne touche jamais updated_at ici, sinon ça redéclencherait
+  // la détection "modifiée après coup" et la notification ne se fermerait jamais.
+  if (type === "late") {
+    db.prepare("UPDATE entries SET delay_dismissed=1 WHERE id=?").run(req.params.entryId);
+  } else if (type === "modified") {
+    db.prepare("UPDATE entries SET modified_dismissed=1 WHERE id=?").run(req.params.entryId);
+  } else {
+    return res.status(400).json({ error: "type invalide" });
+  }
   res.json({ ok: true });
 });
 
