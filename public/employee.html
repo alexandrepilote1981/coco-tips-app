@@ -691,7 +691,7 @@ function render() {
     try {
       await api(`/api/employee/${CODE}/messages`, { method: "DELETE" });
       conversation = [];
-      closeMessageModal();
+      render(); // reconstruit l'écran pour que la conversation vide (et le badge) reflètent le vrai état tout de suite
     } catch (err) {
       alert(t("erreurSauvegarde"));
     }
