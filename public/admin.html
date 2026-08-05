@@ -25,6 +25,8 @@
   .restaurant-title { font-size: 17px; font-weight: 800; color: #0B5D5C; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
   .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0 6px; border-top: 1px solid #F0EBE0; }
   .employee-card-block:first-of-type .employee-row { border-top: none; }
+  .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .secondary-btn { background: #F1EEE6; color: #0B5D5C; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
   .employee-stats { display: flex; gap: 20px; flex-wrap: wrap; padding: 4px 0 10px; }
   .employee-stat-label { font-size: 10px; text-transform: uppercase; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 2px; }
   .employee-stat-value { font-size: 19px; font-weight: 800; color: #17302D; }
@@ -200,6 +202,7 @@ const I18N = {
     pctMoyenLabel: "% moyen",
     enAttenteLabel: "En attente",
     messagesTitle: "Messages des employés",
+    messageTab: "Message",
     aucunMessage: "Aucun message pour l'instant.",
     confirmSupprimerMessage: "Supprimer ce message?",
     supprimerMessage: "Supprimer",
@@ -277,6 +280,7 @@ const I18N = {
     pctMoyenLabel: "Avg. %",
     enAttenteLabel: "Pending",
     messagesTitle: "Messages from employees",
+    messageTab: "Message",
     aucunMessage: "No messages yet.",
     confirmSupprimerMessage: "Delete this message?",
     supprimerMessage: "Delete",
@@ -545,7 +549,10 @@ function render() {
                 <button class="copy-btn" data-action="copyLink" data-link="${link}">${t("copier")}</button>
               </div>
             </div>
-            <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
+            <div class="employee-row-actions">
+              <button class="secondary-btn" data-action="messageEmployee" data-id="${e.id}" data-name="${e.name}" data-resto="${r.name}">✉️ ${t("messageTab")}</button>
+              <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
+            </div>
           </div>
           <div class="employee-stats">
             <div>
@@ -708,6 +715,12 @@ function render() {
     });
   });
 
+  document.querySelectorAll('[data-action="messageEmployee"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openThreadModal(btn.dataset.id, btn.dataset.name, btn.dataset.resto);
+    });
+  });
+
   document.querySelectorAll('[data-action="copyLink"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       const link = btn.dataset.link;
@@ -810,7 +823,7 @@ function renderMessagesInbox() {
   });
 }
 
-async function openThreadModal(employeeId) {
+async function openThreadModal(employeeId, employeeName, restaurantName) {
   const overlay = document.getElementById("threadModalOverlay");
   overlay.style.display = "flex";
   overlay.dataset.emp = employeeId;
@@ -821,9 +834,12 @@ async function openThreadModal(employeeId) {
   renderThreadMessages(employeeId);
 
   const threads = groupMessagesByEmployee();
-  const thread = threads.find((t) => t.employeeId === employeeId);
+  const thread = threads.find((th) => th.employeeId === employeeId);
   if (thread) {
     document.getElementById("threadModalTitle").textContent = `${thread.employeeName} · ${thread.restaurantName}`;
+  } else if (employeeName) {
+    // aucune conversation existante encore — on utilise le nom/restaurant fournis directement
+    document.getElementById("threadModalTitle").textContent = `${employeeName} · ${restaurantName || ""}`;
   }
 
   if (thread && thread.unreadCount > 0) {
