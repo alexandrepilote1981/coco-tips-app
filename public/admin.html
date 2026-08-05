@@ -68,6 +68,7 @@
   .modal-box input[type=date] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 14px; }
   .modal-actions { display: flex; gap: 8px; }
   .modal-actions button { flex: 1; }
+  .modal-actions button.danger-text { background: #FDECEC; color: #7A1F1F; }
   .pending-banner {
     background: #FDECEC; border: 1px solid #F5B8B8; color: #7A1F1F; border-radius: 14px;
     padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px;
@@ -155,7 +156,7 @@
     <div id="threadMessages" class="conversation-history"></div>
     <textarea id="threadReplyBody" class="reply-textarea" placeholder=""></textarea>
     <div class="modal-actions">
-      <button class="secondary" id="threadModalCloseBtn"></button>
+      <button class="secondary danger-text" id="deleteThreadBtn"></button>
       <button id="threadReplySendBtn"></button>
     </div>
   </div>
@@ -207,6 +208,8 @@ const I18N = {
     confirmSupprimerMessage: "Supprimer ce message?",
     supprimerMessage: "Supprimer",
     repondrePlaceholder: "Écris ta réponse...",
+    supprimerConversation: "Supprimer",
+    confirmSupprimerConversation: "Supprimer toute la conversation avec cette personne? Cette action ne peut pas être annulée.",
     toiVers: "Toi →",
     toiLabel: "Toi",
     erreurEnvoiReponse: "Erreur lors de l'envoi de la réponse. Réessaie.",
@@ -285,6 +288,8 @@ const I18N = {
     confirmSupprimerMessage: "Delete this message?",
     supprimerMessage: "Delete",
     repondrePlaceholder: "Write your reply...",
+    supprimerConversation: "Delete",
+    confirmSupprimerConversation: "Delete the entire conversation with this person? This cannot be undone.",
     toiVers: "You →",
     toiLabel: "You",
     erreurEnvoiReponse: "Error sending reply. Try again.",
@@ -829,7 +834,7 @@ async function openThreadModal(employeeId, employeeName, restaurantName) {
   overlay.dataset.emp = employeeId;
   document.getElementById("threadReplyBody").value = "";
   document.getElementById("threadReplyBody").placeholder = t("repondrePlaceholder");
-  document.getElementById("threadModalCloseBtn").textContent = t("annulerBtn");
+  document.getElementById("deleteThreadBtn").textContent = t("supprimerConversation");
   document.getElementById("threadReplySendBtn").textContent = t("messageSend");
   renderThreadMessages(employeeId);
 
@@ -1014,9 +1019,23 @@ function openTransferModal(entryId, direction) {
 function setupThreadModal() {
   const overlay = document.getElementById("threadModalOverlay");
   document.getElementById("threadModalCloseX").addEventListener("click", closeThreadModal);
-  document.getElementById("threadModalCloseBtn").addEventListener("click", closeThreadModal);
   overlay.addEventListener("click", (ev) => {
     if (ev.target === overlay) closeThreadModal();
+  });
+  document.getElementById("deleteThreadBtn").addEventListener("click", async () => {
+    const employeeId = overlay.dataset.emp;
+    if (!employeeId) return;
+    const hasMessages = messages.some((m) => m.employee_id === employeeId);
+    if (!hasMessages) { closeThreadModal(); return; }
+    if (!confirm(t("confirmSupprimerConversation"))) return;
+    try {
+      await api(`/api/admin/employees/${employeeId}/messages`, { method: "DELETE" });
+      messages = messages.filter((m) => m.employee_id !== employeeId);
+      closeThreadModal();
+      renderMessagesInbox();
+    } catch (err) {
+      alert(t("erreurEnvoiReponse"));
+    }
   });
   document.getElementById("threadReplySendBtn").addEventListener("click", async () => {
     const employeeId = overlay.dataset.emp;

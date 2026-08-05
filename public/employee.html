@@ -105,6 +105,7 @@
   .modal-actions { display: flex; gap: 8px; margin-top: 10px; }
   .modal-actions button { flex: 1; }
   .modal-actions button.secondary { background: #EAE4D8; color: #17302D; }
+  .modal-actions button.danger-text { background: #FDECEC; color: #7A1F1F; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; }
   .period-btn {
     background: #F1EEE6; color: #17302D; font-size: 12px; font-weight: 700;
@@ -163,7 +164,8 @@ const I18N = {
     erreurSauvegarde: "Erreur de sauvegarde. Vérifie ta connexion et réessaie.",
     messageTitle: "Écrire un message au gérant",
     messageTab: "Message",
-    annulerBtn: "Annuler",
+    supprimerConversation: "Supprimer",
+    confirmSupprimerConversation: "Supprimer toute la conversation? Cette action ne peut pas être annulée.",
     messagePlaceholder: "Question, problème, ou n'importe quoi que tu veux signaler...",
     messageSend: "Envoyer",
     messageSent: "Message envoyé!",
@@ -216,7 +218,8 @@ const I18N = {
     erreurSauvegarde: "Save error. Check your connection and try again.",
     messageTitle: "Write a message to your manager",
     messageTab: "Message",
-    annulerBtn: "Cancel",
+    supprimerConversation: "Delete",
+    confirmSupprimerConversation: "Delete the entire conversation? This cannot be undone.",
     messagePlaceholder: "Question, issue, or anything you'd like to flag...",
     messageSend: "Send",
     messageSent: "Message sent!",
@@ -641,7 +644,7 @@ function render() {
         <textarea id="messageBody" class="message-textarea" placeholder="${t("messagePlaceholder")}"></textarea>
         <p id="messageConfirm" class="message-confirm" style="display:none;">✓ ${t("messageSent")}</p>
         <div class="modal-actions">
-          <button class="secondary" id="closeMessageModalBtn">${t("annulerBtn")}</button>
+          <button class="secondary danger-text" id="deleteConversationBtn">${t("supprimerConversation")}</button>
           <button id="sendMessageBtn">${t("messageSend")}</button>
         </div>
       </div>
@@ -677,10 +680,21 @@ function render() {
     messageOverlay.style.display = "none";
   }
 
-  document.getElementById("closeMessageModalBtn").addEventListener("click", closeMessageModal);
   document.getElementById("closeMessageModalX").addEventListener("click", closeMessageModal);
   messageOverlay.addEventListener("click", (ev) => {
     if (ev.target === messageOverlay) closeMessageModal(); // clic sur le fond sombre, pas sur la boîte elle-même
+  });
+
+  document.getElementById("deleteConversationBtn").addEventListener("click", async () => {
+    if (conversation.length === 0) { closeMessageModal(); return; }
+    if (!confirm(t("confirmSupprimerConversation"))) return;
+    try {
+      await api(`/api/employee/${CODE}/messages`, { method: "DELETE" });
+      conversation = [];
+      closeMessageModal();
+    } catch (err) {
+      alert(t("erreurSauvegarde"));
+    }
   });
 
   document.getElementById("sendMessageBtn").addEventListener("click", async () => {
