@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS entries (
   transferred INTEGER DEFAULT 0,
   transfer_date TEXT,
   is_hotesse INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -77,6 +78,7 @@ for (const col of [
   "transferred INTEGER DEFAULT 0",
   "transfer_date TEXT",
   "is_hotesse INTEGER DEFAULT 0",
+  "created_at TEXT",
 ]) {
   try {
     db.exec(`ALTER TABLE entries ADD COLUMN ${col};`);
@@ -84,6 +86,11 @@ for (const col of [
     // colonne déjà présente — rien à faire
   }
 }
+
+// Pour les journées créées avant l'ajout de cette colonne, on utilise updated_at comme
+// approximation raisonnable de la date de création (mieux que rien; on ne le refait
+// jamais après, donc les vraies nouvelles journées auront toujours la bonne date figée).
+db.exec(`UPDATE entries SET created_at = updated_at WHERE created_at IS NULL;`);
 
 function makeAccessCode() {
   // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus

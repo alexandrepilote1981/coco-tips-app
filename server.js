@@ -75,7 +75,7 @@ app.post("/api/employee/:code/entries", (req, res) => {
     // (ex: une serveuse qui rentre ses chiffres 2 fois dans la même journée).
     const newId = nanoid(10);
     db.prepare(
-      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction, remit_amount, is_hotesse) VALUES (?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction, remit_amount, is_hotesse, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))`
     ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse);
     res.json({ ok: true, id: newId });
   }
