@@ -6,17 +6,17 @@
 <title>Admin — Suivi des pourboires / Tip Tracking</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  body { margin: 0; font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     background-color: #F4F2ED;
-    color: #1C1C1A; padding-bottom: 60px; }
-  .header { background: linear-gradient(135deg,#4C7A63 0%,#5C9478 100%); padding: 24px 20px; color: white; display:flex; justify-content:space-between; align-items:center; }
-  .title { font-size: 22px; font-weight: 800; margin: 0; display:flex; align-items:center; }
+    color: #1C1C1A; padding-bottom: 60px; -webkit-font-smoothing: antialiased; }
+  .header { background: linear-gradient(135deg,#4C7A63 0%,#5C9478 100%); padding: 30px 22px 32px; color: white; display:flex; justify-content:space-between; align-items:center; }
+  .title { font-family: 'Fraunces', serif; font-size: 25px; font-weight: 600; margin: 0; display:flex; align-items:center; letter-spacing: -0.01em; }
   .lang-toggle { background: rgba(255,255,255,0.15); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
-  .content { padding: 16px; max-width: 900px; margin: 0 auto; }
-  .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 14px; }
+  .content { padding: 20px 16px; max-width: 900px; margin: 0 auto; }
+  .card { background: white; border-radius: 18px; padding: 22px; box-shadow: 0 2px 10px rgba(22,35,61,0.05); border: 1px solid rgba(22,35,61,0.05); margin-bottom: 18px; }
   .login-screen {
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: linear-gradient(160deg, #4C7A63 0%, #5C9478 100%); padding: 24px; position: relative; overflow: hidden;
@@ -93,15 +93,23 @@
   button { background: #4C7A63; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
   button.secondary { background: #EAE4D8; color: #1C1C1A; }
   button.danger { background: #B4483C; }
-  .restaurant-title { font-size: 17px; font-weight: 800; color: #4C7A63; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
-  .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0 6px; border-top: 1px solid #F0EBE0; }
+  .restaurant-title {
+    font-family: 'Fraunces', serif; font-size: 23px; font-weight: 600; color: #16233D; margin: 0 0 4px;
+    display:flex; justify-content:space-between; align-items:center; letter-spacing: -0.01em;
+  }
+  .restaurant-total { font-size: 12.5px; color: rgba(0,0,0,0.5); margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #F0EBE0; }
+  .employee-card-block {
+    background: #FBFAF7; border-radius: 14px; padding: 16px 16px 14px; margin-bottom: 12px; border: 1px solid #F0EBE0;
+  }
+  .employee-card-block:last-of-type { margin-bottom: 0; }
+  .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 0 10px; }
   .employee-card-block:first-of-type .employee-row { border-top: none; }
   .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
   .secondary-btn { background: #F1EEE6; color: #16233D; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
-  .employee-stats { display: flex; gap: 20px; flex-wrap: wrap; padding: 4px 0 10px; }
-  .employee-stat-label { font-size: 10px; text-transform: uppercase; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 2px; }
-  .employee-stat-value { font-size: 19px; font-weight: 800; color: #1C1C1A; }
-  .employee-name { font-weight: 700; font-size: 14px; }
+  .employee-stats { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 0 12px; }
+  .employee-stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 3px; }
+  .employee-stat-value { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; color: #1C1C1A; }
+  .employee-name { font-weight: 700; font-size: 15px; }
   .employee-sub { font-size: 11px; color: rgba(0,0,0,0.5); }
   .link-box { font-size: 11px; background: #EAF1DD; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
   .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
@@ -758,7 +766,7 @@ function render() {
           <span>${r.name}</span>
           <button class="danger" data-action="delRestaurant" data-id="${r.id}" style="font-size:11px; padding:4px 10px;">${t("supprimer")}</button>
         </div>
-        <div style="font-size:12px; color:rgba(0,0,0,0.55); margin-bottom:8px;">
+        <div class="restaurant-total">
           ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#16233D">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
         </div>
     `;
