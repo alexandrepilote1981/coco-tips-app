@@ -10,12 +10,10 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background-color: #FBF7F0;
-    background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22240%22%20height%3D%22240%22%20viewBox%3D%220%200%20240%20240%22%3E%0A%20%20%3Cg%20opacity%3D%220.07%22%3E%0A%20%20%20%20%3C%21--%20tranche%20de%20mangue%20--%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2240%22%20cy%3D%2240%22%20rx%3D%2226%22%20ry%3D%2220%22%20fill%3D%22%23F2994A%22%20transform%3D%22rotate%28-20%2040%2040%29%22/%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2240%22%20cy%3D%2240%22%20rx%3D%2214%22%20ry%3D%2210%22%20fill%3D%22%23F26D6D%22%20transform%3D%22rotate%28-20%2040%2040%29%22/%3E%0A%20%20%20%20%3C%21--%20feuille%20--%3E%0A%20%20%20%20%3Cpath%20d%3D%22M170%2020%20C%20190%2010%2C%20210%2030%2C%20195%2055%20C%20175%2060%2C%20160%2040%2C%20170%2020%20Z%22%20fill%3D%22%230E7C7B%22/%3E%0A%20%20%20%20%3C%21--%20ananas%20%28texture%20crois%C3%A9e%20simplifi%C3%A9e%29%20--%3E%0A%20%20%20%20%3Cg%20transform%3D%22translate%28190%2C130%29%22%3E%0A%20%20%20%20%20%20%3Cellipse%20cx%3D%220%22%20cy%3D%2210%22%20rx%3D%2216%22%20ry%3D%2222%22%20fill%3D%22%23F2994A%22/%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M0%20-12%20C%20-6%20-22%2C%206%20-22%2C%200%20-12%22%20fill%3D%22%230E7C7B%22/%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M-14%204%20L14%204%20M-14%2012%20L14%2012%20M-14%2020%20L14%2020%20M-8%20-8%20L-8%2028%20M0%20-8%20L0%2028%20M8%20-8%20L8%2028%22%20stroke%3D%22%237A5B00%22%20stroke-width%3D%221%22%20opacity%3D%220.5%22/%3E%0A%20%20%20%20%3C/g%3E%0A%20%20%20%20%3C%21--%20verre%20de%20smoothie%20--%3E%0A%20%20%20%20%3Cg%20transform%3D%22translate%2860%2C170%29%22%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M-14%20-20%20L14%20-20%20L10%2026%20C10%2030%2C%20-10%2030%2C%20-10%2026%20Z%22%20fill%3D%22%23F26D6D%22/%3E%0A%20%20%20%20%20%20%3Cellipse%20cx%3D%220%22%20cy%3D%22-20%22%20rx%3D%2214%22%20ry%3D%224%22%20fill%3D%22%230B5D5C%22/%3E%0A%20%20%20%20%20%20%3Crect%20x%3D%22-2%22%20y%3D%22-32%22%20width%3D%224%22%20height%3D%2216%22%20fill%3D%22%230E7C7B%22/%3E%0A%20%20%20%20%3C/g%3E%0A%20%20%20%20%3C%21--%20petite%20feuille%20additionnelle%20--%3E%0A%20%20%20%20%3Cpath%20d%3D%22M120%20190%20C%20135%20180%2C%20150%20195%2C%20138%20210%20C%20122%20212%2C%20112%20200%2C%20120%20190%20Z%22%20fill%3D%22%232E9E5B%22/%3E%0A%20%20%3C/g%3E%0A%3C/svg%3E");
-    background-repeat: repeat;
-    color: #17302D; padding-bottom: 60px; }
-  .header { background: linear-gradient(135deg,#0B5D5C 0%,#0E7C7B 55%,#F2994A 130%); padding: 24px 20px; color: white; display:flex; justify-content:space-between; align-items:center; }
-  .title { font-size: 22px; font-weight: 800; margin: 0; }
+    background-color: #F4F2ED;
+    color: #1C1C1A; padding-bottom: 60px; }
+  .header { background: linear-gradient(135deg,#16233D 0%,#24345A 100%); padding: 24px 20px; color: white; display:flex; justify-content:space-between; align-items:center; }
+  .title { font-size: 22px; font-weight: 800; margin: 0; display:flex; align-items:center; }
   .lang-toggle { background: rgba(255,255,255,0.15); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
   .content { padding: 16px; max-width: 900px; margin: 0 auto; }
   .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 14px; }
@@ -76,26 +74,26 @@
   }
   input, button, select { font-family: inherit; }
   input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 10px; }
-  button { background: #0B5D5C; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
-  button.secondary { background: #EAE4D8; color: #17302D; }
-  button.danger { background: #F26D6D; }
-  .restaurant-title { font-size: 17px; font-weight: 800; color: #0B5D5C; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
+  button { background: #16233D; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  button.secondary { background: #EAE4D8; color: #1C1C1A; }
+  button.danger { background: #B4483C; }
+  .restaurant-title { font-size: 17px; font-weight: 800; color: #16233D; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
   .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0 6px; border-top: 1px solid #F0EBE0; }
   .employee-card-block:first-of-type .employee-row { border-top: none; }
   .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-  .secondary-btn { background: #F1EEE6; color: #0B5D5C; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
+  .secondary-btn { background: #F1EEE6; color: #16233D; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
   .employee-stats { display: flex; gap: 20px; flex-wrap: wrap; padding: 4px 0 10px; }
   .employee-stat-label { font-size: 10px; text-transform: uppercase; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 2px; }
-  .employee-stat-value { font-size: 19px; font-weight: 800; color: #17302D; }
+  .employee-stat-value { font-size: 19px; font-weight: 800; color: #1C1C1A; }
   .employee-name { font-weight: 700; font-size: 14px; }
   .employee-sub { font-size: 11px; color: rgba(0,0,0,0.5); }
   .link-box { font-size: 11px; background: #EAF1DD; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
   .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
   .link-row .link-box { flex: 1; margin-top: 0; }
-  .copy-btn { background: #0B5D5C; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
-  .copy-btn.copied { background: #2E9E5B; }
+  .copy-btn { background: #16233D; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn.copied { background: #4C7A63; }
   .report-toggle {
-    background: #F1EEE6; color: #0B5D5C; font-size: 11px; font-weight: 700;
+    background: #F1EEE6; color: #16233D; font-size: 11px; font-weight: 700;
     padding: 6px 12px; border-radius: 999px; margin-top: 8px;
   }
   .report-table-wrap { margin-top: 10px; overflow-x: auto; }
@@ -108,17 +106,17 @@
   .report-table tr:last-child td { border-bottom: none; }
   .report-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; border: 1px solid #EEE8DC; vertical-align: middle; }
   .delay-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
-  .delay-badge.delay-ok { background: #EAF7EE; color: #1E6B3C; }
+  .delay-badge.delay-ok { background: #E8F0EB; color: #3D6350; }
   .delay-badge.delay-warn { background: #FFF2CC; color: #7A5B00; }
   .delay-badge.delay-bad { background: #FDECEC; color: #7A1F1F; }
-  .modified-badge { font-size: 9px; color: #0B5D5C; margin-top: 2px; white-space: nowrap; }
+  .modified-badge { font-size: 9px; color: #16233D; margin-top: 2px; white-space: nowrap; }
   tr.row-jump-highlight { animation: rowJumpFlash 1.6s ease; }
   @keyframes rowJumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
   .row-flagged-owed-employee { background: #FDECEC; }
   .row-flagged-owed-employer { background: #FFF9E8; }
-  .transfer-btn { background: #F26D6D; color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
-  .transfer-btn.owed-employer { background: #F2994A; }
-  .transfer-done { color: #2E9E5B; font-weight: 700; font-size: 11px; white-space: nowrap; }
+  .transfer-btn { background: #B4483C; color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+  .transfer-btn.owed-employer { background: #C99A44; }
+  .transfer-done { color: #4C7A63; font-weight: 700; font-size: 11px; white-space: nowrap; }
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
     display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -141,11 +139,11 @@
     background: #FFF9E8; border: 1px solid #F5E5A8; color: #7A5B00;
   }
   .messages-toggle {
-    background: none; border: none; padding: 0; color: #0B5D5C; font-size: 14px; font-weight: 700;
+    background: none; border: none; padding: 0; color: #16233D; font-size: 14px; font-weight: 700;
     display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   }
   .unread-badge {
-    background: #F26D6D; color: white; font-size: 11px; font-weight: 800; border-radius: 999px;
+    background: #B4483C; color: white; font-size: 11px; font-weight: 800; border-radius: 999px;
     padding: 2px 8px; min-width: 18px; text-align: center; display: inline-block;
   }
   .thread-row {
@@ -154,7 +152,7 @@
   }
   .thread-row:first-child { border-top: none; }
   .thread-row-top { display: flex; justify-content: space-between; align-items: center; }
-  .thread-name { font-size: 13px; font-weight: 700; color: #17302D; }
+  .thread-name { font-size: 13px; font-weight: 700; color: #1C1C1A; }
   .thread-resto { font-size: 11px; font-weight: 400; color: rgba(0,0,0,0.45); }
   .thread-preview { font-size: 12px; color: rgba(0,0,0,0.6); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .thread-date { font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 2px; }
@@ -164,14 +162,14 @@
   .conv-bubble.conv-employee { background: #F1EEE6; margin-right: auto; border-bottom-left-radius: 4px; }
   .conv-bubble.conv-admin { background: #DDEBF7; margin-left: auto; border-bottom-right-radius: 4px; }
   .conv-sender { font-size: 9px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 2px; }
-  .conv-body { font-size: 13px; color: #17302D; white-space: pre-wrap; }
+  .conv-body { font-size: 13px; color: #1C1C1A; white-space: pre-wrap; }
   .conv-delete-btn {
     background: none; border: none; color: rgba(0,0,0,0.3); font-size: 10px; padding: 4px 0 0;
     text-decoration: underline; cursor: pointer;
   }
   .reply-textarea {
     width: 100%; min-height: 60px; border: none; border-radius: 8px; padding: 8px;
-    font-size: 13px; font-family: inherit; background: #F1EEE6; color: #17302D; outline: none; resize: vertical; margin-bottom: 6px;
+    font-size: 13px; font-family: inherit; background: #F1EEE6; color: #1C1C1A; outline: none; resize: vertical; margin-bottom: 6px;
   }
   .pending-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .pending-chip {
@@ -189,18 +187,18 @@
   .employee-card-block.jump-highlight { animation: jumpFlash 1.6s ease; }
   @keyframes jumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
   .totals { font-size: 12px; text-align: right; }
-  .totals b { color: #2E9E5B; }
+  .totals b { color: #4C7A63; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
   .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.5); margin: 20px 0 8px; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .period-btn { background: #EAE4D8; color: #17302D; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
-  .period-btn.active { background: #0B5D5C; color: white; }
+  .period-btn { background: #EAE4D8; color: #1C1C1A; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
+  .period-btn.active { background: #16233D; color: white; }
   .period-dates { display: flex; gap: 6px; align-items: center; font-size: 12px; }
   .period-dates input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; margin-bottom: 0; }
-  .period-label { font-size: 15px; font-weight: 700; color: #0B5D5C; margin-top: 4px; margin-bottom: 4px; }
+  .period-label { font-size: 15px; font-weight: 700; color: #16233D; margin-top: 4px; margin-bottom: 4px; }
   .export-btn {
-    display: block; width: 100%; margin-top: 10px; background: #F2994A; color: white;
+    display: block; width: 100%; margin-top: 10px; background: #C99A44; color: white;
     font-size: 13px; font-weight: 700; padding: 10px; border-radius: 10px;
   }
 </style>
@@ -742,7 +740,7 @@ function render() {
           <button class="danger" data-action="delRestaurant" data-id="${r.id}" style="font-size:11px; padding:4px 10px;">${t("supprimer")}</button>
         </div>
         <div style="font-size:12px; color:rgba(0,0,0,0.55); margin-bottom:8px;">
-          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#2E9E5B">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
+          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#4C7A63">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
         </div>
     `;
     r.employees.forEach((e) => {
@@ -771,16 +769,16 @@ function render() {
             </div>
             <div>
               <div class="employee-stat-label">${t("pourboireNetTotal")}</div>
-              <div class="employee-stat-value" style="color:#2E9E5B;">${fmtMoney(e.totals.net)}</div>
+              <div class="employee-stat-value" style="color:#4C7A63;">${fmtMoney(e.totals.net)}</div>
             </div>
             <div>
               <div class="employee-stat-label">${t("pctMoyenLabel")}</div>
-              <div class="employee-stat-value" style="color:#F2994A; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
+              <div class="employee-stat-value" style="color:#C99A44; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
             </div>
             ${empPending ? `
             <div>
               <div class="employee-stat-label">${t("enAttenteLabel")}</div>
-              <div class="employee-stat-value" style="color:${empPending.direction === "employer_owes" ? "#F26D6D" : "#F2994A"}; font-size:16px;">${fmtMoney(empPending.amount)}</div>
+              <div class="employee-stat-value" style="color:${empPending.direction === "employer_owes" ? "#B4483C" : "#C99A44"}; font-size:16px;">${fmtMoney(empPending.amount)}</div>
             </div>` : ""}
           </div>
           <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${icon("chart", 13)} ${t("voirDetail", e.entries.length)}</button>
@@ -829,7 +827,7 @@ function render() {
                     <td>${d.clients}</td>
                     <td>${fmtPct(d.pct / 100)}</td>
                     <td>${fmtMoney(d.remis)}</td>
-                    <td style="color:#2E9E5B; font-weight:700;">${fmtMoney(d.net)}</td>
+                    <td style="color:#4C7A63; font-weight:700;">${fmtMoney(d.net)}</td>
                     <td>${fmtMoney(d.moyenne)}</td>
                     <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
                     <td>${virementCell}</td>
