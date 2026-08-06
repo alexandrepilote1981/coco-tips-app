@@ -5,7 +5,23 @@ const { db, nanoid, makeAccessCode, PHOTOS_DIR } = require("./db");
 
 const app = express();
 app.use(express.json({ limit: "12mb" })); // les photos en base64 sont plus lourdes que du texte
-app.use(express.static(path.join(__dirname, "public")));
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    setHeaders: (res, filePath) => {
+      // Les pages HTML changent souvent pendant le développement — on force le navigateur
+      // à toujours redemander la dernière version au lieu de garder une vieille copie en cache.
+      if (filePath.endsWith(".html")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      }
+    },
+  })
+);
+
+const NO_CACHE_HEADERS = {
+  headers: { "Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0" },
+};
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 
@@ -330,13 +346,13 @@ app.delete("/api/admin/employees/:id/messages", requireAdmin, (req, res) => {
 
 // ---------- pages ----------
 app.get("/e/:code", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "employee.html"));
+  res.sendFile(path.join(__dirname, "public", "employee.html"), NO_CACHE_HEADERS);
 });
 app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
+  res.sendFile(path.join(__dirname, "public", "admin.html"), NO_CACHE_HEADERS);
 });
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "landing.html"));
+  res.sendFile(path.join(__dirname, "public", "landing.html"), NO_CACHE_HEADERS);
 });
 
 const PORT = process.env.PORT || 3000;
