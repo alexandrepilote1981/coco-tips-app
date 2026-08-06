@@ -525,7 +525,13 @@ function attachCardListeners(card, e) {
 
   card.querySelector('.hotesse-checkbox').addEventListener("change", async (ev) => {
     e.is_hotesse = ev.target.checked;
-    if (ev.target.checked) { e.pct = 100; e.remis = 0; e.clients = 0; }
+    if (ev.target.checked) {
+      // en entrant en mode hôtesse : ventes = montant reçu, le reste n'a pas de sens, on force à des valeurs neutres
+      e.pct = 100; e.remis = 0; e.clients = 0;
+    } else {
+      // en sortant du mode hôtesse : on repart à zéro plutôt que de garder les valeurs forcées (ex: 100%) collées
+      e.ventes = 0; e.pct = 0; e.remis = 0; e.clients = 0;
+    }
     recomputeEntry(e);
     const newCard = buildCardElement(e); // la mise en page du formulaire change, donc on reconstruit CETTE carte seulement
     card.replaceWith(newCard);
