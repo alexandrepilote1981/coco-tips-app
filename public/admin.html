@@ -12,14 +12,14 @@
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     background-color: #F4F2ED;
     color: #1C1C1A; padding-bottom: 60px; }
-  .header { background: linear-gradient(135deg,#16233D 0%,#24345A 100%); padding: 24px 20px; color: white; display:flex; justify-content:space-between; align-items:center; }
+  .header { background: linear-gradient(135deg,#4C7A63 0%,#5C9478 100%); padding: 24px 20px; color: white; display:flex; justify-content:space-between; align-items:center; }
   .title { font-size: 22px; font-weight: 800; margin: 0; display:flex; align-items:center; }
   .lang-toggle { background: rgba(255,255,255,0.15); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
   .content { padding: 16px; max-width: 900px; margin: 0 auto; }
   .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 14px; }
   .login-screen {
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: linear-gradient(160deg, #16233D 0%, #24345A 100%); padding: 24px; position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #4C7A63 0%, #5C9478 100%); padding: 24px; position: relative; overflow: hidden;
   }
   .login-screen::before {
     content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
@@ -32,13 +32,11 @@
     background-image: radial-gradient(rgba(244,242,237,0.08) 1px, transparent 1px);
     background-size: 22px 22px;
   }
-  .login-stub {
-    position: absolute; width: 60px; height: 80px; background: rgba(201,154,68,0.06);
-    border: 1px solid rgba(244,242,237,0.1);
-    clip-path: polygon(0% 0%, 100% 0%, 100% 92%, 90% 100%, 80% 92%, 70% 100%, 60% 92%, 50% 100%, 40% 92%, 30% 100%, 20% 92%, 10% 100%, 0% 92%);
+  .login-glow {
+    position: absolute; border-radius: 50%; filter: blur(50px); pointer-events: none;
   }
-  .login-stub.s1 { top: 16%; left: 14%; transform: rotate(-14deg); }
-  .login-stub.s2 { bottom: 15%; right: 12%; transform: rotate(11deg); }
+  .login-glow.g1 { width: 260px; height: 260px; background: rgba(22,35,61,0.55); top: 6%; left: -10%; }
+  .login-glow.g2 { width: 260px; height: 260px; background: rgba(201,154,68,0.32); bottom: 6%; right: -10%; }
   .login-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; animation: loginFadeUp .55s cubic-bezier(.2,.8,.2,1) both; }
   @keyframes loginFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
   .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
@@ -55,21 +53,22 @@
     position: relative; overflow: hidden;
   }
   .login-box::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-    background: linear-gradient(90deg, #16233D, #C99A44, #4C7A63);
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 7px;
+    background: linear-gradient(90deg, #4C7A63 0%, #C99A44 55%, #16233D 100%);
   }
   .login-tagline {
     font-family: 'Fraunces', serif; font-style: italic; font-weight: 400;
-    font-size: 16px; color: rgba(244,242,237,0.8); margin: 0 0 30px; text-align: center; max-width: 300px;
+    font-size: 16px; color: #B7C2D6; margin: 0 0 30px; text-align: center; max-width: 300px;
   }
   .login-box h2 {
-    font-size: 12px; font-weight: 700; color: #8A8478; margin: 0 0 20px;
-    text-transform: uppercase; letter-spacing: 0.09em;
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #16233D;
+    margin: 0 0 22px; text-transform: uppercase; letter-spacing: 0.08em;
+    background: rgba(22,35,61,0.1); padding: 6px 14px; border-radius: 999px;
   }
   .login-field-wrap { position: relative; margin-bottom: 14px; }
   .login-field-wrap svg {
     position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-    width: 16px; height: 16px; color: #B5AFA0; pointer-events: none;
+    width: 16px; height: 16px; color: #16233D; pointer-events: none;
   }
   .login-box input[type=password] {
     width: 100%; padding: 13px 14px 13px 38px; border-radius: 10px; border: 1.5px solid #E5E1D8;
@@ -84,21 +83,21 @@
   .login-back {
     margin-top: 24px; font-size: 12.5px; color: rgba(255,255,255,0.5); text-decoration: none; transition: color .15s;
   }
-  .login-back:hover { color: white; }
+  .login-back:hover { color: #B7C2D6; }
   .login-lang-toggle {
     position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.12); color: white;
     font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: none; cursor: pointer; z-index: 2;
   }
   input, button, select { font-family: inherit; }
   input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 10px; }
-  button { background: #16233D; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  button { background: #4C7A63; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
   button.secondary { background: #EAE4D8; color: #1C1C1A; }
   button.danger { background: #B4483C; }
-  .restaurant-title { font-size: 17px; font-weight: 800; color: #16233D; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
+  .restaurant-title { font-size: 17px; font-weight: 800; color: #4C7A63; margin: 0 0 10px; display:flex; justify-content:space-between; align-items:center; }
   .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0 6px; border-top: 1px solid #F0EBE0; }
   .employee-card-block:first-of-type .employee-row { border-top: none; }
   .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-  .secondary-btn { background: #F1EEE6; color: #16233D; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
+  .secondary-btn { background: #F1EEE6; color: #4C7A63; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
   .employee-stats { display: flex; gap: 20px; flex-wrap: wrap; padding: 4px 0 10px; }
   .employee-stat-label { font-size: 10px; text-transform: uppercase; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 2px; }
   .employee-stat-value { font-size: 19px; font-weight: 800; color: #1C1C1A; }
@@ -107,10 +106,10 @@
   .link-box { font-size: 11px; background: #EAF1DD; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
   .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
   .link-row .link-box { flex: 1; margin-top: 0; }
-  .copy-btn { background: #16233D; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
-  .copy-btn.copied { background: #4C7A63; }
+  .copy-btn { background: #4C7A63; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn.copied { background: #16233D; }
   .report-toggle {
-    background: #F1EEE6; color: #16233D; font-size: 11px; font-weight: 700;
+    background: #F1EEE6; color: #4C7A63; font-size: 11px; font-weight: 700;
     padding: 6px 12px; border-radius: 999px; margin-top: 8px;
   }
   .report-table-wrap { margin-top: 10px; overflow-x: auto; }
@@ -123,17 +122,17 @@
   .report-table tr:last-child td { border-bottom: none; }
   .report-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; border: 1px solid #EEE8DC; vertical-align: middle; }
   .delay-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
-  .delay-badge.delay-ok { background: #E8F0EB; color: #3D6350; }
+  .delay-badge.delay-ok { background: #E7EAF0; color: #16233D; }
   .delay-badge.delay-warn { background: #FFF2CC; color: #7A5B00; }
   .delay-badge.delay-bad { background: #FDECEC; color: #7A1F1F; }
-  .modified-badge { font-size: 9px; color: #16233D; margin-top: 2px; white-space: nowrap; }
+  .modified-badge { font-size: 9px; color: #4C7A63; margin-top: 2px; white-space: nowrap; }
   tr.row-jump-highlight { animation: rowJumpFlash 1.6s ease; }
   @keyframes rowJumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
   .row-flagged-owed-employee { background: #FDECEC; }
   .row-flagged-owed-employer { background: #FFF9E8; }
   .transfer-btn { background: #B4483C; color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
   .transfer-btn.owed-employer { background: #C99A44; }
-  .transfer-done { color: #4C7A63; font-weight: 700; font-size: 11px; white-space: nowrap; }
+  .transfer-done { color: #16233D; font-weight: 700; font-size: 11px; white-space: nowrap; }
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
     display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -156,7 +155,7 @@
     background: #FFF9E8; border: 1px solid #F5E5A8; color: #7A5B00;
   }
   .messages-toggle {
-    background: none; border: none; padding: 0; color: #16233D; font-size: 14px; font-weight: 700;
+    background: none; border: none; padding: 0; color: #4C7A63; font-size: 14px; font-weight: 700;
     display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   }
   .unread-badge {
@@ -204,16 +203,16 @@
   .employee-card-block.jump-highlight { animation: jumpFlash 1.6s ease; }
   @keyframes jumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
   .totals { font-size: 12px; text-align: right; }
-  .totals b { color: #4C7A63; }
+  .totals b { color: #16233D; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
   .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.5); margin: 20px 0 8px; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
   .period-btn { background: #EAE4D8; color: #1C1C1A; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
-  .period-btn.active { background: #16233D; color: white; }
+  .period-btn.active { background: #4C7A63; color: white; }
   .period-dates { display: flex; gap: 6px; align-items: center; font-size: 12px; }
   .period-dates input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; margin-bottom: 0; }
-  .period-label { font-size: 15px; font-weight: 700; color: #16233D; margin-top: 4px; margin-bottom: 4px; }
+  .period-label { font-size: 15px; font-weight: 700; color: #4C7A63; margin-top: 4px; margin-bottom: 4px; }
   .export-btn {
     display: block; width: 100%; margin-top: 10px; background: #C99A44; color: white;
     font-size: 13px; font-weight: 700; padding: 10px; border-radius: 10px;
@@ -520,8 +519,8 @@ async function login(password) {
 function renderLogin(errorMsg) {
   document.getElementById("app").innerHTML = `
     <div class="login-screen">
-      <div class="login-stub s1"></div>
-      <div class="login-stub s2"></div>
+      <div class="login-glow g1"></div>
+      <div class="login-glow g2"></div>
       <button class="login-lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
       <div class="login-content">
         <div class="login-brand">
@@ -532,7 +531,7 @@ function renderLogin(errorMsg) {
         </div>
         <p class="login-tagline">${t("loginTagline")}</p>
         <div class="login-box">
-          <h2>${t("accesAdmin")}</h2>
+          <h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>${t("accesAdmin")}</h2>
           <div class="login-field-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <input type="password" id="pw" placeholder="${t("motDePasse")}" />
@@ -757,7 +756,7 @@ function render() {
           <button class="danger" data-action="delRestaurant" data-id="${r.id}" style="font-size:11px; padding:4px 10px;">${t("supprimer")}</button>
         </div>
         <div style="font-size:12px; color:rgba(0,0,0,0.55); margin-bottom:8px;">
-          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#4C7A63">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
+          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#16233D">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
         </div>
     `;
     r.employees.forEach((e) => {
@@ -786,7 +785,7 @@ function render() {
             </div>
             <div>
               <div class="employee-stat-label">${t("pourboireNetTotal")}</div>
-              <div class="employee-stat-value" style="color:#4C7A63;">${fmtMoney(e.totals.net)}</div>
+              <div class="employee-stat-value" style="color:#16233D;">${fmtMoney(e.totals.net)}</div>
             </div>
             <div>
               <div class="employee-stat-label">${t("pctMoyenLabel")}</div>
@@ -844,7 +843,7 @@ function render() {
                     <td>${d.clients}</td>
                     <td>${fmtPct(d.pct / 100)}</td>
                     <td>${fmtMoney(d.remis)}</td>
-                    <td style="color:#4C7A63; font-weight:700;">${fmtMoney(d.net)}</td>
+                    <td style="color:#16233D; font-weight:700;">${fmtMoney(d.net)}</td>
                     <td>${fmtMoney(d.moyenne)}</td>
                     <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
                     <td>${virementCell}</td>
