@@ -10,17 +10,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #4C7A63;
-    --ink-soft: #5C9478;
-    --brass: #C99A44;
-    --brass-light: #E4C888;
-    --stone: #F4F2ED;
-    --stone-warm: #EFE9DD;
-    --text: #1C1C1A;
-    --slate: #6B7280;
-    --sage: #16233D;
-    --on-brass: #16233D;
-    --coral: #B4483C;
+    --ink: #6FBF93;
+    --ink-soft: #59A67D;
+    --brass: #D4A857;
+    --brass-light: #E8C688;
+    --stone: #10151D;
+    --stone-warm: #161C26;
+    --surface: #1B222D;
+    --text: #F1EFEA;
+    --slate: #9BA3B0;
+    --sage: #7B9BD9;
+    --on-brass: #10151D;
+    --coral: #E2685A;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
@@ -40,13 +41,15 @@
   /* ---------- NAV ---------- */
   nav {
     position: sticky; top: 0; z-index: 50;
-    background: rgba(244,242,237,0.92); backdrop-filter: blur(10px);
+    background: rgba(16,21,29,0.85); backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(76,122,99,0.08);
   }
   nav .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 16px; padding-bottom: 16px; }
   .logo { display: flex; align-items: center; gap: 9px; font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; color: var(--ink); }
-  .logo-mark { width: 30px; height: 30px; border-radius: 8px; background: var(--ink); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .logo-mark svg { width: 16px; height: 16px; }
+  .logo-mark {
+    width: 30px; height: 30px; border-radius: 8px; background: var(--ink); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    font-family: 'Fraunces', serif; font-weight: 700; font-size: 17px; color: var(--stone); font-style: italic;
+  }
   .nav-links { display: flex; align-items: center; gap: 32px; font-size: 14px; font-weight: 500; }
   .nav-links a.navlink { color: var(--slate); transition: color .15s; }
   .nav-links a.navlink:hover { color: var(--ink); }
@@ -61,6 +64,15 @@
   .btn-ghost:hover { border-color: var(--ink); }
   .btn-brass { background: var(--brass); color: var(--on-brass); }
   .btn-brass:hover { background: var(--brass-light); transform: translateY(-1px); }
+
+  /* ---------- BRAND MOMENT ---------- */
+  .brand-moment {
+    display: flex; justify-content: center; padding: 36px 24px 0; background: var(--stone);
+  }
+  .brand-moment-img {
+    width: 100%; max-width: 460px; height: auto; border-radius: 20px;
+    box-shadow: 0 20px 60px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  }
 
   /* ---------- HERO ---------- */
   .hero { padding: 88px 0 100px; overflow: hidden; position: relative; }
@@ -87,26 +99,26 @@
     transform: rotate(2deg);
   }
   .phone-screen { background: var(--stone); border-radius: 24px; overflow: hidden; }
-  .phone-topbar { background: linear-gradient(135deg, var(--ink), var(--ink-soft)); padding: 22px 18px 26px; color: white; }
+  .phone-topbar { background: linear-gradient(160deg, #161C26 0%, #10151D 100%); padding: 22px 18px 26px; color: white; border-bottom: 1px solid rgba(255,255,255,0.06); }
   .phone-topbar .eb { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; margin-bottom: 4px; }
   .phone-topbar .tt { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; }
   .phone-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
   .notif-chip {
-    background: white; border: 1px solid rgba(76,122,99,0.08); border-radius: 14px; padding: 12px 14px;
-    box-shadow: 0 2px 10px rgba(76,122,99,0.06);
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
   }
   .notif-chip .row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .notif-chip .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .notif-chip .name { font-size: 13px; font-weight: 600; color: var(--text); }
   .notif-chip .amt { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: var(--coral); }
-  .notif-chip .amt.ok { color: var(--sage); }
+  .notif-chip .amt.ok { color: var(--ink); }
   .notif-chip .sub { font-size: 11px; color: var(--slate); }
   .notif-badge {
     display: inline-block; font-size: 10px; font-weight: 700; background: var(--brass);
     color: var(--on-brass); padding: 2px 8px; border-radius: 999px; margin-top: 6px;
   }
   .float-tag {
-    position: absolute; background: white; border-radius: 12px; padding: 10px 14px;
-    box-shadow: 0 14px 30px rgba(76,122,99,0.16); font-size: 12px; font-weight: 600; color: var(--ink);
+    position: absolute; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 14px;
+    box-shadow: 0 14px 30px rgba(0,0,0,0.35); font-size: 12px; font-weight: 600; color: var(--text);
     display: flex; align-items: center; gap: 8px;
   }
   .float-tag svg { width: 15px; height: 15px; color: var(--sage); }
@@ -131,7 +143,7 @@
   .section-sub { font-size: 16px; color: var(--slate); max-width: 560px; line-height: 1.65; }
 
   /* ---------- PROBLEM ---------- */
-  .problem { background: var(--ink); color: var(--stone); }
+  .problem { background: var(--surface); color: var(--text); border-top: 1px solid rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.06); }
   .problem .section-label { color: var(--brass-light); }
   .problem .section-title { color: white; }
   .problem .section-sub { color: rgba(244,242,237,0.7); }
@@ -162,7 +174,7 @@
     display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
   }
   .feat-card .icn svg { width: 21px; height: 21px; color: var(--ink); }
-  .feat-card .icn.icn-sage { background: rgba(22,35,61,0.12); }
+  .feat-card .icn.icn-sage { background: rgba(123,155,217,0.15); }
   .feat-card .icn.icn-sage svg { color: var(--sage); }
   .feat-card h3 { font-size: 15.5px; font-weight: 600; color: var(--ink); margin-bottom: 7px; }
   .feat-card p { font-size: 13.5px; color: var(--slate); line-height: 1.6; }
@@ -170,12 +182,12 @@
   /* ---------- PRICING ---------- */
   .pricing-wrap { display: flex; justify-content: center; margin-top: 52px; }
   .price-card {
-    background: var(--ink); border-radius: 22px; padding: 44px 48px; max-width: 480px; width: 100%;
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 44px 48px; max-width: 480px; width: 100%;
     color: white; position: relative; overflow: hidden;
   }
   .price-card::before {
     content: ''; position: absolute; top: -60px; right: -60px; width: 200px; height: 200px;
-    background: radial-gradient(circle, rgba(201,154,68,0.25), transparent 70%);
+    background: radial-gradient(circle, rgba(212,168,87,0.2), transparent 70%);
   }
   .price-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
   .price-amt { font-family: 'Fraunces', serif; font-size: 52px; font-weight: 600; }
@@ -224,9 +236,7 @@
 <nav>
   <div class="wrap">
     <div class="logo">
-      <span class="logo-mark">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#F4F2ED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      </span>
+      <span class="logo-mark">D</span>
       Déclara
     </div>
     <div class="nav-links">
@@ -236,6 +246,10 @@
     </div>
   </div>
 </nav>
+
+<div class="brand-moment">
+  <img src="/logo-declara-full.jpg" alt="Déclara — Déclarer, Simplifier" class="brand-moment-img" />
+</div>
 
 <section class="hero">
   <div class="wrap">
@@ -418,9 +432,7 @@
 <footer>
   <div class="wrap">
     <div class="fmark">
-      <span class="logo-mark" style="width:22px;height:22px;border-radius:6px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#F4F2ED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      </span>
+      <span class="logo-mark" style="width:22px;height:22px;border-radius:6px;font-size:12px;">D</span>
       Déclara — fait au Québec
     </div>
     <div class="flinks">

@@ -22,76 +22,81 @@
     background: radial-gradient(circle, rgba(212,168,87,0.16), transparent 70%); pointer-events: none;
   }
   .title { font-family: 'Fraunces', serif; font-size: 25px; font-weight: 600; margin: 0; display:flex; align-items:center; letter-spacing: -0.01em; position: relative; }
+  .title-mark {
+    width: 34px; height: 34px; border-radius: 9px; background: #D4A857; color: #10151D;
+    display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0;
+    font-style: italic; font-size: 18px; box-shadow: 0 4px 12px -3px rgba(212,168,87,0.5);
+  }
   .lang-toggle { background: rgba(255,255,255,0.08); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; position: relative; }
   .content { padding: 20px 16px; max-width: 900px; margin: 0 auto; }
   .card { background: #161C26; border-radius: 18px; padding: 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 18px; }
   .login-screen {
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: linear-gradient(160deg, #4C7A63 0%, #5C9478 100%); padding: 24px; position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #161C26 0%, #10151D 100%); padding: 24px; position: relative; overflow: hidden;
   }
   .login-screen::before {
     content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
     width: 520px; height: 520px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(201,154,68,0.18), transparent 68%);
+    background: radial-gradient(circle, rgba(212,168,87,0.16), transparent 68%);
     pointer-events: none;
   }
   .login-screen::after {
     content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
-    background-image: radial-gradient(rgba(244,242,237,0.08) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
     background-size: 22px 22px;
   }
   .login-glow {
     position: absolute; border-radius: 50%; filter: blur(50px); pointer-events: none;
   }
-  .login-glow.g1 { width: 260px; height: 260px; background: rgba(22,35,61,0.55); top: 6%; left: -10%; }
-  .login-glow.g2 { width: 260px; height: 260px; background: rgba(201,154,68,0.32); bottom: 6%; right: -10%; }
+  .login-glow.g1 { width: 260px; height: 260px; background: rgba(111,191,147,0.28); top: 6%; left: -10%; }
+  .login-glow.g2 { width: 260px; height: 260px; background: rgba(212,168,87,0.25); bottom: 6%; right: -10%; }
   .login-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; animation: loginFadeUp .55s cubic-bezier(.2,.8,.2,1) both; }
   @keyframes loginFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
   .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   .login-brand-mark {
-    width: 38px; height: 38px; border-radius: 10px; background: #C99A44;
+    width: 38px; height: 38px; border-radius: 10px; background: #D4A857;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    box-shadow: 0 6px 16px -4px rgba(201,154,68,0.5);
+    box-shadow: 0 6px 16px -4px rgba(212,168,87,0.5);
+    font-family: 'Fraunces', serif; font-weight: 700; font-style: italic; font-size: 21px; color: #10151D;
   }
-  .login-brand-mark svg { width: 20px; height: 20px; color: #16233D; }
   .login-brand-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 27px; color: white; letter-spacing: -0.01em; }
   .login-box {
-    max-width: 360px; width: 100%; text-align: center; background: white; border-radius: 18px;
-    padding: 38px 30px 32px; box-shadow: 0 30px 70px -20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+    max-width: 360px; width: 100%; text-align: center; background: #161C26; border-radius: 18px;
+    padding: 38px 30px 32px; box-shadow: 0 30px 70px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
     position: relative; overflow: hidden;
   }
   .login-box::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 7px;
-    background: linear-gradient(90deg, #4C7A63 0%, #C99A44 55%, #16233D 100%);
+    background: linear-gradient(90deg, #6FBF93 0%, #D4A857 55%, #E2685A 100%);
   }
   .login-tagline {
     font-family: 'Fraunces', serif; font-style: italic; font-weight: 400;
-    font-size: 16px; color: #B7C2D6; margin: 0 0 30px; text-align: center; max-width: 300px;
+    font-size: 16px; color: #A8C4B4; margin: 0 0 30px; text-align: center; max-width: 300px;
   }
   .login-box h2 {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #16233D;
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #D4A857;
     margin: 0 0 22px; text-transform: uppercase; letter-spacing: 0.08em;
-    background: rgba(22,35,61,0.1); padding: 6px 14px; border-radius: 999px;
+    background: rgba(212,168,87,0.12); padding: 6px 14px; border-radius: 999px;
   }
   .login-field-wrap { position: relative; margin-bottom: 14px; }
   .login-field-wrap svg {
     position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-    width: 16px; height: 16px; color: #16233D; pointer-events: none;
+    width: 16px; height: 16px; color: #D4A857; pointer-events: none;
   }
   .login-box input[type=password] {
-    width: 100%; padding: 13px 14px 13px 38px; border-radius: 10px; border: 1.5px solid #E5E1D8;
-    font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s; background: #FAF9F6;
+    width: 100%; padding: 13px 14px 13px 38px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.1);
+    font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s; background: #10151D; color: #F1EFEA;
   }
-  .login-box input[type=password]:focus { border-color: #C99A44; box-shadow: 0 0 0 3px rgba(201,154,68,0.15); background: white; }
+  .login-box input[type=password]:focus { border-color: #D4A857; box-shadow: 0 0 0 3px rgba(212,168,87,0.15); }
   .login-box button#loginBtn {
-    width: 100%; background: #C99A44; color: #16233D; border: none; border-radius: 10px;
+    width: 100%; background: #D4A857; color: #10151D; border: none; border-radius: 10px;
     padding: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; transition: background .15s, transform .15s, box-shadow .15s;
   }
-  .login-box button#loginBtn:hover { background: #E4C888; transform: translateY(-1px); box-shadow: 0 8px 18px -6px rgba(201,154,68,0.5); }
+  .login-box button#loginBtn:hover { background: #E5C078; transform: translateY(-1px); box-shadow: 0 8px 18px -6px rgba(212,168,87,0.5); }
   .login-back {
     margin-top: 24px; font-size: 12.5px; color: rgba(255,255,255,0.5); text-decoration: none; transition: color .15s;
   }
-  .login-back:hover { color: #B7C2D6; }
+  .login-back:hover { color: #A8C4B4; }
   .login-lang-toggle {
     position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.12); color: white;
     font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: none; cursor: pointer; z-index: 2;
@@ -581,9 +586,7 @@ function renderLogin(errorMsg) {
       <button class="login-lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
       <div class="login-content">
         <div class="login-brand">
-          <span class="login-brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          </span>
+          <span class="login-brand-mark">D</span>
           <span class="login-brand-name">Déclara</span>
         </div>
         <p class="login-tagline">${t("loginTagline")}</p>
@@ -594,7 +597,7 @@ function renderLogin(errorMsg) {
             <input type="password" id="pw" placeholder="${t("motDePasse")}" />
           </div>
           <button id="loginBtn">${t("entrer")}</button>
-          ${errorMsg ? `<p style="color:#B4483C; font-size:12px; margin:12px 0 0;">${errorMsg}</p>` : ""}
+          ${errorMsg ? `<p style="color:#E2685A; font-size:12px; margin:12px 0 0;">${errorMsg}</p>` : ""}
         </div>
         <a class="login-back" href="/">${t("retourAccueil")}</a>
       </div>
@@ -743,7 +746,7 @@ function render() {
 
   let html = `
     <div class="header">
-      <p class="title">${icon("logo", 20, "margin-right:8px;")}${t("dashboardTitle")}</p>
+      <p class="title"><span class="title-mark">D</span>${t("dashboardTitle")}</p>
       <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
     </div>
     <div class="content">
