@@ -10,13 +10,21 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background-color: #F4F2ED;
-    color: #1C1C1A; padding-bottom: 60px; -webkit-font-smoothing: antialiased; }
-  .header { background: linear-gradient(135deg,#4C7A63 0%,#5C9478 100%); padding: 30px 22px 32px; color: white; display:flex; justify-content:space-between; align-items:center; }
-  .title { font-family: 'Fraunces', serif; font-size: 25px; font-weight: 600; margin: 0; display:flex; align-items:center; letter-spacing: -0.01em; }
-  .lang-toggle { background: rgba(255,255,255,0.15); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+    background-color: #10151D;
+    color: #F1EFEA; padding-bottom: 60px; -webkit-font-smoothing: antialiased; }
+  .header {
+    background: linear-gradient(160deg,#161C26 0%,#10151D 100%); padding: 30px 22px 32px; color: white;
+    display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: relative; overflow: hidden;
+  }
+  .header::before {
+    content: ''; position: absolute; top: -140px; right: -60px; width: 320px; height: 320px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,168,87,0.16), transparent 70%); pointer-events: none;
+  }
+  .title { font-family: 'Fraunces', serif; font-size: 25px; font-weight: 600; margin: 0; display:flex; align-items:center; letter-spacing: -0.01em; position: relative; }
+  .lang-toggle { background: rgba(255,255,255,0.08); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; position: relative; }
   .content { padding: 20px 16px; max-width: 900px; margin: 0 auto; }
-  .card { background: white; border-radius: 18px; padding: 22px; box-shadow: 0 2px 10px rgba(22,35,61,0.05); border: 1px solid rgba(22,35,61,0.05); margin-bottom: 18px; }
+  .card { background: #161C26; border-radius: 18px; padding: 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 18px; }
   .login-screen {
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: linear-gradient(160deg, #4C7A63 0%, #5C9478 100%); padding: 24px; position: relative; overflow: hidden;
@@ -89,145 +97,156 @@
     font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: none; cursor: pointer; z-index: 2;
   }
   input, button, select { font-family: inherit; }
-  input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 10px; }
-  button { background: #4C7A63; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
-  button.secondary { background: #EAE4D8; color: #1C1C1A; }
-  button.danger { background: #B4483C; }
+  input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; color: #F1EFEA; font-size: 14px; margin-bottom: 10px; }
+  button { background: #6FBF93; color: #10151D; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  button.secondary { background: rgba(255,255,255,0.08); color: #F1EFEA; }
+  button.danger { background: #E2685A; color: #10151D; }
   .restaurant-title {
-    font-family: 'Fraunces', serif; font-size: 23px; font-weight: 600; color: #16233D; margin: 0 0 4px;
+    font-family: 'Fraunces', serif; font-size: 23px; font-weight: 600; color: #F1EFEA; margin: 0 0 4px;
     display:flex; justify-content:space-between; align-items:center; letter-spacing: -0.01em;
   }
-  .restaurant-total { font-size: 12.5px; color: rgba(0,0,0,0.5); margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #F0EBE0; }
+  .restaurant-total { font-size: 12.5px; color: #8993A4; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.07); }
   .employee-card-block {
-    background: #FBFAF7; border-radius: 14px; padding: 16px 16px 14px; margin-bottom: 12px; border: 1px solid #F0EBE0;
+    background: #1B222D; border-radius: 14px; padding: 16px 16px 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.06);
   }
   .employee-card-block:last-of-type { margin-bottom: 0; }
   .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 0 10px; }
   .employee-card-block:first-of-type .employee-row { border-top: none; }
   .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-  .secondary-btn { background: #F1EEE6; color: #16233D; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
-  .employee-stats { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 0 12px; }
-  .employee-stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(0,0,0,0.45); font-weight: 700; margin-bottom: 3px; }
-  .employee-stat-value { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; color: #1C1C1A; }
-  .employee-name { font-weight: 700; font-size: 15px; }
-  .employee-sub { font-size: 11px; color: rgba(0,0,0,0.5); }
-  .link-box { font-size: 11px; background: #EAF1DD; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
+  .secondary-btn { background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
+  .employee-stats { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 0 12px; align-items: flex-end; }
+  .employee-stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 3px; }
+  .employee-stat-value { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; color: #F1EFEA; }
+  .employee-name { font-weight: 700; font-size: 15px; color: #F1EFEA; }
+  .employee-sub { font-size: 11px; color: #8993A4; }
+  .link-box { font-size: 11px; background: rgba(255,255,255,0.06); color: #8993A4; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
   .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
   .link-row .link-box { flex: 1; margin-top: 0; }
-  .copy-btn { background: #4C7A63; color: white; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
-  .copy-btn.copied { background: #16233D; }
+  .copy-btn { background: #6FBF93; color: #10151D; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn.copied { background: #D4A857; }
   .report-toggle {
-    background: #F1EEE6; color: #16233D; font-size: 11px; font-weight: 700;
+    background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 11px; font-weight: 700;
     padding: 6px 12px; border-radius: 999px; margin-top: 8px;
   }
   .report-table-wrap { margin-top: 10px; overflow-x: auto; }
   .report-table { width: 100%; border-collapse: collapse; font-size: 11px; }
   .report-table th {
-    text-align: left; font-size: 9px; text-transform: uppercase; color: rgba(0,0,0,0.45);
-    padding: 4px 6px; border-bottom: 1px solid #EEE8DC; white-space: nowrap;
+    text-align: left; font-size: 9px; text-transform: uppercase; color: #8993A4;
+    padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap;
   }
-  .report-table td { padding: 5px 6px; border-bottom: 1px solid #F5F1E8; white-space: nowrap; }
+  .report-table td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; color: #D8D5CE; }
   .report-table tr:last-child td { border-bottom: none; }
-  .report-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; border: 1px solid #EEE8DC; vertical-align: middle; }
+  .report-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); vertical-align: middle; }
   .delay-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
-  .delay-badge.delay-ok { background: #E7EAF0; color: #16233D; }
-  .delay-badge.delay-warn { background: #FFF2CC; color: #7A5B00; }
-  .delay-badge.delay-bad { background: #FDECEC; color: #7A1F1F; }
-  .modified-badge { font-size: 9px; color: #4C7A63; margin-top: 2px; white-space: nowrap; }
+  .delay-badge.delay-ok { background: rgba(111,191,147,0.15); color: #6FBF93; }
+  .delay-badge.delay-warn { background: rgba(212,168,87,0.15); color: #D4A857; }
+  .delay-badge.delay-bad { background: rgba(226,104,90,0.15); color: #E2685A; }
+  .modified-badge { font-size: 9px; color: #D4A857; margin-top: 2px; white-space: nowrap; }
   tr.row-jump-highlight { animation: rowJumpFlash 1.6s ease; }
-  @keyframes rowJumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
-  .row-flagged-owed-employee { background: #FDECEC; }
-  .row-flagged-owed-employer { background: #FFF9E8; }
-  .transfer-btn { background: #B4483C; color: white; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
-  .transfer-btn.owed-employer { background: #C99A44; }
+  @keyframes rowJumpFlash { 0% { background: rgba(212,168,87,0.18); } 100% { background: transparent; } }
+  .row-flagged-owed-employee { background: rgba(226,104,90,0.08); }
+  .row-flagged-owed-employer { background: rgba(212,168,87,0.08); }
+  .transfer-btn { background: #E2685A; color: #10151D; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; font-weight: 700; }
+  .transfer-btn.owed-employer { background: #D4A857; }
   .transfer-done {
-    display: inline-block; background: #39E639; color: #16233D; font-weight: 700; font-size: 11px;
+    display: inline-block; background: #39E639; color: #10151D; font-weight: 700; font-size: 11px;
     white-space: nowrap; padding: 4px 10px; border-radius: 999px;
   }
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100;
     display: flex; align-items: center; justify-content: center; padding: 20px;
   }
-  .modal-box { background: white; border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; }
-  .modal-box h3 { margin: 0 0 10px; font-size: 16px; }
+  .modal-box { background: #161C26; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; color: #F1EFEA; }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: #F1EFEA; }
   .modal-header-row { display: flex; justify-content: space-between; align-items: flex-start; }
   .modal-header-row h3 { margin: 0; }
-  .modal-close-x { background: none; border: none; font-size: 18px; color: rgba(0,0,0,0.4); padding: 0 0 0 10px; line-height: 1; cursor: pointer; }
-  .modal-box p { font-size: 13px; color: rgba(0,0,0,0.6); margin: 0 0 14px; }
-  .modal-box input[type=date] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 14px; }
+  .modal-close-x { background: none; border: none; font-size: 18px; color: #8993A4; padding: 0 0 0 10px; line-height: 1; cursor: pointer; }
+  .modal-box p { font-size: 13px; color: #8993A4; margin: 0 0 14px; }
+  .modal-box input[type=date] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; color: #F1EFEA; font-size: 14px; margin-bottom: 14px; }
   .modal-actions { display: flex; gap: 8px; }
   .modal-actions button { flex: 1; }
-  .modal-actions button.danger-text { background: #FDECEC; color: #7A1F1F; }
+  .modal-actions button.danger-text { background: rgba(226,104,90,0.15); color: #E2685A; }
   .pending-banner {
-    background: #FDECEC; border: 1px solid #F5B8B8; color: #7A1F1F; border-radius: 14px;
+    background: rgba(226,104,90,0.1); border: 1px solid rgba(226,104,90,0.25); color: #E2685A; border-radius: 14px;
     padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px;
   }
   .pending-banner.banner-delay {
-    background: #FFF9E8; border: 1px solid #F5E5A8; color: #7A5B00;
+    background: rgba(212,168,87,0.1); border: 1px solid rgba(212,168,87,0.25); color: #D4A857;
   }
   .messages-toggle {
-    background: none; border: none; padding: 0; color: #4C7A63; font-size: 14px; font-weight: 700;
-    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: none; border: none; padding: 0; color: #F1EFEA; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  }
+  .messages-toggle .icn-circle {
+    width: 38px; height: 38px; border-radius: 10px; background: rgba(111,191,147,0.15);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #6FBF93;
   }
   .unread-badge {
-    background: #B4483C; color: white; font-size: 11px; font-weight: 800; border-radius: 999px;
+    background: #E2685A; color: #10151D; font-size: 11px; font-weight: 800; border-radius: 999px;
     padding: 2px 8px; min-width: 18px; text-align: center; display: inline-block;
   }
   .thread-row {
     display: block; width: 100%; text-align: left; background: none; border: none;
-    border-top: 1px solid #F0EBE0; padding: 10px 0;
+    border-top: 1px solid rgba(255,255,255,0.07); padding: 10px 0;
   }
   .thread-row:first-child { border-top: none; }
   .thread-row-top { display: flex; justify-content: space-between; align-items: center; }
-  .thread-name { font-size: 13px; font-weight: 700; color: #1C1C1A; }
-  .thread-resto { font-size: 11px; font-weight: 400; color: rgba(0,0,0,0.45); }
-  .thread-preview { font-size: 12px; color: rgba(0,0,0,0.6); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .thread-date { font-size: 10px; color: rgba(0,0,0,0.4); margin-top: 2px; }
+  .thread-name { font-size: 13px; font-weight: 700; color: #F1EFEA; }
+  .thread-resto { font-size: 11px; font-weight: 400; color: #8993A4; }
+  .thread-preview { font-size: 12px; color: #8993A4; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread-date { font-size: 10px; color: #6B7280; margin-top: 2px; }
   .thread-modal-box { max-width: 400px; }
   .conversation-history { max-height: 280px; overflow-y: auto; margin-bottom: 12px; padding-right: 2px; }
   .conv-bubble { max-width: 88%; margin-bottom: 8px; padding: 8px 10px; border-radius: 12px; position: relative; }
-  .conv-bubble.conv-employee { background: #F1EEE6; margin-right: auto; border-bottom-left-radius: 4px; }
-  .conv-bubble.conv-admin { background: #DDEBF7; margin-left: auto; border-bottom-right-radius: 4px; }
-  .conv-sender { font-size: 9px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 2px; }
-  .conv-body { font-size: 13px; color: #1C1C1A; white-space: pre-wrap; }
+  .conv-bubble.conv-employee { background: rgba(255,255,255,0.06); margin-right: auto; border-bottom-left-radius: 4px; }
+  .conv-bubble.conv-admin { background: rgba(212,168,87,0.15); margin-left: auto; border-bottom-right-radius: 4px; }
+  .conv-sender { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin-bottom: 2px; }
+  .conv-body { font-size: 13px; color: #F1EFEA; white-space: pre-wrap; }
   .conv-delete-btn {
-    background: none; border: none; color: rgba(0,0,0,0.3); font-size: 10px; padding: 4px 0 0;
+    background: none; border: none; color: #6B7280; font-size: 10px; padding: 4px 0 0;
     text-decoration: underline; cursor: pointer;
   }
   .reply-textarea {
     width: 100%; min-height: 60px; border: none; border-radius: 8px; padding: 8px;
-    font-size: 13px; font-family: inherit; background: #F1EEE6; color: #1C1C1A; outline: none; resize: vertical; margin-bottom: 6px;
+    font-size: 13px; font-family: inherit; background: rgba(255,255,255,0.06); color: #F1EFEA; outline: none; resize: vertical; margin-bottom: 6px;
   }
   .pending-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .pending-chip {
-    background: white; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px;
-    border: 1px solid rgba(0,0,0,0.08); white-space: nowrap;
+    background: rgba(255,255,255,0.06); font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; color: #F1EFEA;
   }
-  .pending-chip.chip-owed-employee { color: #7A1F1F; }
-  .pending-chip.chip-owed-employer { color: #7A5B00; }
+  .pending-chip.chip-owed-employee { color: #E2685A; }
+  .pending-chip.chip-owed-employer { color: #D4A857; }
   .pending-chip-wrap { display: inline-flex; align-items: stretch; border-radius: 999px; overflow: hidden; }
   .pending-chip-wrap .pending-chip { border-radius: 999px 0 0 999px; border-right: none; }
   .chip-dismiss-x {
-    background: white; border: 1px solid rgba(0,0,0,0.08); border-left: 1px solid rgba(0,0,0,0.08);
-    color: rgba(0,0,0,0.35); font-size: 11px; padding: 6px 9px; border-radius: 0 999px 999px 0;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-left: 1px solid rgba(255,255,255,0.1);
+    color: #8993A4; font-size: 11px; padding: 6px 9px; border-radius: 0 999px 999px 0;
   }
   .employee-card-block.jump-highlight { animation: jumpFlash 1.6s ease; }
-  @keyframes jumpFlash { 0% { background: #FFF2CC; } 100% { background: transparent; } }
-  .totals { font-size: 12px; text-align: right; }
-  .totals b { color: #16233D; }
+  @keyframes jumpFlash { 0% { background: rgba(212,168,87,0.18); } 100% { background: #1B222D; } }
+  .totals { font-size: 12px; text-align: right; color: #8993A4; }
+  .totals b { color: #F1EFEA; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
-  .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: rgba(0,0,0,0.5); margin: 20px 0 8px; }
+  .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 20px 0 8px; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .period-btn { background: #EAE4D8; color: #1C1C1A; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
-  .period-btn.active { background: #4C7A63; color: white; }
-  .period-dates { display: flex; gap: 6px; align-items: center; font-size: 12px; }
-  .period-dates input { padding: 6px 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; margin-bottom: 0; }
-  .period-label { font-size: 15px; font-weight: 700; color: #4C7A63; margin-top: 4px; margin-bottom: 4px; }
-  .export-btn {
-    display: block; width: 100%; margin-top: 10px; background: #C99A44; color: white;
-    font-size: 13px; font-weight: 700; padding: 10px; border-radius: 10px;
+  .period-btn { background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
+  .period-btn.active { background: #6FBF93; color: #10151D; }
+  .period-dates { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #8993A4; }
+  .period-dates input {
+    padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; font-size: 12px;
+    margin-bottom: 0; color: #F1EFEA;
   }
+  .period-label { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #F1EFEA; margin-top: 6px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  .export-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; background: #D4A857; color: #10151D;
+    font-size: 13.5px; font-weight: 700; padding: 13px; border-radius: 10px; box-shadow: 0 2px 8px rgba(212,168,87,0.25);
+  }
+  .sparkline-wrap { margin-top: 4px; }
+  .sparkline-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 6px; }
+  .sparkline-bar { fill: #6FBF93; }
+  .sparkline-bar.negative { fill: #E2685A; }
 </style>
 </head>
 <body>
@@ -320,6 +339,7 @@ const I18N = {
     ventesTotales: "Ventes totales",
     pourboireNetTotal: "Pourboire net total",
     pctMoyenLabel: "% moyen",
+    tendanceRecente: "Tendance récente",
     enAttenteLabel: "En attente",
     messagesTitle: "Messages des employés",
     messageTab: "Message",
@@ -412,6 +432,7 @@ const I18N = {
     ventesTotales: "Total sales",
     pourboireNetTotal: "Total net tips",
     pctMoyenLabel: "Avg. %",
+    tendanceRecente: "Recent trend",
     enAttenteLabel: "Pending",
     messagesTitle: "Messages from employees",
     messageTab: "Message",
@@ -515,6 +536,31 @@ async function api(path, opts) {
 }
 
 function fmtMoney(n) { n = isFinite(n) ? n : 0; return n.toLocaleString(t("locale"), { style: "currency", currency: "CAD" }); }
+
+// Un vrai petit graphique (pas juste des chiffres) : les pourboires nets des derniers jours,
+// en ordre chronologique, pour repérer une tendance d'un coup d'œil.
+function renderSparkline(entries) {
+  if (!entries || entries.length < 2) return "";
+  const recent = entries.slice(0, 8).slice().reverse(); // entries arrive déjà triées DESC -> on remet en ordre chronologique
+  const values = recent.map((e) => e.net || 0);
+  const max = Math.max(...values.map(Math.abs), 1);
+  const barW = 10;
+  const gap = 6;
+  const chartH = 36;
+  const width = recent.length * (barW + gap) - gap;
+  const bars = values.map((v, i) => {
+    const h = Math.max(2, (Math.abs(v) / max) * chartH);
+    const x = i * (barW + gap);
+    const y = v >= 0 ? chartH - h : chartH;
+    return `<rect class="sparkline-bar${v < 0 ? " negative" : ""}" x="${x}" y="${y}" width="${barW}" height="${h}" rx="2"/>`;
+  }).join("");
+  return `
+    <div class="sparkline-wrap">
+      <div class="sparkline-label">${t("tendanceRecente")}</div>
+      <svg width="${width}" height="${chartH}" viewBox="0 0 ${width} ${chartH}">${bars}</svg>
+    </div>
+  `;
+}
 function fmtPct(n) { n = isFinite(n) ? n : 0; return (n * 100).toFixed(1) + "%"; }
 
 async function login(password) {
@@ -767,7 +813,7 @@ function render() {
           <button class="danger" data-action="delRestaurant" data-id="${r.id}" style="font-size:11px; padding:4px 10px;">${t("supprimer")}</button>
         </div>
         <div class="restaurant-total">
-          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#16233D">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
+          ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#6FBF93">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
         </div>
     `;
     r.employees.forEach((e) => {
@@ -796,21 +842,22 @@ function render() {
             </div>
             <div>
               <div class="employee-stat-label">${t("pourboireNetTotal")}</div>
-              <div class="employee-stat-value" style="color:#16233D;">${fmtMoney(e.totals.net)}</div>
+              <div class="employee-stat-value" style="color:#6FBF93;">${fmtMoney(e.totals.net)}</div>
             </div>
             <div>
               <div class="employee-stat-label">${t("pctMoyenLabel")}</div>
-              <div class="employee-stat-value" style="color:#C99A44; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
+              <div class="employee-stat-value" style="color:#D4A857; font-size:16px;">${fmtPct(e.totals.pctMoyen)}</div>
             </div>
             ${empPending ? `
             <div>
               <div class="employee-stat-label">${t("enAttenteLabel")}</div>
-              <div class="employee-stat-value" style="color:${empPending.direction === "employer_owes" ? "#B4483C" : "#C99A44"}; font-size:16px;">${fmtMoney(empPending.amount)}</div>
+              <div class="employee-stat-value" style="color:${empPending.direction === "employer_owes" ? "#E2685A" : "#D4A857"}; font-size:16px;">${fmtMoney(empPending.amount)}</div>
             </div>` : ""}
           </div>
+          ${renderSparkline(e.entries)}
           <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${icon("chart", 13)} ${t("voirDetail", e.entries.length)}</button>
           <div class="report-table-wrap" id="report-${e.id}" style="display:none;">
-            ${e.entries.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5); padding:8px 0;">${t("aucuneJournee")}</p>` : `
+            ${e.entries.length === 0 ? `<p style="font-size:12px; color:#8993A4; padding:8px 0;">${t("aucuneJournee")}</p>` : `
             <table class="report-table">
               <thead>
                 <tr>
@@ -833,8 +880,8 @@ function render() {
                       const btnClass = isEmployerOwes ? "" : "owed-employer";
                       const btnLabel = isEmployerOwes ? t("marquerVire") : t("marquerRecu");
                       virementCell = `
-                        <div style="font-size:9px; margin-bottom:1px; color:${isEmployerOwes ? "#7A1F1F" : "#7A5B00"};">${label}</div>
-                        <div style="font-size:12px; font-weight:800; margin-bottom:3px; color:${isEmployerOwes ? "#7A1F1F" : "#7A5B00"};">${fmtMoney(d.remit_amount)}</div>
+                        <div style="font-size:9px; margin-bottom:1px; color:${isEmployerOwes ? "#E2685A" : "#D4A857"};">${label}</div>
+                        <div style="font-size:12px; font-weight:800; margin-bottom:3px; color:${isEmployerOwes ? "#E2685A" : "#D4A857"};">${fmtMoney(d.remit_amount)}</div>
                         <button class="transfer-btn ${btnClass}" data-action="markTransferred" data-entry="${d.id}" data-direction="${d.remit_direction}">${btnLabel}</button>
                       `;
                     }
@@ -848,13 +895,13 @@ function render() {
                     : "";
                   return `
                   <tr class="${rowClass}" id="row-${d.id}">
-                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#7A5B00; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}</td>
+                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#D4A857; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}</td>
                     <td>${delayCell}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
                     <td>${fmtPct(d.pct / 100)}</td>
                     <td>${fmtMoney(d.remis)}</td>
-                    <td style="color:#16233D; font-weight:700;">${fmtMoney(d.net)}</td>
+                    <td style="color:#6FBF93; font-weight:700;">${fmtMoney(d.net)}</td>
                     <td>${fmtMoney(d.moyenne)}</td>
                     <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
                     <td>${virementCell}</td>
@@ -1085,10 +1132,11 @@ function renderMessagesInbox() {
 
   container.innerHTML = `
     <button class="messages-toggle" id="messagesToggleBtn">
-      ${icon("inbox", 16, "margin-right:6px;")}${t("messagesTitle")} ${totalUnread > 0 ? `<span class="unread-badge">${totalUnread}</span>` : ""}
+      <span class="icn-circle">${icon("inbox", 18)}</span>
+      <span>${t("messagesTitle")} ${totalUnread > 0 ? `<span class="unread-badge">${totalUnread}</span>` : ""}</span>
     </button>
     <div id="messagesList" style="display:none; margin-top:12px;">
-      ${threads.length === 0 ? `<p style="font-size:12px; color:rgba(0,0,0,0.5);">${t("aucunMessage")}</p>` : threads.map((th) => `
+      ${threads.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunMessage")}</p>` : threads.map((th) => `
         <button class="thread-row" data-action="openThread" data-emp="${th.employeeId}">
           <div class="thread-row-top">
             <span class="thread-name">${th.employeeName} <span class="thread-resto">· ${th.restaurantName}</span></span>
