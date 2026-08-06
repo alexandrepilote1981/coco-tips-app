@@ -21,8 +21,23 @@
   .card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); margin-bottom: 14px; }
   .login-screen {
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: linear-gradient(160deg, #16233D 0%, #24345A 100%); padding: 24px;
+    background: linear-gradient(160deg, #16233D 0%, #24345A 100%); padding: 24px; position: relative; overflow: hidden;
   }
+  .login-screen::before {
+    content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+    width: 480px; height: 480px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(201,154,68,0.16), transparent 70%);
+    pointer-events: none;
+  }
+  .login-stub {
+    position: absolute; width: 58px; height: 76px; background: rgba(244,242,237,0.05);
+    border: 1px solid rgba(244,242,237,0.1);
+    clip-path: polygon(0% 0%, 100% 0%, 100% 92%, 90% 100%, 80% 92%, 70% 100%, 60% 92%, 50% 100%, 40% 92%, 30% 100%, 20% 92%, 10% 100%, 0% 92%);
+  }
+  .login-stub.s1 { top: 14%; left: 12%; transform: rotate(-12deg); }
+  .login-stub.s2 { bottom: 12%; right: 10%; transform: rotate(9deg); }
+  .login-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; animation: loginFadeUp .5s ease both; }
+  @keyframes loginFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 34px; }
   .login-brand-mark {
     width: 38px; height: 38px; border-radius: 10px; background: #C99A44;
@@ -32,27 +47,32 @@
   .login-brand-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; color: white; }
   .login-box {
     max-width: 360px; width: 100%; text-align: center; background: white; border-radius: 18px;
-    padding: 36px 30px; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.4);
+    padding: 36px 30px; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06);
   }
   .login-tagline { font-size: 13.5px; color: rgba(255,255,255,0.65); margin: 0 0 32px; text-align: center; max-width: 320px; }
   .login-box h2 { font-size: 15px; font-weight: 700; color: #16233D; margin: 0 0 18px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .login-box input[type=password] {
-    width: 100%; padding: 13px 14px; border-radius: 10px; border: 1.5px solid #E5E1D8;
-    font-size: 15px; margin-bottom: 14px; outline: none; transition: border-color .15s;
+  .login-field-wrap { position: relative; margin-bottom: 14px; }
+  .login-field-wrap svg {
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+    width: 16px; height: 16px; color: #B5AFA0; pointer-events: none;
   }
-  .login-box input[type=password]:focus { border-color: #C99A44; }
+  .login-box input[type=password] {
+    width: 100%; padding: 13px 14px 13px 38px; border-radius: 10px; border: 1.5px solid #E5E1D8;
+    font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  .login-box input[type=password]:focus { border-color: #C99A44; box-shadow: 0 0 0 3px rgba(201,154,68,0.15); }
   .login-box button#loginBtn {
     width: 100%; background: #C99A44; color: #16233D; border: none; border-radius: 10px;
-    padding: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; transition: background .15s;
+    padding: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; transition: background .15s, transform .15s;
   }
-  .login-box button#loginBtn:hover { background: #E4C888; }
+  .login-box button#loginBtn:hover { background: #E4C888; transform: translateY(-1px); }
   .login-back {
-    margin-top: 22px; font-size: 12.5px; color: rgba(255,255,255,0.55); text-decoration: none;
+    margin-top: 22px; font-size: 12.5px; color: rgba(255,255,255,0.55); text-decoration: none; transition: color .15s;
   }
   .login-back:hover { color: white; }
   .login-lang-toggle {
     position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.12); color: white;
-    font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: none; cursor: pointer;
+    font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: none; cursor: pointer; z-index: 2;
   }
   input, button, select { font-family: inherit; }
   input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; margin-bottom: 10px; }
@@ -485,21 +505,28 @@ async function login(password) {
 function renderLogin(errorMsg) {
   document.getElementById("app").innerHTML = `
     <div class="login-screen">
+      <div class="login-stub s1"></div>
+      <div class="login-stub s2"></div>
       <button class="login-lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
-      <div class="login-brand">
-        <span class="login-brand-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        </span>
-        <span class="login-brand-name">Déclara</span>
+      <div class="login-content">
+        <div class="login-brand">
+          <span class="login-brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </span>
+          <span class="login-brand-name">Déclara</span>
+        </div>
+        <p class="login-tagline">${t("loginTagline")}</p>
+        <div class="login-box">
+          <h2>${t("accesAdmin")}</h2>
+          <div class="login-field-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="pw" placeholder="${t("motDePasse")}" />
+          </div>
+          <button id="loginBtn">${t("entrer")}</button>
+          ${errorMsg ? `<p style="color:#B4483C; font-size:12px; margin:12px 0 0;">${errorMsg}</p>` : ""}
+        </div>
+        <a class="login-back" href="/">${t("retourAccueil")}</a>
       </div>
-      <p class="login-tagline">${t("loginTagline")}</p>
-      <div class="login-box">
-        <h2>${t("accesAdmin")}</h2>
-        <input type="password" id="pw" placeholder="${t("motDePasse")}" />
-        <button id="loginBtn">${t("entrer")}</button>
-        ${errorMsg ? `<p style="color:#B4483C; font-size:12px; margin:12px 0 0;">${errorMsg}</p>` : ""}
-      </div>
-      <a class="login-back" href="/">${t("retourAccueil")}</a>
     </div>`;
   document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
   document.getElementById("pw").addEventListener("keydown", (ev) => {
