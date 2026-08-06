@@ -54,12 +54,16 @@
   @keyframes loginFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
   .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   .login-brand-mark {
-    width: 38px; height: 38px; border-radius: 10px; background: #D4A857;
+    width: 44px; height: 44px; border-radius: 10px; background: #10151D; overflow: hidden;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    box-shadow: 0 6px 16px -4px rgba(212,168,87,0.5);
-    font-family: 'Fraunces', serif; font-weight: 700; font-style: italic; font-size: 21px; color: #10151D;
+    box-shadow: 0 6px 16px -4px rgba(212,168,87,0.5); border: 1px solid rgba(212,168,87,0.3);
   }
+  .login-brand-mark img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.5); }
   .login-brand-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 27px; color: white; letter-spacing: -0.01em; }
+  .login-watermark {
+    position: absolute; width: 180vw; opacity: 0.16; pointer-events: none;
+    top: 50%; left: 50%; transform: translate(-50%, -50%); object-fit: cover;
+  }
   .login-box {
     max-width: 360px; width: 100%; text-align: center; background: #161C26; border-radius: 18px;
     padding: 38px 30px 32px; box-shadow: 0 30px 70px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
@@ -581,12 +585,13 @@ async function login(password) {
 function renderLogin(errorMsg) {
   document.getElementById("app").innerHTML = `
     <div class="login-screen">
+      <img src="/logo-declara-mark.jpg" alt="" class="login-watermark" />
       <div class="login-glow g1"></div>
       <div class="login-glow g2"></div>
       <button class="login-lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
       <div class="login-content">
         <div class="login-brand">
-          <span class="login-brand-mark">D</span>
+          <span class="login-brand-mark"><img src="/logo-declara-mark.jpg" alt="D" /></span>
           <span class="login-brand-name">Déclara</span>
         </div>
         <p class="login-tagline">${t("loginTagline")}</p>
