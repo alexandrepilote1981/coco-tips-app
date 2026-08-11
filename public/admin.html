@@ -450,6 +450,7 @@ const I18N = {
     messageSend: "Envoyer",
     voirDetail: (n) => `Voir le détail par jour (${n})`,
     aucuneJournee: "Aucune journée dans cette période.",
+    lienHoraireLabel: "Lien horaire (gérant, aucune donnée financière)",
     thDate: "Date", thVentes: "Ventes", thClients: "Clients", thPct: "%", thRemis: "Remis", thNet: "Net", thMoyCl: "Moy./cl.", thRecu: "Reçu", thVirement: "Virement", thDelai: "Délai",
     delaiOk: "À temps",
     delaiJours: (n) => `${n} j.`,
@@ -554,6 +555,7 @@ const I18N = {
     messageSend: "Send",
     voirDetail: (n) => `See daily detail (${n})`,
     aucuneJournee: "No days in this period.",
+    lienHoraireLabel: "Schedule link (manager, no financial data)",
     thDate: "Date", thVentes: "Sales", thClients: "Customers", thPct: "%", thRemis: "Given", thNet: "Net", thMoyCl: "Avg./cust.", thRecu: "Receipt", thVirement: "Transfer", thDelai: "Delay",
     delaiOk: "On time",
     delaiJours: (n) => `${n} d.`,
@@ -1090,6 +1092,13 @@ function render() {
         </div>
         <div class="restaurant-total">
           ${t("total")} : ${fmtMoney(totVentes)} ${t("ventes")} · <b style="color:#6FBF93">${fmtMoney(totNet)}</b> ${t("pourboireNet")}
+        </div>
+        <div style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienHoraireLabel")}</div>
+          <div class="link-row">
+            <div class="link-box">${origin}/horaire/${r.schedule_code}</div>
+            <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code}">${icon("copy", 13)} ${t("copier")}</button>
+          </div>
         </div>
     `;
     r.employees.forEach((e) => {

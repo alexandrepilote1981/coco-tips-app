@@ -340,6 +340,11 @@ let roster = null;
 let shifts = [];
 let weekStart = getMonday(new Date());
 
+// Si l'URL est /horaire/CODE, on est en mode lien direct pour un seul restaurant —
+// aucun mot de passe requis, comme les liens employés.
+const pathParts = window.location.pathname.split("/").filter(Boolean);
+const RESTAURANT_CODE = pathParts.length >= 2 && pathParts[0] === "horaire" ? pathParts[1] : null;
+
 const I18N = {
   fr: {
     locale: "fr-CA",
@@ -360,6 +365,8 @@ const I18N = {
     erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
     dashboardTitle: "Horaire",
+    lienInvalideTitre: "Lien invalide",
+    lienInvalideMsg: "Ce lien horaire n'est plus valide. Vérifie le lien reçu, ou contacte ton gérant.",
   },
   en: {
     locale: "en-CA",
@@ -380,6 +387,8 @@ const I18N = {
     erreurAjoutQuart: "Error adding the shift. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
     dashboardTitle: "Schedule",
+    lienInvalideTitre: "Invalid link",
+    lienInvalideMsg: "This schedule link is no longer valid. Check the link you received, or contact your manager.",
   },
 };
 function t(key, ...args) {
@@ -425,6 +434,25 @@ async function api(path, opts) {
 }
 
 async function load() {
+  if (RESTAURANT_CODE) {
+    try {
+      const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}`);
+      if (!res.ok) throw new Error("Lien invalide");
+      const data = await res.json();
+      roster = { restaurants: [{ id: data.restaurant.id, name: data.restaurant.name, employees: data.employees }] };
+      try {
+        const shiftsRes = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
+        const shiftsData = await shiftsRes.json();
+        shifts = shiftsData.shifts || [];
+      } catch (e) {
+        shifts = [];
+      }
+      render();
+    } catch (e) {
+      renderInvalidCode();
+    }
+    return;
+  }
   try {
     roster = await api("/api/schedule/roster");
     try {
@@ -438,6 +466,15 @@ async function load() {
     renderLogin();
   }
 }
+
+function renderInvalidCode() {
+  document.getElementById("app").innerHTML = `
+    <div class="error-box" style="margin:40px 20px; text-align:center; color:#E2685A;">
+      <h2>${t("lienInvalideTitre")}</h2>
+      <p>${t("lienInvalideMsg")}</p>
+    </div>`;
+}
+
 
 function renderLogin(errorMsg) {
   document.getElementById("app").innerHTML = `
@@ -595,6 +632,18 @@ function openShiftModal({ shiftId, employeeId, date }) {
 function closeShiftModal() {
   document.getElementById("shiftModalOverlay").style.display = "none";
 }
+async function shiftApiCall(path, opts) {
+  if (RESTAURANT_CODE) {
+    const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}${path}`, {
+      ...opts,
+      headers: { "Content-Type": "application/json", ...(opts && opts.headers) },
+    });
+    if (!res.ok) throw new Error((await res.json()).error || "Erreur");
+    return res.json();
+  }
+  return api(`/api/admin${path}`, opts);
+}
+
 async function saveShiftFromModal() {
   const overlay = document.getElementById("shiftModalOverlay");
   const employeeId = overlay.dataset.employeeId;
@@ -612,14 +661,12 @@ async function saveShiftFromModal() {
   btn.disabled = true;
   try {
     if (shiftId) {
-      await api(`/api/admin/shifts/${shiftId}`, { method: "POST", body: JSON.stringify(payload) });
+      await shiftApiCall(`/shifts/${shiftId}`, { method: "POST", body: JSON.stringify(payload) });
     } else {
-      await api("/api/admin/shifts", { method: "POST", body: JSON.stringify(payload) });
+      await shiftApiCall("/shifts", { method: "POST", body: JSON.stringify(payload) });
     }
-    const res = await api("/api/admin/shifts");
-    shifts = res.shifts;
+    await load();
     closeShiftModal();
-    render();
   } catch (err) {
     alert(t("erreurAjoutQuart"));
   } finally {
@@ -631,7 +678,7 @@ async function deleteShiftFromModal() {
   const shiftId = overlay.dataset.shiftId;
   if (!shiftId) return;
   if (!confirm(t("confirmSupprimerQuart"))) return;
-  await api(`/api/admin/shifts/${shiftId}`, { method: "DELETE" });
+  await shiftApiCall(`/shifts/${shiftId}`, { method: "DELETE" });
   shifts = shifts.filter((s) => s.id !== shiftId);
   closeShiftModal();
   render();
@@ -681,7 +728,9 @@ document.getElementById("shiftModalOverlay").addEventListener("click", (ev) => {
 document.getElementById("shiftSaveBtn").addEventListener("click", saveShiftFromModal);
 document.getElementById("shiftDeleteBtn").addEventListener("click", deleteShiftFromModal);
 
-if (TOKEN) load(); else renderLogin();
+if (RESTAURANT_CODE) load();
+else if (TOKEN) load();
+else renderLogin();
 </script>
 </body>
 </html>
