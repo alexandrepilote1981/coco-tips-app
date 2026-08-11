@@ -234,6 +234,76 @@ app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
   res.json({ restaurants: data });
 });
 
+// ---------- Accès horaire par lien direct (un code par restaurant, aucun mot de passe) ----------
+// Même logique que les liens employés : le code lui-même sert de clé d'accès.
+function getRestaurantByCode(code) {
+  return db.prepare("SELECT * FROM restaurants WHERE schedule_code = ?").get((code || "").toUpperCase());
+}
+
+app.get("/api/schedule/by-code/:code", (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const employees = db
+    .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
+    .all(r.id);
+  res.json({ restaurant: { id: r.id, name: r.name }, employees });
+});
+
+app.get("/api/schedule/by-code/:code/shifts", (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const shifts = db
+    .prepare(`
+      SELECT s.* FROM shifts s
+      JOIN employees e ON e.id = s.employee_id
+      WHERE e.restaurant_id = ?
+      ORDER BY s.date ASC, s.start_time ASC
+    `)
+    .all(r.id);
+  res.json({ shifts });
+});
+
+app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const { employee_id, date, start_time, end_time, role, note } = req.body;
+  if (!employee_id || !date || !start_time || !end_time) {
+    return res.status(400).json({ error: "employee_id, date, start_time et end_time requis" });
+  }
+  const emp = db.prepare("SELECT * FROM employees WHERE id = ? AND restaurant_id = ?").get(employee_id, r.id);
+  if (!emp) return res.status(403).json({ error: "Cet employé n'appartient pas à ce restaurant" });
+  const id = nanoid(10);
+  db.prepare(
+    "INSERT INTO shifts (id, employee_id, date, start_time, end_time, role, note) VALUES (?,?,?,?,?,?,?)"
+  ).run(id, employee_id, date, start_time, end_time, role || "server", note || "");
+  res.json({ id, ok: true });
+});
+
+app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const shift = db
+    .prepare("SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id WHERE s.id = ? AND e.restaurant_id = ?")
+    .get(req.params.id, r.id);
+  if (!shift) return res.status(404).json({ error: "Quart introuvable" });
+  const { date, start_time, end_time, role, note } = req.body;
+  db.prepare(
+    "UPDATE shifts SET date=?, start_time=?, end_time=?, role=?, note=?, updated_at=datetime('now') WHERE id=?"
+  ).run(date, start_time, end_time, role || "server", note || "", req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const shift = db
+    .prepare("SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id WHERE s.id = ? AND e.restaurant_id = ?")
+    .get(req.params.id, r.id);
+  if (!shift) return res.status(404).json({ error: "Quart introuvable" });
+  db.prepare("DELETE FROM shifts WHERE id=?").run(req.params.id);
+  res.json({ ok: true });
+});
+
 app.get("/api/admin/overview", requireAdmin, (req, res) => {
   const { startDate, endDate } = req.query;
   const restaurants = db.prepare("SELECT * FROM restaurants ORDER BY name").all();
@@ -331,8 +401,12 @@ app.post("/api/admin/restaurants", requireAdmin, (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "Nom requis" });
   const id = nanoid(10);
-  db.prepare("INSERT INTO restaurants (id, name) VALUES (?, ?)").run(id, name);
-  res.json({ id, name });
+  let scheduleCode;
+  do {
+    scheduleCode = makeAccessCode();
+  } while (db.prepare("SELECT 1 FROM restaurants WHERE schedule_code = ?").get(scheduleCode));
+  db.prepare("INSERT INTO restaurants (id, name, schedule_code) VALUES (?, ?, ?)").run(id, name, scheduleCode);
+  res.json({ id, name, schedule_code: scheduleCode });
 });
 
 app.post("/api/admin/employees", requireAdmin, (req, res) => {
@@ -443,6 +517,9 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"), NO_CACHE_HEADERS);
 });
 app.get("/horaire", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "horaire.html"), NO_CACHE_HEADERS);
+});
+app.get("/horaire/:code", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "horaire.html"), NO_CACHE_HEADERS);
 });
 app.get("/", (req, res) => {

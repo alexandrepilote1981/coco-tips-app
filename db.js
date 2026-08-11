@@ -17,6 +17,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS restaurants (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  schedule_code TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -124,6 +125,22 @@ function makeAccessCode() {
   let code = "";
   for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
   return code;
+}
+
+// Migration défensive : ajoute la colonne schedule_code si la table restaurants existait déjà sans elle,
+// puis donne un code à tout restaurant qui n'en a pas encore (ex: restaurants créés avant cette mise à jour).
+try {
+  db.exec(`ALTER TABLE restaurants ADD COLUMN schedule_code TEXT;`);
+} catch (e) {
+  // colonne déjà présente — rien à faire
+}
+const restaurantsSansCode = db.prepare(`SELECT id FROM restaurants WHERE schedule_code IS NULL OR schedule_code = ''`).all();
+for (const r of restaurantsSansCode) {
+  let code;
+  do {
+    code = makeAccessCode();
+  } while (db.prepare(`SELECT 1 FROM restaurants WHERE schedule_code = ?`).get(code));
+  db.prepare(`UPDATE restaurants SET schedule_code = ? WHERE id = ?`).run(code, r.id);
 }
 
 module.exports = {
