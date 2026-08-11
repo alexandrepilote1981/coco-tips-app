@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Horaire — Déclara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background-color: #10151D;
+    color: #F1EFEA; padding-bottom: 60px; -webkit-font-smoothing: antialiased; }
+  .header {
+    background: linear-gradient(160deg,#161C26 0%,#10151D 100%); padding: 30px 22px 32px; color: white;
+    display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: relative; overflow: hidden;
+  }
+  .header::before {
+    content: ''; position: absolute; top: -140px; right: -60px; width: 320px; height: 320px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,168,87,0.16), transparent 70%); pointer-events: none;
+  }
+  .title { font-family: 'Fraunces', serif; font-size: 25px; font-weight: 600; margin: 0; display:flex; align-items:center; letter-spacing: -0.01em; position: relative; }
+  .title-mark {
+    width: 34px; height: 34px; border-radius: 9px; background: #6FBF93; color: #10151D;
+    display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0;
+    font-style: italic; font-size: 18px; box-shadow: 0 4px 12px -3px rgba(111,191,147,0.5);
+  }
+  .lang-toggle { background: rgba(255,255,255,0.08); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; position: relative; }
+  .content { padding: 20px 16px; max-width: 900px; margin: 0 auto; }
+  .card { background: #161C26; border-radius: 18px; padding: 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 18px; }
+  .login-screen {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #161C26 0%, #10151D 100%); padding: 24px; position: relative; overflow: hidden;
+  }
+  .login-screen::before {
+    content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+    width: 520px; height: 520px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,168,87,0.16), transparent 68%);
+    pointer-events: none;
+  }
+  .login-screen::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+    background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .login-glow {
+    position: absolute; border-radius: 50%; filter: blur(50px); pointer-events: none;
+  }
+  .login-glow.g1 { width: 260px; height: 260px; background: rgba(111,191,147,0.28); top: 6%; left: -10%; }
+  .login-glow.g2 { width: 260px; height: 260px; background: rgba(212,168,87,0.25); bottom: 6%; right: -10%; }
+  .login-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; animation: loginFadeUp .55s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes loginFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .login-brand-mark {
+    width: 38px; height: 38px; border-radius: 10px; background: #6FBF93;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    box-shadow: 0 6px 16px -4px rgba(111,191,147,0.5);
+    font-family: 'Fraunces', serif; font-weight: 700; font-style: italic; font-size: 21px; color: #10151D;
+  }
+  .login-brand-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 27px; color: white; letter-spacing: -0.01em; }
+  .login-box {
+    max-width: 360px; width: 100%; text-align: center; background: #161C26; border-radius: 18px;
+    padding: 38px 30px 32px; box-shadow: 0 30px 70px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+    position: relative; overflow: hidden;
+  }
+  .login-box::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 7px;
+    background: linear-gradient(90deg, #6FBF93 0%, #D4A857 55%, #E2685A 100%);
+  }
+  .login-tagline {
+    font-family: 'Fraunces', serif; font-style: italic; font-weight: 400;
+    font-size: 16px; color: #A8C4B4; margin: 0 0 30px; text-align: center; max-width: 300px;
+  }
+  .login-box h2 {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #D4A857;
+    margin: 0 0 22px; text-transform: uppercase; letter-spacing: 0.08em;
+    background: rgba(212,168,87,0.12); padding: 6px 14px; border-radius: 999px;
+  }
+  .login-field-wrap { position: relative; margin-bottom: 14px; }
+  .login-field-wrap svg {
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+    width: 16px; height: 16px; color: #D4A857; pointer-events: none;
+  }
+  .login-box input[type=password] {
+    width: 100%; padding: 13px 14px 13px 38px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.1);
+    font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s; background: #10151D; color: #F1EFEA;
+  }
+  .login-box input[type=password]:focus { border-color: #D4A857; box-shadow: 0 0 0 3px rgba(212,168,87,0.15); }
+  .login-box button#loginBtn {
+    width: 100%; background: #D4A857; color: #10151D; border: none; border-radius: 10px;
+    padding: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; transition: background .15s, transform .15s, box-shadow .15s;
+  }
+  .login-box button#loginBtn:hover { background: #E5C078; transform: translateY(-1px); box-shadow: 0 8px 18px -6px rgba(212,168,87,0.5); }
+  .login-back {
+    margin-top: 24px; font-size: 12.5px; color: rgba(255,255,255,0.5); text-decoration: none; transition: color .15s;
+  }
+  .login-back:hover { color: #A8C4B4; }
+  .login-lang-toggle {
+    position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.12); color: white;
+    font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: none; cursor: pointer; z-index: 2;
+  }
+  input, button, select { font-family: inherit; }
+  input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; color: #F1EFEA; font-size: 14px; margin-bottom: 10px; }
+  button { background: #6FBF93; color: #10151D; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  button.secondary { background: rgba(255,255,255,0.08); color: #F1EFEA; }
+  button.danger { background: #E2685A; color: #10151D; }
+  .restaurant-title {
+    font-family: 'Fraunces', serif; font-size: 23px; font-weight: 600; color: #F1EFEA; margin: 0 0 4px;
+    display:flex; justify-content:space-between; align-items:center; letter-spacing: -0.01em;
+  }
+  .restaurant-total { font-size: 12.5px; color: #8993A4; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .employee-card-block {
+    background: #1B222D; border-radius: 14px; padding: 16px 16px 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.06);
+  }
+  .employee-card-block:last-of-type { margin-bottom: 0; }
+  .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 0 10px; }
+  .employee-card-block:first-of-type .employee-row { border-top: none; }
+  .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .secondary-btn { background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
+  .employee-stats { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 0 12px; align-items: flex-end; }
+  .employee-stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 3px; }
+  .employee-stat-value { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; color: #F1EFEA; }
+  .employee-name { font-weight: 700; font-size: 15px; color: #F1EFEA; }
+  .employee-sub { font-size: 11px; color: #8993A4; }
+  .link-box { font-size: 11px; background: rgba(255,255,255,0.06); color: #8993A4; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
+  .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .link-row .link-box { flex: 1; margin-top: 0; }
+  .copy-btn { background: #6FBF93; color: #10151D; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn.copied { background: #D4A857; }
+  .report-toggle {
+    background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 11px; font-weight: 700;
+    padding: 6px 12px; border-radius: 999px; margin-top: 8px;
+  }
+  .report-table-wrap { margin-top: 10px; overflow-x: auto; }
+  .report-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .report-table th {
+    text-align: left; font-size: 9px; text-transform: uppercase; color: #8993A4;
+    padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap;
+  }
+  .report-table td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; color: #D8D5CE; }
+  .report-table tr:last-child td { border-bottom: none; }
+  .report-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); vertical-align: middle; }
+  .delay-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+  .delay-badge.delay-ok { background: rgba(111,191,147,0.15); color: #6FBF93; }
+  .delay-badge.delay-warn { background: rgba(212,168,87,0.15); color: #D4A857; }
+  .delay-badge.delay-bad { background: rgba(226,104,90,0.15); color: #E2685A; }
+  .modified-badge { font-size: 9px; color: #D4A857; margin-top: 2px; white-space: nowrap; }
+  tr.row-jump-highlight { animation: rowJumpFlash 1.6s ease; }
+  @keyframes rowJumpFlash { 0% { background: rgba(212,168,87,0.18); } 100% { background: transparent; } }
+  .row-flagged-owed-employee { background: rgba(226,104,90,0.08); }
+  .row-flagged-owed-employer { background: rgba(212,168,87,0.08); }
+  .transfer-btn { background: #E2685A; color: #10151D; font-size: 10px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; font-weight: 700; }
+  .transfer-btn.owed-employer { background: #D4A857; }
+  .transfer-done {
+    display: inline-block; background: #39E639; color: #10151D; font-weight: 700; font-size: 11px;
+    white-space: nowrap; padding: 4px 10px; border-radius: 999px;
+  }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-box { background: #161C26; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; color: #F1EFEA; }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: #F1EFEA; }
+  .modal-header-row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .modal-header-row h3 { margin: 0; }
+  .modal-close-x { background: none; border: none; font-size: 18px; color: #8993A4; padding: 0 0 0 10px; line-height: 1; cursor: pointer; }
+  .modal-box p { font-size: 13px; color: #8993A4; margin: 0 0 14px; }
+  .modal-box input[type=date] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; color: #F1EFEA; font-size: 14px; margin-bottom: 14px; }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions button { flex: 1; }
+  .modal-actions button.danger-text { background: rgba(226,104,90,0.15); color: #E2685A; }
+  .pending-banner {
+    background: rgba(226,104,90,0.1); border: 1px solid rgba(226,104,90,0.25); color: #E2685A; border-radius: 14px;
+    padding: 12px 14px; font-size: 13px; font-weight: 700; margin-bottom: 14px;
+  }
+  .pending-banner.banner-delay {
+    background: rgba(212,168,87,0.1); border: 1px solid rgba(212,168,87,0.25); color: #D4A857;
+  }
+  .messages-toggle {
+    background: none; border: none; padding: 0; color: #F1EFEA; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  }
+  .messages-toggle .icn-circle {
+    width: 38px; height: 38px; border-radius: 10px; background: rgba(111,191,147,0.15);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #6FBF93;
+  }
+  .unread-badge {
+    background: #E2685A; color: #10151D; font-size: 11px; font-weight: 800; border-radius: 999px;
+    padding: 2px 8px; min-width: 18px; text-align: center; display: inline-block;
+  }
+  .thread-row {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    border-top: 1px solid rgba(255,255,255,0.07); padding: 10px 0;
+  }
+  .thread-row:first-child { border-top: none; }
+  .thread-row-top { display: flex; justify-content: space-between; align-items: center; }
+  .thread-name { font-size: 13px; font-weight: 700; color: #F1EFEA; }
+  .thread-resto { font-size: 11px; font-weight: 400; color: #8993A4; }
+  .thread-preview { font-size: 12px; color: #8993A4; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread-date { font-size: 10px; color: #6B7280; margin-top: 2px; }
+  .thread-modal-box { max-width: 400px; }
+  .conversation-history { max-height: 280px; overflow-y: auto; margin-bottom: 12px; padding-right: 2px; }
+  .conv-bubble { max-width: 88%; margin-bottom: 8px; padding: 8px 10px; border-radius: 12px; position: relative; }
+  .conv-bubble.conv-employee { background: rgba(255,255,255,0.06); margin-right: auto; border-bottom-left-radius: 4px; }
+  .conv-bubble.conv-admin { background: rgba(212,168,87,0.15); margin-left: auto; border-bottom-right-radius: 4px; }
+  .conv-sender { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin-bottom: 2px; }
+  .conv-body { font-size: 13px; color: #F1EFEA; white-space: pre-wrap; }
+  .conv-delete-btn {
+    background: none; border: none; color: #6B7280; font-size: 10px; padding: 4px 0 0;
+    text-decoration: underline; cursor: pointer;
+  }
+  .reply-textarea {
+    width: 100%; min-height: 60px; border: none; border-radius: 8px; padding: 8px;
+    font-size: 13px; font-family: inherit; background: rgba(255,255,255,0.06); color: #F1EFEA; outline: none; resize: vertical; margin-bottom: 6px;
+  }
+  .pending-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .pending-chip {
+    background: rgba(255,255,255,0.06); font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; color: #F1EFEA;
+  }
+  .pending-chip.chip-owed-employee { color: #E2685A; }
+  .pending-chip.chip-owed-employer { color: #D4A857; }
+  .pending-chip-wrap { display: inline-flex; align-items: stretch; border-radius: 999px; overflow: hidden; }
+  .pending-chip-wrap .pending-chip { border-radius: 999px 0 0 999px; border-right: none; }
+  .chip-dismiss-x {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-left: 1px solid rgba(255,255,255,0.1);
+    color: #8993A4; font-size: 11px; padding: 6px 9px; border-radius: 0 999px 999px 0;
+  }
+  .employee-card-block.jump-highlight { animation: jumpFlash 1.6s ease; }
+  @keyframes jumpFlash { 0% { background: rgba(212,168,87,0.18); } 100% { background: #1B222D; } }
+  .totals { font-size: 12px; text-align: right; color: #8993A4; }
+  .totals b { color: #F1EFEA; }
+  .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
+  .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 20px 0 8px; }
+  .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .period-btn { background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
+  .period-btn.active { background: #6FBF93; color: #10151D; }
+  .period-dates { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #8993A4; }
+  .period-dates input {
+    padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; font-size: 12px;
+    margin-bottom: 0; color: #F1EFEA;
+  }
+  .period-label { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #F1EFEA; margin-top: 6px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  .export-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; background: #D4A857; color: #10151D;
+    font-size: 13.5px; font-weight: 700; padding: 13px; border-radius: 10px; box-shadow: 0 2px 8px rgba(212,168,87,0.25);
+  }
+  .sparkline-wrap { margin-top: 4px; }
+  .sparkline-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 6px; }
+  .sparkline-bar { fill: #6FBF93; }
+  .sparkline-bar.negative { fill: #E2685A; }
+
+  /* ---------- Horaire : grille hebdomadaire ---------- */
+  .week-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .week-title { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: #F1EFEA; }
+  .week-nav { display: flex; gap: 6px; }
+  .week-nav button {
+    background: rgba(255,255,255,0.08); border: none; color: #F1EFEA; padding: 6px 10px;
+    border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
+  .day-head { text-align: center; padding: 6px 2px; }
+  .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
+  .day-head .dnum { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; margin-top: 2px; color: #F1EFEA; }
+  .day-head.today .dnum { color: #D4A857; }
+  .emp-name-cell {
+    display: flex; align-items: center; font-size: 11.5px; font-weight: 700; color: #F1EFEA;
+    padding: 6px 6px 6px 0; border-top: 1px solid rgba(255,255,255,0.06); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .shift-cell { border-top: 1px solid rgba(255,255,255,0.06); padding: 3px; min-height: 46px; display: flex; align-items: center; justify-content: center; }
+  .shift-chip {
+    width: 100%; height: 100%; background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.3); border-radius: 8px;
+    padding: 4px 3px; text-align: center; cursor: pointer;
+  }
+  .shift-chip.role-hostess { background: rgba(212,168,87,0.14); border-color: rgba(212,168,87,0.3); }
+  .shift-chip .st { font-size: 9.5px; font-weight: 700; color: #6FBF93; line-height: 1.25; }
+  .shift-chip.role-hostess .st { color: #D4A857; }
+  .shift-chip .rl { font-size: 8px; color: #8993A4; margin-top: 1px; }
+  .empty-cell {
+    width: 100%; height: 100%; min-height: 40px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.12);
+    background: none; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.2); font-size: 15px; cursor: pointer;
+  }
+  .empty-cell:hover { border-color: rgba(111,191,147,0.4); color: #6FBF93; }
+  .shift-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .shift-form-grid label { display: flex; flex-direction: column; font-size: 11px; color: #8993A4; }
+  .shift-form-grid input, .shift-form-grid select {
+    margin-top: 5px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    padding: 9px 10px; font-size: 13px; color: #F1EFEA; font-family: inherit;
+  }
+  #shiftNoteInput { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 9px 10px; font-size: 13px; color: #F1EFEA; }
+
+  .schedule-header { background: linear-gradient(160deg,#161C26 0%,#10151D 100%); padding: 30px 22px 32px; color: white; display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(255,255,255,0.06); }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<div id="shiftModalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header-row">
+      <h3 id="shiftModalTitle"></h3>
+      <button class="modal-close-x" id="shiftModalCloseX">✕</button>
+    </div>
+    <p id="shiftModalEmpName" style="font-size:13px; font-weight:700; color:#F1EFEA; margin:-6px 0 14px;"></p>
+    <div class="shift-form-grid">
+      <label>
+        <span></span>
+        <input type="date" id="shiftDateInput" />
+      </label>
+      <label class="shift-role-label">
+        <span></span>
+        <select id="shiftRoleInput"></select>
+      </label>
+      <label>
+        <span></span>
+        <input type="time" id="shiftStartInput" min="05:00" max="22:00" step="1800" />
+      </label>
+      <label>
+        <span></span>
+        <input type="time" id="shiftEndInput" min="05:00" max="22:00" step="1800" />
+      </label>
+    </div>
+    <input type="text" id="shiftNoteInput" placeholder="" style="width:100%; margin-top:10px;" />
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="secondary danger-text" id="shiftDeleteBtn" style="display:none;"></button>
+      <button id="shiftSaveBtn"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+let lang = localStorage.getItem("coco-lang") || "fr";
+let TOKEN = sessionStorage.getItem("scheduleToken") || "";
+let roster = null;
+let shifts = [];
+let weekStart = getMonday(new Date());
+
+const I18N = {
+  fr: {
+    locale: "fr-CA",
+    loginTagline: "Gère l'horaire, où que tu sois.",
+    accesHoraire: "ACCÈS HORAIRE",
+    motDePasse: "Mot de passe",
+    entrer: "Entrer",
+    retourAccueil: "← Retour à l'accueil",
+    horaireTitre: "Horaire",
+    semaineDu: (s, e) => `Semaine du ${s} au ${e}`,
+    aujourdhui: "Aujourd'hui",
+    aucunEmployePourHoraire: "Aucun employé pour ce restaurant.",
+    modifierQuart: "Modifier le quart",
+    ajouterQuart: "Ajouter un quart",
+    supprimerQuart: "Supprimer",
+    enregistrer: "Enregistrer",
+    noteQuartPlaceholder: "Note (optionnel)",
+    erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
+    confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    dashboardTitle: "Horaire",
+  },
+  en: {
+    locale: "en-CA",
+    loginTagline: "Manage the schedule, wherever you are.",
+    accesHoraire: "SCHEDULE ACCESS",
+    motDePasse: "Password",
+    entrer: "Enter",
+    retourAccueil: "← Back to home",
+    horaireTitre: "Schedule",
+    semaineDu: (s, e) => `Week of ${s} to ${e}`,
+    aujourdhui: "Today",
+    aucunEmployePourHoraire: "No employees for this restaurant.",
+    modifierQuart: "Edit shift",
+    ajouterQuart: "Add a shift",
+    supprimerQuart: "Delete",
+    enregistrer: "Save",
+    noteQuartPlaceholder: "Note (optional)",
+    erreurAjoutQuart: "Error adding the shift. Try again.",
+    confirmSupprimerQuart: "Delete this shift?",
+    dashboardTitle: "Schedule",
+  },
+};
+function t(key, ...args) {
+  const v = I18N[lang][key];
+  return typeof v === "function" ? v(...args) : (v ?? key);
+}
+function setLang(newLang) {
+  lang = newLang;
+  localStorage.setItem("coco-lang", lang);
+  if (TOKEN) render(); else renderLogin();
+}
+
+const ICON_PATHS = {
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
+};
+function icon(name, size = 16, extraStyle = "") {
+  const path = ICON_PATHS[name];
+  if (!path) return "";
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle}">${path}</svg>`;
+}
+
+async function login(password) {
+  const r = await fetch("/api/schedule/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "Erreur");
+  TOKEN = data.token;
+  sessionStorage.setItem("scheduleToken", TOKEN);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "X-Admin-Token": TOKEN, ...(opts && opts.headers) },
+  });
+  if (!res.ok) throw new Error((await res.json()).error || "Erreur");
+  return res.json();
+}
+
+async function load() {
+  try {
+    roster = await api("/api/schedule/roster");
+    try {
+      const res = await api("/api/admin/shifts");
+      shifts = res.shifts;
+    } catch (e) {
+      shifts = [];
+    }
+    render();
+  } catch (e) {
+    renderLogin();
+  }
+}
+
+function renderLogin(errorMsg) {
+  document.getElementById("app").innerHTML = `
+    <div class="login-screen">
+      <div class="login-glow g1"></div>
+      <div class="login-glow g2"></div>
+      <button class="login-lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+      <div class="login-content">
+        <div class="login-brand">
+          <span class="login-brand-mark">D</span>
+          <span class="login-brand-name">Déclara</span>
+        </div>
+        <p class="login-tagline">${t("loginTagline")}</p>
+        <div class="login-box">
+          <h2>${icon("calendar", 12)}${t("accesHoraire")}</h2>
+          <div class="login-field-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="pw" placeholder="${t("motDePasse")}" />
+          </div>
+          <button id="loginBtn">${t("entrer")}</button>
+          ${errorMsg ? `<p style="color:#E2685A; font-size:12px; margin:12px 0 0;">${errorMsg}</p>` : ""}
+        </div>
+        <a class="login-back" href="/">${t("retourAccueil")}</a>
+      </div>
+    </div>`;
+  document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
+  document.getElementById("pw").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") document.getElementById("loginBtn").click();
+  });
+  document.getElementById("loginBtn").addEventListener("click", async () => {
+    try {
+      await login(document.getElementById("pw").value);
+      await load();
+    } catch (e) {
+      renderLogin(e.message);
+    }
+  });
+}
+
+function getMonday(d) {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+function isoDate(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function weekDates(start) { return Array.from({ length: 7 }, (_, i) => addDays(start, i)); }
+function fmtWeekLabel(start) {
+  const end = addDays(start, 6);
+  const startStr = start.toLocaleDateString(t("locale"), { day: "numeric" });
+  const endStr = end.toLocaleDateString(t("locale"), { day: "numeric", month: "long" });
+  return t("semaineDu", startStr, endStr);
+}
+function fmtTime(tm) { return tm || ""; }
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+const ROLES = {
+  server: { fr: "Serveur", en: "Server" },
+  hostess: { fr: "Hôtesse", en: "Host" },
+};
+
+function renderWeekGrid(restaurantId, employees) {
+  const dates = weekDates(weekStart);
+  const todayStr = todayISO();
+  return `
+    <div class="week-header">
+      <div class="week-title">${fmtWeekLabel(weekStart)}</div>
+      <div class="week-nav">
+        <button data-action="prevWeek" data-resto="${restaurantId}">‹</button>
+        <button data-action="thisWeek" data-resto="${restaurantId}">${t("aujourdhui")}</button>
+        <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
+      </div>
+    </div>
+    <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
+      <div></div>
+      ${dates.map((d) => `
+        <div class="day-head ${isoDate(d) === todayStr ? "today" : ""}">
+          <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
+          <div class="dnum">${d.getDate()}</div>
+        </div>
+      `).join("")}
+      ${employees.map((emp) => `
+        <div class="emp-name-cell">${emp.name.split(" ")[0]}</div>
+        ${dates.map((d) => {
+          const dateStr = isoDate(d);
+          const shift = shifts.find((s) => s.employee_id === emp.id && s.date === dateStr);
+          return `
+            <div class="shift-cell">
+              ${shift
+                ? `<div class="shift-chip role-${shift.role || "server"}" data-action="editShift" data-id="${shift.id}">
+                     <div class="st">${fmtTime(shift.start_time)}–${fmtTime(shift.end_time)}</div>
+                     <div class="rl">${ROLES[shift.role || "server"][lang]}</div>
+                   </div>`
+                : `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}">+</button>`
+              }
+            </div>
+          `;
+        }).join("")}
+      `).join("")}
+    </div>
+  `;
+}
+
+function openShiftModal({ shiftId, employeeId, date }) {
+  const overlay = document.getElementById("shiftModalOverlay");
+  const existing = shiftId ? shifts.find((s) => s.id === shiftId) : null;
+  overlay.dataset.shiftId = shiftId || "";
+  overlay.dataset.employeeId = existing ? existing.employee_id : employeeId;
+
+  document.getElementById("shiftModalTitle").textContent = existing ? t("modifierQuart") : t("ajouterQuart");
+  document.getElementById("shiftModalEmpName").textContent = (() => {
+    const empId = existing ? existing.employee_id : employeeId;
+    for (const r of roster.restaurants) {
+      const e = r.employees.find((e) => e.id === empId);
+      if (e) return e.name;
+    }
+    return "";
+  })();
+  document.getElementById("shiftDateInput").value = existing ? existing.date : date;
+  document.getElementById("shiftStartInput").value = existing ? existing.start_time : "09:00";
+  document.getElementById("shiftEndInput").value = existing ? existing.end_time : "17:00";
+  document.getElementById("shiftRoleInput").innerHTML = Object.entries(ROLES).map(([val, labels]) => `<option value="${val}">${labels[lang]}</option>`).join("");
+  document.getElementById("shiftRoleInput").value = existing ? (existing.role || "server") : "server";
+  document.getElementById("shiftNoteInput").value = existing ? (existing.note || "") : "";
+  document.getElementById("shiftNoteInput").placeholder = t("noteQuartPlaceholder");
+  document.getElementById("shiftDeleteBtn").textContent = t("supprimerQuart");
+  document.getElementById("shiftDeleteBtn").style.display = existing ? "block" : "none";
+  document.getElementById("shiftSaveBtn").textContent = t("enregistrer");
+
+  overlay.style.display = "flex";
+}
+function closeShiftModal() {
+  document.getElementById("shiftModalOverlay").style.display = "none";
+}
+async function saveShiftFromModal() {
+  const overlay = document.getElementById("shiftModalOverlay");
+  const employeeId = overlay.dataset.employeeId;
+  const shiftId = overlay.dataset.shiftId;
+  const payload = {
+    employee_id: employeeId,
+    date: document.getElementById("shiftDateInput").value,
+    start_time: document.getElementById("shiftStartInput").value,
+    end_time: document.getElementById("shiftEndInput").value,
+    role: document.getElementById("shiftRoleInput").value,
+    note: document.getElementById("shiftNoteInput").value,
+  };
+  if (!payload.date || !payload.start_time || !payload.end_time) return;
+  const btn = document.getElementById("shiftSaveBtn");
+  btn.disabled = true;
+  try {
+    if (shiftId) {
+      await api(`/api/admin/shifts/${shiftId}`, { method: "POST", body: JSON.stringify(payload) });
+    } else {
+      await api("/api/admin/shifts", { method: "POST", body: JSON.stringify(payload) });
+    }
+    const res = await api("/api/admin/shifts");
+    shifts = res.shifts;
+    closeShiftModal();
+    render();
+  } catch (err) {
+    alert(t("erreurAjoutQuart"));
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function deleteShiftFromModal() {
+  const overlay = document.getElementById("shiftModalOverlay");
+  const shiftId = overlay.dataset.shiftId;
+  if (!shiftId) return;
+  if (!confirm(t("confirmSupprimerQuart"))) return;
+  await api(`/api/admin/shifts/${shiftId}`, { method: "DELETE" });
+  shifts = shifts.filter((s) => s.id !== shiftId);
+  closeShiftModal();
+  render();
+}
+
+function render() {
+  let html = `
+    <div class="schedule-header">
+      <p class="title"><span class="title-mark">D</span>${t("dashboardTitle")}</p>
+      <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+    </div>
+    <div class="content">
+  `;
+  roster.restaurants.forEach((r) => {
+    html += `
+      <div class="card">
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${r.name}</div>
+        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : renderWeekGrid(r.id, r.employees)}
+      </div>
+    `;
+  });
+  html += `</div>`;
+  document.getElementById("app").innerHTML = html;
+
+  document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
+  document.querySelectorAll('[data-action="prevWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => { weekStart = addDays(weekStart, -7); render(); });
+  });
+  document.querySelectorAll('[data-action="nextWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => { weekStart = addDays(weekStart, 7); render(); });
+  });
+  document.querySelectorAll('[data-action="thisWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => { weekStart = getMonday(new Date()); render(); });
+  });
+  document.querySelectorAll('[data-action="newShift"]').forEach((btn) => {
+    btn.addEventListener("click", () => openShiftModal({ employeeId: btn.dataset.emp, date: btn.dataset.date }));
+  });
+  document.querySelectorAll('[data-action="editShift"]').forEach((btn) => {
+    btn.addEventListener("click", () => openShiftModal({ shiftId: btn.dataset.id }));
+  });
+}
+
+document.getElementById("shiftModalCloseX").addEventListener("click", closeShiftModal);
+document.getElementById("shiftModalOverlay").addEventListener("click", (ev) => {
+  if (ev.target === document.getElementById("shiftModalOverlay")) closeShiftModal();
+});
+document.getElementById("shiftSaveBtn").addEventListener("click", saveShiftFromModal);
+document.getElementById("shiftDeleteBtn").addEventListener("click", deleteShiftFromModal);
+
+if (TOKEN) load(); else renderLogin();
+</script>
+</body>
+</html>
