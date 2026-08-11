@@ -344,11 +344,11 @@
       </label>
       <label>
         <span></span>
-        <input type="time" id="shiftStartInput" min="05:00" max="22:00" step="900" />
+        <select id="shiftStartInput"></select>
       </label>
       <label>
         <span></span>
-        <input type="time" id="shiftEndInput" min="05:00" max="22:00" step="900" />
+        <select id="shiftEndInput"></select>
       </label>
     </div>
     <input type="text" id="shiftNoteInput" placeholder="" style="width:100%; margin-top:10px;" />
@@ -745,6 +745,20 @@ function renderWeekGrid(restaurantId, employees) {
   `;
 }
 
+// Génère les options d'heure valides (5h à 22h, tranches de 15 min) — fiable sur tous les téléphones,
+// contrairement au sélecteur natif <input type="time"> qui ignore parfois l'attribut step sur iOS.
+function timeOptionsHTML(selected) {
+  let opts = "";
+  for (let h = 5; h <= 22; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      if (h === 22 && m > 0) break;
+      const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      opts += `<option value="${val}" ${val === selected ? "selected" : ""}>${val}</option>`;
+    }
+  }
+  return opts;
+}
+
 function openShiftModal({ shiftId, employeeId, date }) {
   const overlay = document.getElementById("shiftModalOverlay");
   const existing = shiftId ? shifts.find((s) => s.id === shiftId) : null;
@@ -761,8 +775,8 @@ function openShiftModal({ shiftId, employeeId, date }) {
     return "";
   })();
   document.getElementById("shiftDateInput").value = existing ? existing.date : date;
-  document.getElementById("shiftStartInput").value = existing ? existing.start_time : "09:00";
-  document.getElementById("shiftEndInput").value = existing ? existing.end_time : "17:00";
+  document.getElementById("shiftStartInput").innerHTML = timeOptionsHTML(existing ? existing.start_time : "09:00");
+  document.getElementById("shiftEndInput").innerHTML = timeOptionsHTML(existing ? existing.end_time : "17:00");
   document.getElementById("shiftRoleInput").innerHTML = Object.entries(ROLES).map(([val, labels]) => `<option value="${val}">${labels[lang]}</option>`).join("");
   document.getElementById("shiftRoleInput").value = existing ? (existing.role || "server") : "server";
   document.getElementById("shiftNoteInput").value = existing ? (existing.note || "") : "";
