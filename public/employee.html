@@ -33,6 +33,27 @@
   .card { background: #161C26; border-radius: 18px; padding: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); }
   .kpi-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 7px; display:flex; align-items:center; gap:6px;}
   .kpi-value { font-family: 'Fraunces', serif; font-size: 21px; font-weight: 600; }
+  .schedule-card { margin-top: 12px; }
+  .section-label-sm { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .my-shift-list { display: flex; flex-direction: column; gap: 8px; }
+  .my-shift-row { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 10px 12px; }
+  .my-shift-date { font-size: 13px; font-weight: 700; color: #F1EFEA; }
+  .my-shift-time { font-size: 12px; color: #8993A4; margin-top: 2px; }
+  .week-strip { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+  .week-strip::-webkit-scrollbar { height: 4px; }
+  .week-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+  .day-pill {
+    flex: 0 0 46px; scroll-snap-align: start; text-align: center; padding: 7px 2px; border-radius: 10px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .day-pill.worked { background: rgba(111,191,147,0.14); border-color: rgba(111,191,147,0.35); }
+  .day-pill .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; }
+  .day-pill.worked .dow { color: #6FBF93; }
+  .day-pill .dnum { font-family: 'Fraunces', serif; font-size: 13px; font-weight: 600; margin-top: 2px; color: #F1EFEA; }
+  .day-pill.is-today { border-color: rgba(212,168,87,0.5); }
+  .day-pill.is-today .dnum { color: #D4A857; }
+  .my-shift-row { display: flex; justify-content: space-between; align-items: center; }
+  .next-badge { font-size: 8.5px; font-weight: 800; background: #D4A857; color: #10151D; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; white-space: nowrap; }
   .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 22px 0 10px; display:flex; justify-content:space-between; align-items:center;}
   .add-btn { background:#6FBF93; color:#10151D; border:none; border-radius:999px; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; }
   .day-card { margin-bottom: 12px; }
@@ -142,6 +163,7 @@ const ICON_PATHS = {
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   tag: '<path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42Z"/><path d="M7 7h.01"/>',
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
 };
 function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
@@ -163,6 +185,8 @@ const I18N = {
     journees: (n) => `Journées (${n})`,
     ajouter: "+ Ajouter",
     multiEntryHint: "Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).",
+    monHoraireAvenir: "Mon horaire à venir",
+    prochain: "Prochain",
     hotesseTodayLabel: "Aujourd'hui je suis hôtesse",
     montantRecuLabel: "Montant reçu des serveuses $",
     montantDeclare: "Montant déclaré",
@@ -217,6 +241,8 @@ const I18N = {
     journees: (n) => `Days (${n})`,
     ajouter: "+ Add",
     multiEntryHint: "You can add several entries for the same day (e.g. lunch and dinner separately).",
+    monHoraireAvenir: "My upcoming schedule",
+    prochain: "Next",
     hotesseTodayLabel: "Today I am the hostess",
     montantRecuLabel: "Amount received from servers $",
     montantDeclare: "Amount declared",
@@ -300,6 +326,23 @@ function isoDaysAgoLocal(n) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+function addDaysLocal(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function dateToISO(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function fmtDateShort(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString(t("locale"), { weekday: "short", day: "numeric", month: "short" });
+}
+
+const ROLES_EMP = {
+  server: { fr: "Serveur", en: "Server" },
+  hostess: { fr: "Hôtesse", en: "Host" },
+};
 
 let period = { mode: "2w" }; // '2w' | 'month' | 'all'
 function resolvePeriod() {
@@ -357,6 +400,7 @@ function recomputeEntry(entry) {
 }
 
 let conversation = [];
+let myShifts = [];
 
 async function load() {
   try {
@@ -366,6 +410,12 @@ async function load() {
       conversation = res.messages;
     } catch (e) {
       conversation = [];
+    }
+    try {
+      const resShifts = await api(`/api/employee/${CODE}/shifts`);
+      myShifts = resShifts.shifts;
+    } catch (e) {
+      myShifts = [];
     }
     render();
   } catch (e) {
@@ -649,6 +699,39 @@ function render() {
         <div class="card"><div class="kpi-label" style="color:#D4A857">${t("pctMoyen")}</div><div class="kpi-value" id="kpi-pct" style="color:#D4A857">${fmtPct(pctMoyen)}</div></div>
         <div class="card"><div class="kpi-label" style="color:#E2685A">${icon("users", 13)} ${t("moyClient")}</div><div class="kpi-value" id="kpi-client" style="color:#E2685A">${fmtMoney(parClient)}</div></div>
       </div>
+
+      ${myShifts.length > 0 ? `
+      <div class="card schedule-card">
+        <div class="section-label-sm">${icon("calendar", 14)} ${t("monHoraireAvenir")}</div>
+        <div class="week-strip">
+          ${(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStr = dateToISO(today);
+            return Array.from({ length: 14 }, (_, i) => addDaysLocal(today, i)).map((d) => {
+              const dStr = dateToISO(d);
+              const hasShift = myShifts.some((s) => s.date === dStr);
+              return `
+                <div class="day-pill ${hasShift ? "worked" : ""} ${dStr === todayStr ? "is-today" : ""}">
+                  <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
+                  <div class="dnum">${d.getDate()}</div>
+                </div>
+              `;
+            }).join("");
+          })()}
+        </div>
+        <div class="my-shift-list">
+          ${myShifts.map((s, i) => `
+            <div class="my-shift-row">
+              <div>
+                <div class="my-shift-date">${fmtDateShort(s.date)}</div>
+                <div class="my-shift-time">${s.start_time} – ${s.end_time} · ${ROLES_EMP[s.role || "server"][lang]}${s.note ? ` · ${s.note}` : ""}</div>
+              </div>
+              ${i === 0 ? `<span class="next-badge">${t("prochain")}</span>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>` : ""}
 
       <div class="section-title">
         <span id="days-count">${t("journees", entries.length)}</span>

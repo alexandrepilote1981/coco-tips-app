@@ -252,6 +252,45 @@
   .sparkline-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 6px; }
   .sparkline-bar { fill: #6FBF93; }
   .sparkline-bar.negative { fill: #E2685A; }
+
+  /* ---------- Horaire : grille hebdomadaire ---------- */
+  .week-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .week-title { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: #F1EFEA; }
+  .week-nav { display: flex; gap: 6px; }
+  .week-nav button {
+    background: rgba(255,255,255,0.08); border: none; color: #F1EFEA; padding: 6px 10px;
+    border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
+  .day-head { text-align: center; padding: 6px 2px; }
+  .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
+  .day-head .dnum { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; margin-top: 2px; color: #F1EFEA; }
+  .day-head.today .dnum { color: #D4A857; }
+  .emp-name-cell {
+    display: flex; align-items: center; font-size: 11.5px; font-weight: 700; color: #F1EFEA;
+    padding: 6px 6px 6px 0; border-top: 1px solid rgba(255,255,255,0.06); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .shift-cell { border-top: 1px solid rgba(255,255,255,0.06); padding: 3px; min-height: 46px; display: flex; align-items: center; justify-content: center; }
+  .shift-chip {
+    width: 100%; height: 100%; background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.3); border-radius: 8px;
+    padding: 4px 3px; text-align: center; cursor: pointer;
+  }
+  .shift-chip.role-hostess { background: rgba(212,168,87,0.14); border-color: rgba(212,168,87,0.3); }
+  .shift-chip .st { font-size: 9.5px; font-weight: 700; color: #6FBF93; line-height: 1.25; }
+  .shift-chip.role-hostess .st { color: #D4A857; }
+  .shift-chip .rl { font-size: 8px; color: #8993A4; margin-top: 1px; }
+  .empty-cell {
+    width: 100%; height: 100%; min-height: 40px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.12);
+    background: none; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.2); font-size: 15px; cursor: pointer;
+  }
+  .empty-cell:hover { border-color: rgba(111,191,147,0.4); color: #6FBF93; }
+  .shift-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .shift-form-grid label { display: flex; flex-direction: column; font-size: 11px; color: #8993A4; }
+  .shift-form-grid input, .shift-form-grid select {
+    margin-top: 5px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    padding: 9px 10px; font-size: 13px; color: #F1EFEA; font-family: inherit;
+  }
+  #shiftNoteInput { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 9px 10px; font-size: 13px; color: #F1EFEA; }
 </style>
 </head>
 <body>
@@ -284,6 +323,42 @@
   </div>
 </div>
 
+<div id="shiftModalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header-row">
+      <h3 id="shiftModalTitle"></h3>
+      <button class="modal-close-x" id="shiftModalCloseX">✕</button>
+    </div>
+    <p id="shiftModalEmpName" style="font-size:13px; font-weight:700; color:#F1EFEA; margin:-6px 0 14px;"></p>
+    <div class="shift-form-grid">
+      <label>
+        <span></span>
+        <input type="date" id="shiftDateInput" />
+      </label>
+      <label class="shift-role-label">
+        <span></span>
+        <select id="shiftRoleInput">
+          <option value="server">Serveur</option>
+          <option value="hostess">Hôtesse</option>
+        </select>
+      </label>
+      <label>
+        <span></span>
+        <input type="time" id="shiftStartInput" min="05:00" max="22:00" step="1800" />
+      </label>
+      <label>
+        <span></span>
+        <input type="time" id="shiftEndInput" min="05:00" max="22:00" step="1800" />
+      </label>
+    </div>
+    <input type="text" id="shiftNoteInput" placeholder="" style="width:100%; margin-top:10px;" />
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="secondary danger-text" id="shiftDeleteBtn" style="display:none;"></button>
+      <button id="shiftSaveBtn"></button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
 const ICON_PATHS = {
@@ -299,6 +374,9 @@ const ICON_PATHS = {
   tag: '<path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42Z"/><path d="M7 7h.01"/>',
   logo: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
 };
 function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
@@ -307,6 +385,7 @@ function icon(name, size, extraStyle) {
 let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
 let messages = [];
+let shifts = [];
 let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
 
 // ---------- Traductions ----------
@@ -345,6 +424,17 @@ const I18N = {
     pourboireNetTotal: "Pourboire net total",
     pctMoyenLabel: "% moyen",
     tendanceRecente: "Tendance récente",
+    semaineDu: (start, end) => `Semaine du ${start} au ${end}`,
+    aujourdhui: "Aujourd'hui",
+    horaireTitre: "Horaire",
+    aucunEmployePourHoraire: "Ajoute des employés pour commencer à planifier leur horaire.",
+    modifierQuart: "Modifier le quart",
+    supprimerQuart: "Supprimer",
+    enregistrer: "Enregistrer",
+    noteQuartPlaceholder: "Note (optionnel)",
+    ajouterQuart: "Ajouter un quart",
+    erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
+    confirmSupprimerQuart: "Supprimer ce quart de travail?",
     enAttenteLabel: "En attente",
     messagesTitle: "Messages des employés",
     messageTab: "Message",
@@ -438,6 +528,17 @@ const I18N = {
     pourboireNetTotal: "Total net tips",
     pctMoyenLabel: "Avg. %",
     tendanceRecente: "Recent trend",
+    semaineDu: (start, end) => `Week of ${start} to ${end}`,
+    aujourdhui: "Today",
+    horaireTitre: "Schedule",
+    aucunEmployePourHoraire: "Add employees to start scheduling them.",
+    modifierQuart: "Edit shift",
+    supprimerQuart: "Delete",
+    enregistrer: "Save",
+    noteQuartPlaceholder: "Note (optional)",
+    ajouterQuart: "Add a shift",
+    erreurAjoutQuart: "Error adding the shift. Try again.",
+    confirmSupprimerQuart: "Delete this shift?",
     enAttenteLabel: "Pending",
     messagesTitle: "Messages from employees",
     messageTab: "Message",
@@ -568,6 +669,158 @@ function renderSparkline(entries) {
 }
 function fmtPct(n) { n = isFinite(n) ? n : 0; return (n * 100).toFixed(1) + "%"; }
 
+// Formate une heure "HH:MM" pour l'affichage (garde le format 24h, simple et sans ambiguïté)
+function fmtTime(t) { return t || ""; }
+
+// ---------- Horaire : grille hebdomadaire ----------
+let weekStart = getMonday(new Date());
+
+function getMonday(d) {
+  const date = new Date(d);
+  const day = date.getDay(); // 0=dimanche .. 6=samedi
+  const diff = day === 0 ? -6 : 1 - day; // recule jusqu'au lundi de cette semaine
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+function isoDate(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function weekDates(start) { return Array.from({ length: 7 }, (_, i) => addDays(start, i)); }
+function fmtWeekLabel(start) {
+  const end = addDays(start, 6);
+  const optsShort = { day: "numeric" };
+  const optsFull = { day: "numeric", month: "long" };
+  const startStr = start.toLocaleDateString(t("locale"), optsShort);
+  const endStr = end.toLocaleDateString(t("locale"), optsFull);
+  return t("semaineDu", startStr, endStr);
+}
+
+const ROLES = {
+  server: { fr: "Serveur", en: "Server" },
+  hostess: { fr: "Hôtesse", en: "Host" },
+};
+
+function renderWeekGrid(restaurantId, employees) {
+  const dates = weekDates(weekStart);
+  const todayStr = todayISO();
+  return `
+    <div class="week-header">
+      <div class="week-title">${fmtWeekLabel(weekStart)}</div>
+      <div class="week-nav">
+        <button data-action="prevWeek" data-resto="${restaurantId}">‹</button>
+        <button data-action="thisWeek" data-resto="${restaurantId}">${t("aujourdhui")}</button>
+        <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
+      </div>
+    </div>
+    <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
+      <div></div>
+      ${dates.map((d) => `
+        <div class="day-head ${isoDate(d) === todayStr ? "today" : ""}">
+          <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
+          <div class="dnum">${d.getDate()}</div>
+        </div>
+      `).join("")}
+      ${employees.map((emp) => `
+        <div class="emp-name-cell">${emp.name.split(" ")[0]}</div>
+        ${dates.map((d) => {
+          const dateStr = isoDate(d);
+          const shift = shifts.find((s) => s.employee_id === emp.id && s.date === dateStr);
+          return `
+            <div class="shift-cell">
+              ${shift
+                ? `<div class="shift-chip role-${shift.role || "server"}" data-action="editShift" data-id="${shift.id}">
+                     <div class="st">${fmtTime(shift.start_time)}–${fmtTime(shift.end_time)}</div>
+                     <div class="rl">${ROLES[shift.role || "server"][lang]}</div>
+                   </div>`
+                : `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}">+</button>`
+              }
+            </div>
+          `;
+        }).join("")}
+      `).join("")}
+    </div>
+  `;
+}
+
+function openShiftModal({ shiftId, employeeId, date }) {
+  const overlay = document.getElementById("shiftModalOverlay");
+  const existing = shiftId ? shifts.find((s) => s.id === shiftId) : null;
+  overlay.dataset.shiftId = shiftId || "";
+  overlay.dataset.employeeId = existing ? existing.employee_id : employeeId;
+
+  document.getElementById("shiftModalTitle").textContent = existing ? t("modifierQuart") : t("ajouterQuart");
+  document.getElementById("shiftModalEmpName").textContent = (() => {
+    const empId = existing ? existing.employee_id : employeeId;
+    for (const r of overview.restaurants) {
+      const e = r.employees.find((e) => e.id === empId);
+      if (e) return e.name;
+    }
+    return "";
+  })();
+  document.getElementById("shiftDateInput").value = existing ? existing.date : date;
+  document.getElementById("shiftStartInput").value = existing ? existing.start_time : "09:00";
+  document.getElementById("shiftEndInput").value = existing ? existing.end_time : "17:00";
+  document.getElementById("shiftRoleInput").innerHTML = Object.entries(ROLES).map(([val, labels]) => `<option value="${val}">${labels[lang]}</option>`).join("");
+  document.getElementById("shiftRoleInput").value = existing ? (existing.role || "server") : "server";
+  document.getElementById("shiftNoteInput").value = existing ? (existing.note || "") : "";
+  document.getElementById("shiftNoteInput").placeholder = t("noteQuartPlaceholder");
+  document.getElementById("shiftDeleteBtn").textContent = t("supprimerQuart");
+  document.getElementById("shiftDeleteBtn").style.display = existing ? "block" : "none";
+  document.getElementById("shiftSaveBtn").textContent = t("enregistrer");
+
+  overlay.style.display = "flex";
+}
+
+function closeShiftModal() {
+  document.getElementById("shiftModalOverlay").style.display = "none";
+}
+
+async function saveShiftFromModal() {
+  const overlay = document.getElementById("shiftModalOverlay");
+  const employeeId = overlay.dataset.employeeId;
+  const shiftId = overlay.dataset.shiftId;
+  const payload = {
+    employee_id: employeeId,
+    date: document.getElementById("shiftDateInput").value,
+    start_time: document.getElementById("shiftStartInput").value,
+    end_time: document.getElementById("shiftEndInput").value,
+    role: document.getElementById("shiftRoleInput").value,
+    note: document.getElementById("shiftNoteInput").value,
+  };
+  if (!payload.date || !payload.start_time || !payload.end_time) return;
+  const btn = document.getElementById("shiftSaveBtn");
+  btn.disabled = true;
+  try {
+    if (shiftId) {
+      await api(`/api/admin/shifts/${shiftId}`, { method: "POST", body: JSON.stringify(payload) });
+    } else {
+      await api("/api/admin/shifts", { method: "POST", body: JSON.stringify(payload) });
+    }
+    const res = await api("/api/admin/shifts");
+    shifts = res.shifts;
+    closeShiftModal();
+    render();
+  } catch (err) {
+    alert(t("erreurAjoutQuart"));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteShiftFromModal() {
+  const overlay = document.getElementById("shiftModalOverlay");
+  const shiftId = overlay.dataset.shiftId;
+  if (!shiftId) return;
+  if (!confirm(t("confirmSupprimerQuart"))) return;
+  await api(`/api/admin/shifts/${shiftId}`, { method: "DELETE" });
+  shifts = shifts.filter((s) => s.id !== shiftId);
+  closeShiftModal();
+  render();
+}
+
 async function login(password) {
   const r = await fetch("/api/admin/login", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }),
@@ -628,6 +881,12 @@ async function load() {
       messages = res.messages;
     } catch (e) {
       messages = [];
+    }
+    try {
+      const resShifts = await api("/api/admin/shifts");
+      shifts = resShifts.shifts;
+    } catch (e) {
+      shifts = [];
     }
     render();
   } catch (e) {
@@ -924,6 +1183,10 @@ function render() {
           <button data-action="addEmployee" data-id="${r.id}">${t("ajouterEmploye")}</button>
         </div>
       </div>
+      <div class="card">
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${t("horaireTitre")}</div>
+        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : renderWeekGrid(r.id, r.employees)}
+      </div>
     `;
   });
 
@@ -978,6 +1241,22 @@ function render() {
       const isOpen = wrap.style.display !== "none";
       wrap.style.display = isOpen ? "none" : "block";
     });
+  });
+
+  document.querySelectorAll('[data-action="prevWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => { weekStart = addDays(weekStart, -7); render(); });
+  });
+  document.querySelectorAll('[data-action="nextWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => { weekStart = addDays(weekStart, 7); render(); });
+  });
+  document.querySelectorAll('[data-action="thisWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => { weekStart = getMonday(new Date()); render(); });
+  });
+  document.querySelectorAll('[data-action="newShift"]').forEach((btn) => {
+    btn.addEventListener("click", () => openShiftModal({ employeeId: btn.dataset.emp, date: btn.dataset.date }));
+  });
+  document.querySelectorAll('[data-action="editShift"]').forEach((btn) => {
+    btn.addEventListener("click", () => openShiftModal({ shiftId: btn.dataset.id }));
   });
 
   document.querySelectorAll('[data-action="jumpToEmployee"]').forEach((btn) => {
@@ -1396,6 +1675,17 @@ function setupThreadModal() {
   });
 }
 setupThreadModal();
+
+function setupShiftModal() {
+  const overlay = document.getElementById("shiftModalOverlay");
+  document.getElementById("shiftModalCloseX").addEventListener("click", closeShiftModal);
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) closeShiftModal();
+  });
+  document.getElementById("shiftSaveBtn").addEventListener("click", saveShiftFromModal);
+  document.getElementById("shiftDeleteBtn").addEventListener("click", deleteShiftFromModal);
+}
+setupShiftModal();
 
 if (TOKEN) load(); else renderLogin();
 </script>
