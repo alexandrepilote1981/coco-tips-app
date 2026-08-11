@@ -24,6 +24,7 @@ const NO_CACHE_HEADERS = {
 };
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
+const SCHEDULE_PASSWORD = process.env.SCHEDULE_PASSWORD || "horaire2026";
 
 // ---------- helpers ----------
 function computeEntry(e) {
@@ -40,6 +41,16 @@ function computeEntry(e) {
 function requireAdmin(req, res, next) {
   const token = req.headers["x-admin-token"];
   if (token !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: "Non autorisé" });
+  }
+  next();
+}
+
+// Accepte le mot de passe admin OU le mot de passe horaire — utilisé pour tout ce qui
+// touche uniquement à la planification (aucune donnée financière derrière cette porte).
+function requireScheduleAccess(req, res, next) {
+  const token = req.headers["x-admin-token"];
+  if (token !== ADMIN_PASSWORD && token !== SCHEDULE_PASSWORD) {
     return res.status(401).json({ error: "Non autorisé" });
   }
   next();
@@ -198,6 +209,31 @@ app.post("/api/admin/login", (req, res) => {
   res.status(401).json({ error: "Mot de passe incorrect" });
 });
 
+// Connexion horaire seulement : accepte le mot de passe horaire OU le mot de passe admin,
+// pour que la même page fonctionne peu importe qui se connecte.
+app.post("/api/schedule/login", (req, res) => {
+  if (req.body.password === SCHEDULE_PASSWORD) {
+    return res.json({ token: SCHEDULE_PASSWORD });
+  }
+  if (req.body.password === ADMIN_PASSWORD) {
+    return res.json({ token: ADMIN_PASSWORD });
+  }
+  res.status(401).json({ error: "Mot de passe incorrect" });
+});
+
+// Liste allégée des restaurants + employés (noms seulement, AUCUNE donnée financière) —
+// c'est tout ce dont la page horaire indépendante a besoin pour construire la grille.
+app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
+  const restaurants = db.prepare("SELECT * FROM restaurants ORDER BY created_at ASC").all();
+  const data = restaurants.map((r) => {
+    const employees = db
+      .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
+      .all(r.id);
+    return { id: r.id, name: r.name, employees };
+  });
+  res.json({ restaurants: data });
+});
+
 app.get("/api/admin/overview", requireAdmin, (req, res) => {
   const { startDate, endDate } = req.query;
   const restaurants = db.prepare("SELECT * FROM restaurants ORDER BY name").all();
@@ -234,6 +270,61 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
     return { ...r, employees };
   });
   res.json({ restaurants: data });
+});
+
+// ---------- Horaire (quarts de travail) ----------
+app.get("/api/admin/shifts", requireScheduleAccess, (req, res) => {
+  const { startDate, endDate } = req.query;
+  let query = `
+    SELECT s.*, e.name AS employee_name, e.restaurant_id
+    FROM shifts s
+    JOIN employees e ON e.id = s.employee_id
+    WHERE 1=1
+  `;
+  const params = [];
+  if (startDate) { query += " AND s.date >= ?"; params.push(startDate); }
+  if (endDate) { query += " AND s.date <= ?"; params.push(endDate); }
+  query += " ORDER BY s.date ASC, s.start_time ASC";
+  const shifts = db.prepare(query).all(...params);
+  res.json({ shifts });
+});
+
+app.post("/api/admin/shifts", requireScheduleAccess, (req, res) => {
+  const { employee_id, date, start_time, end_time, role, note } = req.body;
+  if (!employee_id || !date || !start_time || !end_time) {
+    return res.status(400).json({ error: "employee_id, date, start_time et end_time requis" });
+  }
+  const id = nanoid(10);
+  db.prepare(
+    "INSERT INTO shifts (id, employee_id, date, start_time, end_time, role, note) VALUES (?,?,?,?,?,?,?)"
+  ).run(id, employee_id, date, start_time, end_time, role || "server", note || "");
+  res.json({ id, ok: true });
+});
+
+app.post("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
+  const { date, start_time, end_time, role, note } = req.body;
+  db.prepare(
+    "UPDATE shifts SET date=?, start_time=?, end_time=?, role=?, note=?, updated_at=datetime('now') WHERE id=?"
+  ).run(date, start_time, end_time, role || "server", note || "", req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
+  db.prepare("DELETE FROM shifts WHERE id=?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get("/api/employee/:code/shifts", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  // Les quarts à venir (à partir d'aujourd'hui, heure locale approximative), les plus proches en premier
+  const shifts = db
+    .prepare("SELECT * FROM shifts WHERE employee_id = ? AND date >= date('now', '-1 day') ORDER BY date ASC, start_time ASC")
+    .all(emp.id);
+  res.json({ shifts });
 });
 
 app.post("/api/admin/restaurants", requireAdmin, (req, res) => {
@@ -350,6 +441,9 @@ app.get("/e/:code", (req, res) => {
 });
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"), NO_CACHE_HEADERS);
+});
+app.get("/horaire", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "horaire.html"), NO_CACHE_HEADERS);
 });
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "landing.html"), NO_CACHE_HEADERS);
