@@ -59,6 +59,18 @@ CREATE TABLE IF NOT EXISTS messages (
   is_read INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS shifts (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  date TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  role TEXT DEFAULT 'server',
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
 // Migration : ajoute la colonne sender ('employee' | 'admin') si la table messages existait déjà
@@ -98,6 +110,13 @@ for (const col of [
 // jamais après, donc les vraies nouvelles journées auront toujours la bonne date figée).
 db.exec(`UPDATE entries SET created_at = updated_at WHERE created_at IS NULL;`);
 db.exec(`UPDATE entries SET data_updated_at = updated_at WHERE data_updated_at IS NULL;`);
+
+// Migration défensive : ajoute la colonne role si la table shifts existait déjà sans elle.
+try {
+  db.exec(`ALTER TABLE shifts ADD COLUMN role TEXT DEFAULT 'server';`);
+} catch (e) {
+  // colonne déjà présente — rien à faire
+}
 
 function makeAccessCode() {
   // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus
