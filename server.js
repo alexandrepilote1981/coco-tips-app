@@ -428,6 +428,8 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
 
 app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {
   db.prepare("DELETE FROM entries WHERE employee_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM shifts WHERE employee_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM messages WHERE employee_id = ?").run(req.params.id);
   db.prepare("DELETE FROM employees WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
 });
@@ -458,6 +460,8 @@ app.delete("/api/admin/restaurants/:id", requireAdmin, (req, res) => {
   const emps = db.prepare("SELECT id FROM employees WHERE restaurant_id = ?").all(req.params.id);
   for (const e of emps) {
     db.prepare("DELETE FROM entries WHERE employee_id = ?").run(e.id);
+    db.prepare("DELETE FROM shifts WHERE employee_id = ?").run(e.id);
+    db.prepare("DELETE FROM messages WHERE employee_id = ?").run(e.id);
   }
   db.prepare("DELETE FROM employees WHERE restaurant_id = ?").run(req.params.id);
   db.prepare("DELETE FROM restaurants WHERE id = ?").run(req.params.id);
