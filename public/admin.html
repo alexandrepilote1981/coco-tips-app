@@ -434,6 +434,7 @@ const I18N = {
     noteQuartPlaceholder: "Note (optionnel)",
     ajouterQuart: "Ajouter un quart",
     erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
+    erreurSuppression: "Erreur lors de la suppression. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
     enAttenteLabel: "En attente",
     messagesTitle: "Messages des employés",
@@ -539,6 +540,7 @@ const I18N = {
     noteQuartPlaceholder: "Note (optional)",
     ajouterQuart: "Add a shift",
     erreurAjoutQuart: "Error adding the shift. Try again.",
+    erreurSuppression: "Error deleting. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
     enAttenteLabel: "Pending",
     messagesTitle: "Messages from employees",
@@ -1350,8 +1352,12 @@ function render() {
   document.querySelectorAll('[data-action="delEmployee"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm(t("confirmRetirerEmploye"))) return;
-      await api(`/api/admin/employees/${btn.dataset.id}`, { method: "DELETE" });
-      await load();
+      try {
+        await api(`/api/admin/employees/${btn.dataset.id}`, { method: "DELETE" });
+        await load();
+      } catch (err) {
+        alert(t("erreurSuppression"));
+      }
     });
   });
 
@@ -1393,8 +1399,12 @@ function render() {
   document.querySelectorAll('[data-action="delRestaurant"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm(t("confirmSupprimerRestaurant"))) return;
-      await api(`/api/admin/restaurants/${btn.dataset.id}`, { method: "DELETE" });
-      await load();
+      try {
+        await api(`/api/admin/restaurants/${btn.dataset.id}`, { method: "DELETE" });
+        await load();
+      } catch (err) {
+        alert(t("erreurSuppression"));
+      }
     });
   });
 }
