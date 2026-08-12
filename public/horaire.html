@@ -262,6 +262,11 @@
     background: rgba(255,255,255,0.08); border: none; color: #F1EFEA; padding: 6px 10px;
     border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
   }
+  .duplicate-week-btn {
+    background: rgba(212,168,87,0.14); border: 1px solid rgba(212,168,87,0.3); color: #D4A857;
+    font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
+    display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+  }
   .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
   .day-head { text-align: center; padding: 6px 2px; }
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
@@ -363,6 +368,11 @@ const I18N = {
     enregistrer: "Enregistrer",
     noteQuartPlaceholder: "Note (optionnel)",
     erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
+    copierSemaineSuivante: "Copier vers la semaine suivante",
+    aucunQuartACopier: "Aucun quart cette semaine à copier.",
+    confirmCopierSemaine: (n) => `Copier ${n} quart${n > 1 ? "s" : ""} vers la semaine suivante?`,
+    copieEnCours: "Copie en cours…",
+    quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
     dashboardTitle: "Horaire",
     lienInvalideTitre: "Lien invalide",
@@ -385,6 +395,11 @@ const I18N = {
     enregistrer: "Save",
     noteQuartPlaceholder: "Note (optional)",
     erreurAjoutQuart: "Error adding the shift. Try again.",
+    copierSemaineSuivante: "Copy to next week",
+    aucunQuartACopier: "No shifts this week to copy.",
+    confirmCopierSemaine: (n) => `Copy ${n} shift${n > 1 ? "s" : ""} to next week?`,
+    copieEnCours: "Copying…",
+    quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     confirmSupprimerQuart: "Delete this shift?",
     dashboardTitle: "Schedule",
     lienInvalideTitre: "Invalid link",
@@ -405,6 +420,7 @@ const ICON_PATHS = {
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
 };
 function icon(name, size = 16, extraStyle = "") {
   const path = ICON_PATHS[name];
@@ -557,6 +573,7 @@ function renderWeekGrid(restaurantId, employees) {
         <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
       </div>
     </div>
+    <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
     <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
       <div></div>
       ${dates.map((d) => `
@@ -599,6 +616,48 @@ function timeOptionsHTML(selected) {
     }
   }
   return opts;
+}
+
+// Copie tous les quarts de la semaine affichée vers la semaine suivante (mêmes employés,
+// mêmes heures, même rôle), en sautant les cases déjà remplies pour ne rien écraser.
+async function duplicateWeekToNext(restaurantId, btn) {
+  const restaurant = roster.restaurants.find((r) => r.id === restaurantId);
+  if (!restaurant) return;
+  const empIds = restaurant.employees.map((e) => e.id);
+  const dates = weekDates(weekStart).map((d) => isoDate(d));
+  const weekShifts = shifts.filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
+
+  if (weekShifts.length === 0) {
+    alert(t("aucunQuartACopier"));
+    return;
+  }
+  if (!confirm(t("confirmCopierSemaine", weekShifts.length))) return;
+
+  btn.disabled = true;
+  const originalText = btn.innerHTML;
+  btn.textContent = t("copieEnCours");
+  try {
+    let skipped = 0;
+    for (const s of weekShifts) {
+      const newDate = isoDate(addDays(new Date(s.date + "T12:00:00"), 7));
+      const alreadyExists = shifts.some((x) => x.employee_id === s.employee_id && x.date === newDate);
+      if (alreadyExists) { skipped++; continue; }
+      await shiftApiCall("/shifts", {
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: s.employee_id, date: newDate,
+          start_time: s.start_time, end_time: s.end_time, role: s.role, note: s.note,
+        }),
+      });
+    }
+    weekStart = addDays(weekStart, 7);
+    await load();
+    if (skipped > 0) alert(t("quartsIgnores", skipped));
+  } catch (err) {
+    alert(t("erreurAjoutQuart"));
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
 }
 
 function openShiftModal({ shiftId, employeeId, date }) {
@@ -718,6 +777,9 @@ function render() {
   });
   document.querySelectorAll('[data-action="editShift"]').forEach((btn) => {
     btn.addEventListener("click", () => openShiftModal({ shiftId: btn.dataset.id }));
+  });
+  document.querySelectorAll('[data-action="duplicateWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => duplicateWeekToNext(btn.dataset.resto, btn));
   });
 }
 
