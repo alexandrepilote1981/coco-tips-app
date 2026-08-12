@@ -35,25 +35,22 @@
   .kpi-value { font-family: 'Fraunces', serif; font-size: 21px; font-weight: 600; }
   .schedule-card { margin-top: 12px; }
   .section-label-sm { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-  .my-shift-list { display: flex; flex-direction: column; gap: 8px; }
-  .my-shift-row { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 10px 12px; }
-  .my-shift-date { font-size: 13px; font-weight: 700; color: #F1EFEA; }
-  .my-shift-time { font-size: 12px; color: #8993A4; margin-top: 2px; }
-  .week-strip { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+  .week-strip { display: flex; gap: 8px; margin-bottom: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
   .week-strip::-webkit-scrollbar { height: 4px; }
   .week-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
   .day-pill {
-    flex: 0 0 46px; scroll-snap-align: start; text-align: center; padding: 7px 2px; border-radius: 10px; background: rgba(255,255,255,0.03);
+    flex: 0 0 78px; scroll-snap-align: start; text-align: center; padding: 10px 6px; border-radius: 14px; background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06);
   }
   .day-pill.worked { background: rgba(111,191,147,0.14); border-color: rgba(111,191,147,0.35); }
-  .day-pill .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; }
+  .day-pill .dow { font-size: 10px; text-transform: uppercase; color: #8993A4; font-weight: 700; }
   .day-pill.worked .dow { color: #6FBF93; }
-  .day-pill .dnum { font-family: 'Fraunces', serif; font-size: 13px; font-weight: 600; margin-top: 2px; color: #F1EFEA; }
+  .day-pill .dnum { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; margin: 2px 0 6px; color: #F1EFEA; }
   .day-pill.is-today { border-color: rgba(212,168,87,0.5); }
   .day-pill.is-today .dnum { color: #D4A857; }
-  .my-shift-row { display: flex; justify-content: space-between; align-items: center; }
-  .next-badge { font-size: 8.5px; font-weight: 800; background: #D4A857; color: #10151D; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; white-space: nowrap; }
+  .day-pill .ptime { font-size: 10px; font-weight: 700; color: #F1EFEA; line-height: 1.3; }
+  .day-pill .prole { font-size: 8.5px; color: #8993A4; margin-top: 1px; }
+  .swipe-hint { font-size: 10px; color: #6B7280; text-align: center; }
   .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 22px 0 10px; display:flex; justify-content:space-between; align-items:center;}
   .add-btn { background:#6FBF93; color:#10151D; border:none; border-radius:999px; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; }
   .day-card { margin-bottom: 12px; }
@@ -186,6 +183,7 @@ const I18N = {
     ajouter: "+ Ajouter",
     multiEntryHint: "Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).",
     monHoraireAvenir: "Mon horaire à venir",
+    glisseIndication: "← glisse pour voir plus de journées →",
     aucunQuartSemaine: "Aucun quart prévu cette semaine.",
     prochain: "Prochain",
     hotesseTodayLabel: "Aujourd'hui je suis hôtesse",
@@ -243,6 +241,7 @@ const I18N = {
     ajouter: "+ Add",
     multiEntryHint: "You can add several entries for the same day (e.g. lunch and dinner separately).",
     monHoraireAvenir: "My upcoming schedule",
+    glisseIndication: "← swipe to see more days →",
     aucunQuartSemaine: "No shifts scheduled this week.",
     prochain: "Next",
     hotesseTodayLabel: "Today I am the hostess",
@@ -710,36 +709,23 @@ function render() {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const todayStr = dateToISO(today);
-            return Array.from({ length: 7 }, (_, i) => addDaysLocal(today, i)).map((d) => {
+            return Array.from({ length: 14 }, (_, i) => addDaysLocal(today, i)).map((d) => {
               const dStr = dateToISO(d);
-              const hasShift = myShifts.some((s) => s.date === dStr);
+              const shift = myShifts.find((s) => s.date === dStr);
               return `
-                <div class="day-pill ${hasShift ? "worked" : ""} ${dStr === todayStr ? "is-today" : ""}">
+                <div class="day-pill ${shift ? "worked" : ""} ${dStr === todayStr ? "is-today" : ""}">
                   <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
                   <div class="dnum">${d.getDate()}</div>
+                  ${shift ? `
+                    <div class="ptime">${shift.start_time}–${shift.end_time}</div>
+                    <div class="prole">${ROLES_EMP[shift.role || "server"][lang]}</div>
+                  ` : ""}
                 </div>
               `;
             }).join("");
           })()}
         </div>
-        <div class="my-shift-list">
-          ${(() => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const in7Days = dateToISO(addDaysLocal(today, 6));
-            const upcoming = myShifts.filter((s) => s.date <= in7Days);
-            if (upcoming.length === 0) return `<p style="font-size:12px; color:#8993A4; padding:4px 0 0;">${t("aucunQuartSemaine")}</p>`;
-            return upcoming.map((s, i) => `
-              <div class="my-shift-row">
-                <div>
-                  <div class="my-shift-date">${fmtDateShort(s.date)}</div>
-                  <div class="my-shift-time">${s.start_time} – ${s.end_time} · ${ROLES_EMP[s.role || "server"][lang]}${s.note ? ` · ${s.note}` : ""}</div>
-                </div>
-                ${i === 0 ? `<span class="next-badge">${t("prochain")}</span>` : ""}
-              </div>
-            `).join("");
-          })()}
-        </div>
+        <div class="swipe-hint">${t("glisseIndication")}</div>
       </div>` : ""}
 
       <div class="section-title">
