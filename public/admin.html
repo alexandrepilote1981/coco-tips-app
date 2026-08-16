@@ -261,11 +261,18 @@
     background: rgba(255,255,255,0.08); border: none; color: #F1EFEA; padding: 6px 10px;
     border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
   }
+  .week-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .duplicate-week-btn {
     background: rgba(212,168,87,0.14); border: 1px solid rgba(212,168,87,0.3); color: #D4A857;
     font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
-    display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 6px;
   }
+  .pdf-week-btn {
+    background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.32); color: #6FBF93;
+    font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pdf-week-btn:disabled, .duplicate-week-btn:disabled { opacity: 0.55; }
   .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
   .day-head { text-align: center; padding: 6px 2px; }
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
@@ -370,6 +377,7 @@ const ICON_PATHS = {
   dollar: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   chart: '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   alert: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/>',
@@ -446,6 +454,9 @@ const I18N = {
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     erreurSuppression: "Erreur lors de la suppression. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    telechargerPdf: "PDF de la semaine",
+    pdfEnCours: "Génération…",
+    erreurPdf: "Impossible de générer le PDF. Réessaie.",
     enAttenteLabel: "En attente",
     messagesTitle: "Messages des employés",
     messageTab: "Message",
@@ -557,6 +568,9 @@ const I18N = {
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     erreurSuppression: "Error deleting. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
+    telechargerPdf: "Week PDF",
+    pdfEnCours: "Generating…",
+    erreurPdf: "Could not generate the PDF. Try again.",
     enAttenteLabel: "Pending",
     messagesTitle: "Messages from employees",
     messageTab: "Message",
@@ -734,7 +748,10 @@ function renderWeekGrid(restaurantId, employees) {
         <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
       </div>
     </div>
-    <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
+    <div class="week-actions">
+      <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
+      <button class="pdf-week-btn" data-action="pdfWeek" data-resto="${restaurantId}">${icon("download", 13)} ${t("telechargerPdf")}</button>
+    </div>
     <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
       <div></div>
       ${dates.map((d) => `
@@ -777,6 +794,44 @@ function timeOptionsHTML(selected) {
     }
   }
   return opts;
+}
+
+// Télécharge le PDF de la semaine affichée (lundi → dimanche) pour ce restaurant.
+// Le fichier est récupéré en blob plutôt que par un lien <a href> direct, parce qu'il
+// faut envoyer le jeton admin en en-tête.
+async function downloadWeekPdf(restaurantId, btn) {
+  const weekISO = isoDate(weekStart);
+  const url = `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${lang}`;
+
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = t("pdfEnCours");
+  let objectUrl = null;
+  try {
+    const res = await fetch(url, { headers: { "X-Admin-Token": TOKEN } });
+    if (!res.ok) throw new Error("PDF");
+    const blob = await res.blob();
+
+    // Le serveur propose déjà un nom propre (Horaire_Chez-Coco_2026-08-17.pdf) — on le réutilise.
+    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+    const filename = match ? match[1] : `horaire-${weekISO}.pdf`;
+
+    objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    alert(t("erreurPdf"));
+  } finally {
+    // On libère l'URL après coup : la révoquer tout de suite couperait le téléchargement
+    // sur certains navigateurs mobiles.
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
+  }
 }
 
 // Copie tous les quarts de la semaine affichée vers la semaine suivante (mêmes employés,
@@ -1345,6 +1400,9 @@ function render() {
   });
   document.querySelectorAll('[data-action="duplicateWeek"]').forEach((btn) => {
     btn.addEventListener("click", () => duplicateWeekToNext(btn.dataset.resto, btn));
+  });
+  document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn));
   });
 
   document.querySelectorAll('[data-action="jumpToEmployee"]').forEach((btn) => {
