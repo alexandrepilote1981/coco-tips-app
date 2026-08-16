@@ -262,11 +262,18 @@
     background: rgba(255,255,255,0.08); border: none; color: #F1EFEA; padding: 6px 10px;
     border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
   }
+  .week-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .duplicate-week-btn {
     background: rgba(212,168,87,0.14); border: 1px solid rgba(212,168,87,0.3); color: #D4A857;
     font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
-    display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 6px;
   }
+  .pdf-week-btn {
+    background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.32); color: #6FBF93;
+    font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pdf-week-btn:disabled, .duplicate-week-btn:disabled { opacity: 0.55; }
   .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
   .day-head { text-align: center; padding: 6px 2px; }
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
@@ -374,6 +381,9 @@ const I18N = {
     copieEnCours: "Copie en cours…",
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    telechargerPdf: "PDF de la semaine",
+    pdfEnCours: "Génération…",
+    erreurPdf: "Impossible de générer le PDF. Réessaie.",
     dashboardTitle: "Horaire",
     lienInvalideTitre: "Lien invalide",
     lienInvalideMsg: "Ce lien horaire n'est plus valide. Vérifie le lien reçu, ou contacte ton gérant.",
@@ -401,6 +411,9 @@ const I18N = {
     copieEnCours: "Copying…",
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     confirmSupprimerQuart: "Delete this shift?",
+    telechargerPdf: "Week PDF",
+    pdfEnCours: "Generating…",
+    erreurPdf: "Could not generate the PDF. Try again.",
     dashboardTitle: "Schedule",
     lienInvalideTitre: "Invalid link",
     lienInvalideMsg: "This schedule link is no longer valid. Check the link you received, or contact your manager.",
@@ -421,6 +434,7 @@ const ICON_PATHS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
 };
 function icon(name, size = 16, extraStyle = "") {
   const path = ICON_PATHS[name];
@@ -573,7 +587,10 @@ function renderWeekGrid(restaurantId, employees) {
         <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
       </div>
     </div>
-    <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
+    <div class="week-actions">
+      <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
+      <button class="pdf-week-btn" data-action="pdfWeek" data-resto="${restaurantId}">${icon("download", 13)} ${t("telechargerPdf")}</button>
+    </div>
     <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
       <div></div>
       ${dates.map((d) => `
@@ -657,6 +674,46 @@ async function duplicateWeekToNext(restaurantId, btn) {
     alert(t("erreurAjoutQuart"));
     btn.disabled = false;
     btn.innerHTML = originalText;
+  }
+}
+
+// Télécharge le PDF de la semaine affichée (lundi → dimanche). Le fichier est construit
+// côté serveur, puis récupéré en blob : ça permet d'envoyer le jeton d'accès en en-tête,
+// ce qu'un simple lien <a href> ne pourrait pas faire.
+async function downloadWeekPdf(restaurantId, btn) {
+  const weekISO = isoDate(weekStart);
+  const url = RESTAURANT_CODE
+    ? `/api/schedule/by-code/${RESTAURANT_CODE}/pdf?week=${weekISO}&lang=${lang}`
+    : `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${lang}`;
+
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = t("pdfEnCours");
+  let objectUrl = null;
+  try {
+    const res = await fetch(url, RESTAURANT_CODE ? {} : { headers: { "X-Admin-Token": TOKEN } });
+    if (!res.ok) throw new Error("PDF");
+    const blob = await res.blob();
+
+    // Le serveur propose déjà un nom propre (Horaire_Chez-Coco_2026-08-17.pdf) — on le réutilise.
+    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+    const filename = match ? match[1] : `horaire-${weekISO}.pdf`;
+
+    objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    alert(t("erreurPdf"));
+  } finally {
+    // On libère l'URL après coup : la révoquer tout de suite couperait le téléchargement
+    // sur certains navigateurs mobiles.
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
   }
 }
 
@@ -780,6 +837,9 @@ function render() {
   });
   document.querySelectorAll('[data-action="duplicateWeek"]').forEach((btn) => {
     btn.addEventListener("click", () => duplicateWeekToNext(btn.dataset.resto, btn));
+  });
+  document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
+    btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn));
   });
 }
 

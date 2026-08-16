@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const { db, nanoid, makeAccessCode, PHOTOS_DIR } = require("./db");
+const { buildSchedulePdf, schedulePdfFilename } = require("./pdf-horaire");
 
 const app = express();
 app.use(express.json({ limit: "12mb" })); // les photos en base64 sont plus lourdes que du texte
@@ -302,6 +303,77 @@ app.delete("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
   if (!shift) return res.status(404).json({ error: "Quart introuvable" });
   db.prepare("DELETE FROM shifts WHERE id=?").run(req.params.id);
   res.json({ ok: true });
+});
+
+// ---------- PDF de l'horaire (semaine complète, lundi → dimanche) ----------
+
+// Le PDF couvre toujours une semaine pleine : on envoie n'importe quelle date de la
+// semaine voulue et pdf-horaire.js la ramène au lundi.
+function isoOrToday(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function employeesOf(restaurantId) {
+  return db
+    // Même ordre que la grille à l'écran, pour que le PDF se lise comme ce que le gérant vient de voir.
+    .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
+    .all(restaurantId);
+}
+
+function shiftsOfWeek(restaurantId, weekStartISO) {
+  // On récupère large (2 semaines autour) et le module PDF filtre sur les 7 jours exacts —
+  // ça évite de dupliquer ici le calcul du lundi.
+  return db
+    .prepare(`
+      SELECT s.* FROM shifts s
+      JOIN employees e ON e.id = s.employee_id
+      WHERE e.restaurant_id = ?
+        AND s.date >= date(?, '-7 day') AND s.date <= date(?, '+7 day')
+      ORDER BY s.date ASC, s.start_time ASC
+    `)
+    .all(restaurantId, weekStartISO, weekStartISO);
+}
+
+async function sendSchedulePdf(res, restaurant, weekStartISO, lang) {
+  const buffer = await buildSchedulePdf({
+    restaurantName: restaurant.name,
+    employees: employeesOf(restaurant.id),
+    shifts: shiftsOfWeek(restaurant.id, weekStartISO),
+    weekStartISO,
+    lang,
+  });
+  const filename = schedulePdfFilename(restaurant.name, weekStartISO, lang);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Length", buffer.length);
+  res.setHeader("Cache-Control", "no-store");
+  res.send(buffer);
+}
+
+// Mode lien direct (/horaire/CODE) : le code fait office de clé, comme pour les autres routes by-code.
+app.get("/api/schedule/by-code/:code/pdf", async (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  try {
+    await sendSchedulePdf(res, r, isoOrToday(req.query.week), req.query.lang === "en" ? "en" : "fr");
+  } catch (err) {
+    console.error("PDF horaire (by-code) :", err);
+    res.status(500).json({ error: "Impossible de générer le PDF" });
+  }
+});
+
+// Mode mot de passe (/horaire) : même porte que le reste de la planification.
+app.get("/api/admin/schedule/pdf", requireScheduleAccess, async (req, res) => {
+  const restaurant = db.prepare("SELECT * FROM restaurants WHERE id = ?").get(req.query.restaurantId);
+  if (!restaurant) return res.status(404).json({ error: "Restaurant introuvable" });
+  try {
+    await sendSchedulePdf(res, restaurant, isoOrToday(req.query.week), req.query.lang === "en" ? "en" : "fr");
+  } catch (err) {
+    console.error("PDF horaire (admin) :", err);
+    res.status(500).json({ error: "Impossible de générer le PDF" });
+  }
 });
 
 app.get("/api/admin/overview", requireAdmin, (req, res) => {
