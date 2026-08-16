@@ -1,0 +1,23 @@
+# Dépendances installées — reconstruites par `npm install` au déploiement
+node_modules/
+
+# Base de données locale et fichiers WAL (en production, elle vit sur le volume Railway)
+data.sqlite
+data.sqlite-wal
+data.sqlite-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Photos justificatives téléversées (elles vivent à côté de la base, sur le volume)
+photos/
+
+# Variables d'environnement locales (ADMIN_PASSWORD, SCHEDULE_PASSWORD, etc.)
+.env
+.env.local
+
+# Fichiers système / éditeurs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
