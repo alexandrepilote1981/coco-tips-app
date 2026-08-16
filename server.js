@@ -27,6 +27,39 @@ const NO_CACHE_HEADERS = {
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 const SCHEDULE_PASSWORD = process.env.SCHEDULE_PASSWORD || "horaire2026";
 
+// Seuls ces formats sont acceptés en téléversement et renvoyés par /api/photos.
+// La valeur est l'extension écrite sur disque, la clé le sous-type du data: URI.
+const PHOTO_EXTENSIONS = {
+  jpeg: "jpg",
+  jpg: "jpg",
+  png: "png",
+  gif: "gif",
+  webp: "webp",
+  heic: "heic",
+  heif: "heif",
+};
+const PHOTO_CONTENT_TYPES = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+};
+
+// Supprime les fichiers photo d'une liste de journées — sinon ils s'accumulent
+// indéfiniment sur le volume après la suppression des entrées en base.
+function deletePhotoFiles(entries) {
+  for (const e of entries) {
+    if (!e || !e.photo_filename) continue;
+    try {
+      fs.unlinkSync(path.join(PHOTOS_DIR, path.basename(e.photo_filename)));
+    } catch (err) {
+      // fichier déjà absent — rien à faire
+    }
+  }
+}
+
 // ---------- helpers ----------
 function computeEntry(e) {
   const ventes = e.ventes || 0;
@@ -114,7 +147,9 @@ app.delete("/api/employee/:code/entries/:entryId", (req, res) => {
     .prepare("SELECT * FROM employees WHERE access_code = ?")
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
+  const entry = db.prepare("SELECT photo_filename FROM entries WHERE employee_id = ? AND id = ?").get(emp.id, req.params.entryId);
   db.prepare("DELETE FROM entries WHERE employee_id = ? AND id = ?").run(emp.id, req.params.entryId);
+  deletePhotoFiles([entry]);
   res.json({ ok: true });
 });
 
@@ -132,9 +167,14 @@ app.post("/api/employee/:code/entries/:entryId/photo", (req, res) => {
   const { photoBase64 } = req.body;
   if (!photoBase64) return res.status(400).json({ error: "Photo requise" });
 
-  const match = /^data:image\/(\w+);base64,(.+)$/.exec(photoBase64);
+  const match = /^data:image\/([\w+.-]+);base64,(.+)$/.exec(photoBase64);
   if (!match) return res.status(400).json({ error: "Format de photo invalide" });
-  const ext = match[1] === "jpeg" ? "jpg" : match[1];
+  // On n'accepte QUE de vraies extensions d'image. Sans cette liste blanche, quelqu'un
+  // pouvait envoyer "data:image/html;base64,..." : le fichier était écrit en .html et
+  // /api/photos/ le renvoyait ensuite en text/html, donc du script exécuté sur le domaine
+  // de l'app (et le jeton admin est dans sessionStorage).
+  const ext = PHOTO_EXTENSIONS[match[1].toLowerCase()];
+  if (!ext) return res.status(400).json({ error: "Format de photo invalide" });
   const buffer = Buffer.from(match[2], "base64");
 
   const filename = `${entry.id}.${ext}`;
@@ -147,9 +187,19 @@ app.post("/api/employee/:code/entries/:entryId/photo", (req, res) => {
 app.get("/api/photos/:filename", (req, res) => {
   // sécurité de base : empêche de remonter dans l'arborescence via le nom de fichier
   const safeName = path.basename(req.params.filename);
+  // Deuxième garde-fou, en plus de la liste blanche au téléversement : on refuse de servir
+  // tout ce qui n'est pas une image, et on impose le type MIME au lieu de le déduire du
+  // nom de fichier. Ça neutralise aussi les fichiers déjà écrits avant cette correction.
+  const ext = (safeName.split(".").pop() || "").toLowerCase();
+  const contentType = PHOTO_CONTENT_TYPES[ext];
+  if (!contentType) return res.status(404).send("Photo introuvable");
+
   const filePath = path.join(PHOTOS_DIR, safeName);
   if (!fs.existsSync(filePath)) return res.status(404).send("Photo introuvable");
-  res.sendFile(filePath);
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+  res.sendFile(filePath, { headers: { "Content-Type": contentType } });
 });
 
 app.post("/api/employee/:code/messages", (req, res) => {
@@ -499,6 +549,7 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
 });
 
 app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {
+  deletePhotoFiles(db.prepare("SELECT photo_filename FROM entries WHERE employee_id = ?").all(req.params.id));
   db.prepare("DELETE FROM entries WHERE employee_id = ?").run(req.params.id);
   db.prepare("DELETE FROM shifts WHERE employee_id = ?").run(req.params.id);
   db.prepare("DELETE FROM messages WHERE employee_id = ?").run(req.params.id);
@@ -531,6 +582,7 @@ app.post("/api/admin/entries/:entryId/dismiss-flag", requireAdmin, (req, res) =>
 app.delete("/api/admin/restaurants/:id", requireAdmin, (req, res) => {
   const emps = db.prepare("SELECT id FROM employees WHERE restaurant_id = ?").all(req.params.id);
   for (const e of emps) {
+    deletePhotoFiles(db.prepare("SELECT photo_filename FROM entries WHERE employee_id = ?").all(e.id));
     db.prepare("DELETE FROM entries WHERE employee_id = ?").run(e.id);
     db.prepare("DELETE FROM shifts WHERE employee_id = ?").run(e.id);
     db.prepare("DELETE FROM messages WHERE employee_id = ?").run(e.id);

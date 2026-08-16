@@ -1,6 +1,7 @@
 const Database = require("better-sqlite3");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const { nanoid } = require("nanoid");
 
 // Railway: monter un volume sur /data pour que la DB survive aux redéploiements.
@@ -120,10 +121,12 @@ try {
 }
 
 function makeAccessCode() {
-  // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus
+  // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus.
+  // Tirage cryptographique et non Math.random() : ce code EST la clé d'accès d'un employé,
+  // et Math.random() est prévisible — connaître quelques codes permettait d'en deviner d'autres.
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
-  for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  for (let i = 0; i < 6; i++) code += alphabet[crypto.randomInt(alphabet.length)];
   return code;
 }
 
