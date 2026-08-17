@@ -345,12 +345,13 @@
   </div>
 </div>
 
+<!-- Grille d'horaire commune à cette page et à /admin : une seule définition. -->
+<script src="/shared/schedule-ui.js"></script>
 <script>
 let lang = localStorage.getItem("coco-lang") || "fr";
 let TOKEN = sessionStorage.getItem("scheduleToken") || "";
 let roster = null;
 let shifts = [];
-let weekStart = getMonday(new Date());
 
 // Si l'URL est /horaire/CODE, on est en mode lien direct pour un seul restaurant —
 // aucun mot de passe requis, comme les liens employés.
@@ -544,210 +545,19 @@ function renderLogin(errorMsg) {
   });
 }
 
-function getMonday(d) {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-function isoDate(d) {
-  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
-function weekDates(start) { return Array.from({ length: 7 }, (_, i) => addDays(start, i)); }
-function fmtWeekLabel(start) {
-  const end = addDays(start, 6);
-  const startStr = start.toLocaleDateString(t("locale"), { day: "numeric" });
-  const endStr = end.toLocaleDateString(t("locale"), { day: "numeric", month: "long" });
-  return t("semaineDu", startStr, endStr);
-}
-function fmtTime(tm) { return tm || ""; }
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
 
-const ROLES = {
-  server: { fr: "Serveur", en: "Server" },
-  hostess: { fr: "Hôtesse", en: "Host" },
-};
 
-function renderWeekGrid(restaurantId, employees) {
-  const dates = weekDates(weekStart);
-  const todayStr = todayISO();
-  return `
-    <div class="week-header">
-      <div class="week-title">${fmtWeekLabel(weekStart)}</div>
-      <div class="week-nav">
-        <button data-action="prevWeek" data-resto="${restaurantId}">‹</button>
-        <button data-action="thisWeek" data-resto="${restaurantId}">${t("aujourdhui")}</button>
-        <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
-      </div>
-    </div>
-    <div class="week-actions">
-      <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
-      <button class="pdf-week-btn" data-action="pdfWeek" data-resto="${restaurantId}">${icon("download", 13)} ${t("telechargerPdf")}</button>
-    </div>
-    <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
-      <div></div>
-      ${dates.map((d) => `
-        <div class="day-head ${isoDate(d) === todayStr ? "today" : ""}">
-          <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
-          <div class="dnum">${d.getDate()}</div>
-        </div>
-      `).join("")}
-      ${employees.map((emp) => `
-        <div class="emp-name-cell">${emp.name.split(" ")[0]}</div>
-        ${dates.map((d) => {
-          const dateStr = isoDate(d);
-          const shift = shifts.find((s) => s.employee_id === emp.id && s.date === dateStr);
-          return `
-            <div class="shift-cell">
-              ${shift
-                ? `<div class="shift-chip role-${shift.role || "server"}" data-action="editShift" data-id="${shift.id}">
-                     <div class="st">${fmtTime(shift.start_time)}–${fmtTime(shift.end_time)}</div>
-                     <div class="rl">${ROLES[shift.role || "server"][lang]}</div>
-                   </div>`
-                : `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}">+</button>`
-              }
-            </div>
-          `;
-        }).join("")}
-      `).join("")}
-    </div>
-  `;
-}
 
 // Génère les options d'heure valides (5h à 22h, tranches de 15 min) — fiable sur tous les téléphones,
 // contrairement au sélecteur natif <input type="time"> qui ignore parfois l'attribut step sur iOS.
-function timeOptionsHTML(selected) {
-  let opts = "";
-  for (let h = 5; h <= 22; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      if (h === 22 && m > 0) break;
-      const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      opts += `<option value="${val}" ${val === selected ? "selected" : ""}>${val}</option>`;
-    }
-  }
-  return opts;
-}
 
 // Copie tous les quarts de la semaine affichée vers la semaine suivante (mêmes employés,
 // mêmes heures, même rôle), en sautant les cases déjà remplies pour ne rien écraser.
-async function duplicateWeekToNext(restaurantId, btn) {
-  const restaurant = roster.restaurants.find((r) => r.id === restaurantId);
-  if (!restaurant) return;
-  const empIds = restaurant.employees.map((e) => e.id);
-  const dates = weekDates(weekStart).map((d) => isoDate(d));
-  const weekShifts = shifts.filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
-
-  if (weekShifts.length === 0) {
-    alert(t("aucunQuartACopier"));
-    return;
-  }
-  if (!confirm(t("confirmCopierSemaine", weekShifts.length))) return;
-
-  btn.disabled = true;
-  const originalText = btn.innerHTML;
-  btn.textContent = t("copieEnCours");
-  try {
-    let skipped = 0;
-    for (const s of weekShifts) {
-      const newDate = isoDate(addDays(new Date(s.date + "T12:00:00"), 7));
-      const alreadyExists = shifts.some((x) => x.employee_id === s.employee_id && x.date === newDate);
-      if (alreadyExists) { skipped++; continue; }
-      await shiftApiCall("/shifts", {
-        method: "POST",
-        body: JSON.stringify({
-          employee_id: s.employee_id, date: newDate,
-          start_time: s.start_time, end_time: s.end_time, role: s.role, note: s.note,
-        }),
-      });
-    }
-    weekStart = addDays(weekStart, 7);
-    await load();
-    if (skipped > 0) alert(t("quartsIgnores", skipped));
-  } catch (err) {
-    alert(t("erreurAjoutQuart"));
-    btn.disabled = false;
-    btn.innerHTML = originalText;
-  }
-}
 
 // Télécharge le PDF de la semaine affichée (lundi → dimanche). Le fichier est construit
 // côté serveur, puis récupéré en blob : ça permet d'envoyer le jeton d'accès en en-tête,
 // ce qu'un simple lien <a href> ne pourrait pas faire.
-async function downloadWeekPdf(restaurantId, btn) {
-  const weekISO = isoDate(weekStart);
-  const url = RESTAURANT_CODE
-    ? `/api/schedule/by-code/${RESTAURANT_CODE}/pdf?week=${weekISO}&lang=${lang}`
-    : `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${lang}`;
 
-  const originalHTML = btn.innerHTML;
-  btn.disabled = true;
-  btn.textContent = t("pdfEnCours");
-  let objectUrl = null;
-  try {
-    const res = await fetch(url, RESTAURANT_CODE ? {} : { headers: { "X-Admin-Token": TOKEN } });
-    if (!res.ok) throw new Error("PDF");
-    const blob = await res.blob();
-
-    // Le serveur propose déjà un nom propre (Horaire_Chez-Coco_2026-08-17.pdf) — on le réutilise.
-    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
-    const filename = match ? match[1] : `horaire-${weekISO}.pdf`;
-
-    objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objectUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  } catch (e) {
-    alert(t("erreurPdf"));
-  } finally {
-    // On libère l'URL après coup : la révoquer tout de suite couperait le téléchargement
-    // sur certains navigateurs mobiles.
-    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
-    btn.disabled = false;
-    btn.innerHTML = originalHTML;
-  }
-}
-
-function openShiftModal({ shiftId, employeeId, date }) {
-  const overlay = document.getElementById("shiftModalOverlay");
-  const existing = shiftId ? shifts.find((s) => s.id === shiftId) : null;
-  overlay.dataset.shiftId = shiftId || "";
-  overlay.dataset.employeeId = existing ? existing.employee_id : employeeId;
-
-  document.getElementById("shiftModalTitle").textContent = existing ? t("modifierQuart") : t("ajouterQuart");
-  document.getElementById("shiftModalEmpName").textContent = (() => {
-    const empId = existing ? existing.employee_id : employeeId;
-    for (const r of roster.restaurants) {
-      const e = r.employees.find((e) => e.id === empId);
-      if (e) return e.name;
-    }
-    return "";
-  })();
-  document.getElementById("shiftDateInput").value = existing ? existing.date : date;
-  document.getElementById("shiftStartInput").innerHTML = timeOptionsHTML(existing ? existing.start_time : "09:00");
-  document.getElementById("shiftEndInput").innerHTML = timeOptionsHTML(existing ? existing.end_time : "17:00");
-  document.getElementById("shiftRoleInput").innerHTML = Object.entries(ROLES).map(([val, labels]) => `<option value="${val}">${labels[lang]}</option>`).join("");
-  document.getElementById("shiftRoleInput").value = existing ? (existing.role || "server") : "server";
-  document.getElementById("shiftNoteInput").value = existing ? (existing.note || "") : "";
-  document.getElementById("shiftNoteInput").placeholder = t("noteQuartPlaceholder");
-  document.getElementById("shiftDeleteBtn").textContent = t("supprimerQuart");
-  document.getElementById("shiftDeleteBtn").style.display = existing ? "block" : "none";
-  document.getElementById("shiftSaveBtn").textContent = t("enregistrer");
-
-  overlay.style.display = "flex";
-}
-function closeShiftModal() {
-  document.getElementById("shiftModalOverlay").style.display = "none";
-}
 async function shiftApiCall(path, opts) {
   if (RESTAURANT_CODE) {
     const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}${path}`, {
@@ -760,45 +570,6 @@ async function shiftApiCall(path, opts) {
   return api(`/api/admin${path}`, opts);
 }
 
-async function saveShiftFromModal() {
-  const overlay = document.getElementById("shiftModalOverlay");
-  const employeeId = overlay.dataset.employeeId;
-  const shiftId = overlay.dataset.shiftId;
-  const payload = {
-    employee_id: employeeId,
-    date: document.getElementById("shiftDateInput").value,
-    start_time: document.getElementById("shiftStartInput").value,
-    end_time: document.getElementById("shiftEndInput").value,
-    role: document.getElementById("shiftRoleInput").value,
-    note: document.getElementById("shiftNoteInput").value,
-  };
-  if (!payload.date || !payload.start_time || !payload.end_time) return;
-  const btn = document.getElementById("shiftSaveBtn");
-  btn.disabled = true;
-  try {
-    if (shiftId) {
-      await shiftApiCall(`/shifts/${shiftId}`, { method: "POST", body: JSON.stringify(payload) });
-    } else {
-      await shiftApiCall("/shifts", { method: "POST", body: JSON.stringify(payload) });
-    }
-    await load();
-    closeShiftModal();
-  } catch (err) {
-    alert(t("erreurAjoutQuart"));
-  } finally {
-    btn.disabled = false;
-  }
-}
-async function deleteShiftFromModal() {
-  const overlay = document.getElementById("shiftModalOverlay");
-  const shiftId = overlay.dataset.shiftId;
-  if (!shiftId) return;
-  if (!confirm(t("confirmSupprimerQuart"))) return;
-  await shiftApiCall(`/shifts/${shiftId}`, { method: "DELETE" });
-  shifts = shifts.filter((s) => s.id !== shiftId);
-  closeShiftModal();
-  render();
-}
 
 function render() {
   let html = `
@@ -812,7 +583,7 @@ function render() {
     html += `
       <div class="card">
         <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${r.name}</div>
-        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : renderWeekGrid(r.id, r.employees)}
+        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, r.employees)}
       </div>
     `;
   });
@@ -820,35 +591,36 @@ function render() {
   document.getElementById("app").innerHTML = html;
 
   document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
-  document.querySelectorAll('[data-action="prevWeek"]').forEach((btn) => {
-    btn.addEventListener("click", () => { weekStart = addDays(weekStart, -7); render(); });
-  });
-  document.querySelectorAll('[data-action="nextWeek"]').forEach((btn) => {
-    btn.addEventListener("click", () => { weekStart = addDays(weekStart, 7); render(); });
-  });
-  document.querySelectorAll('[data-action="thisWeek"]').forEach((btn) => {
-    btn.addEventListener("click", () => { weekStart = getMonday(new Date()); render(); });
-  });
-  document.querySelectorAll('[data-action="newShift"]').forEach((btn) => {
-    btn.addEventListener("click", () => openShiftModal({ employeeId: btn.dataset.emp, date: btn.dataset.date }));
-  });
-  document.querySelectorAll('[data-action="editShift"]').forEach((btn) => {
-    btn.addEventListener("click", () => openShiftModal({ shiftId: btn.dataset.id }));
-  });
-  document.querySelectorAll('[data-action="duplicateWeek"]').forEach((btn) => {
-    btn.addEventListener("click", () => duplicateWeekToNext(btn.dataset.resto, btn));
-  });
-  document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
-    btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn));
-  });
+  ScheduleUI.bindGridEvents();
 }
 
-document.getElementById("shiftModalCloseX").addEventListener("click", closeShiftModal);
-document.getElementById("shiftModalOverlay").addEventListener("click", (ev) => {
-  if (ev.target === document.getElementById("shiftModalOverlay")) closeShiftModal();
+// Branche la grille partagée sur les données et l'API de CETTE page. Tout ce qui suit décrit
+// uniquement ce qui distingue la page horaire de la page admin ; l'affichage est commun.
+ScheduleUI.init({
+  t,
+  icon,
+  lang: () => lang,
+  restaurants: () => roster.restaurants,
+  shifts: () => shifts,
+  setShifts: (s) => { shifts = s; },
+  reloadShifts: async () => {
+    if (RESTAURANT_CODE) {
+      const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
+      return (await res.json()).shifts;
+    }
+    return (await api("/api/admin/shifts")).shifts;
+  },
+  shiftApi: (path, opts) => shiftApiCall(path, opts),
+  pdfRequest: (restaurantId, weekISO, langue) =>
+    RESTAURANT_CODE
+      ? { url: `/api/schedule/by-code/${RESTAURANT_CODE}/pdf?week=${weekISO}&lang=${langue}`, options: {} }
+      : {
+          url: `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${langue}`,
+          options: { headers: { "X-Admin-Token": TOKEN } },
+        },
+  rerender: () => render(),
 });
-document.getElementById("shiftSaveBtn").addEventListener("click", saveShiftFromModal);
-document.getElementById("shiftDeleteBtn").addEventListener("click", deleteShiftFromModal);
+ScheduleUI.bindShiftModal();
 
 if (RESTAURANT_CODE) load();
 else if (TOKEN) load();
