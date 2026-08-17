@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Icône Déclara : le même D vert que l'en-tête de l'application.
+       Carré arrondi #6FBF93, D serif italique sombre — proportions reprises de .title-mark
+       (34 px de côté, 9 px de rayon, D de 18 px), transposées sur 64 px. -->
+  <rect width="64" height="64" rx="17" ry="17" fill="#6FBF93"/>
+  <text x="32" y="46" text-anchor="middle"
+        font-family="Georgia, 'Liberation Serif', 'Times New Roman', serif"
+        font-style="italic" font-weight="700" font-size="40" fill="#10151D">D</text>
+</svg>
