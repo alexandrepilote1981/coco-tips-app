@@ -7,6 +7,7 @@ const { guard, noteFailure, clearFailures } = require("./rate-limit");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
 const { computeEntry } = require("./public/shared/tip-math.js");
+const { buildBackupZip } = require("./backup");
 
 const app = express();
 
@@ -451,6 +452,24 @@ app.get("/api/admin/schedule/pdf", requireScheduleAccess, async (req, res) => {
   } catch (err) {
     console.error("PDF horaire (admin) :", err);
     res.status(500).json({ error: "Impossible de générer le PDF" });
+  }
+});
+
+// Sauvegarde complète téléchargeable. Réservée à l'admin : le fichier contient tout,
+// y compris les codes d'accès des employés.
+app.get("/api/admin/backup", requireAdmin, async (req, res) => {
+  try {
+    const { buffer, filename, resume } = await buildBackupZip({ db, photosDir: PHOTOS_DIR });
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    // Permet à la page d'annoncer ce que contient la sauvegarde sans rouvrir le fichier.
+    res.setHeader("X-Backup-Summary", encodeURIComponent(JSON.stringify(resume)));
+    res.send(buffer);
+  } catch (err) {
+    console.error("Sauvegarde :", err);
+    res.status(500).json({ error: "Impossible de créer la sauvegarde" });
   }
 });
 

@@ -248,6 +248,14 @@
     display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; background: #D4A857; color: #10151D;
     font-size: 13.5px; font-weight: 700; padding: 13px; border-radius: 10px; box-shadow: 0 2px 8px rgba(212,168,87,0.25);
   }
+  .backup-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 10px;
+    background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.32); color: #6FBF93;
+    font-size: 13.5px; font-weight: 700; padding: 13px; border-radius: 10px;
+  }
+  .backup-btn:disabled { opacity: 0.55; }
+  .backup-hint { font-size: 11.5px; color: #8993A4; margin-top: 8px; line-height: 1.5; text-align: center; }
+  .backup-hint strong { color: #A8C4B4; font-weight: 600; }
   .sparkline-wrap { margin-top: 4px; }
   .sparkline-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 6px; }
   .sparkline-bar { fill: #6FBF93; }
@@ -379,7 +387,7 @@ const ICON_PATHS = {
   dollar: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
   chart: '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   alert: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/>',
@@ -423,6 +431,12 @@ const I18N = {
     choisisDate: "Choisis une date de début et de fin",
     duAu: (s, e) => `Du ${s} au ${e}`,
     exporter: "Exporter en CSV (pour Numbers/Excel)",
+    sauvegarder: "Télécharger une sauvegarde complète",
+    sauvegardeAide: "Garde ce fichier ailleurs que sur le site — sur ton téléphone, ton ordinateur ou dans tes courriels. Refais-en une de temps en temps.",
+    sauvegardeEnCours: "Préparation…",
+    sauvegardeErreur: "Impossible de créer la sauvegarde. Réessaie.",
+    sauvegardeFaite: (r) =>
+      `Sauvegarde téléchargée.\n\n${r.restaurants} restaurant(s)\n${r.employes} employé(s)\n${r.journees} journée(s) de pourboires\n${r.horaires} quart(s) de travail\n${r.messages} message(s)\n${r.photos} photo(s)${r.photosIncluses ? "" : " — NON incluses, trop volumineuses"}\n\nRange ce fichier ailleurs que sur le site.`,
     ajouterRestaurant: "Ajouter un restaurant",
     nomRestaurantPlaceholder: "Nom du restaurant (ex: Coco Frutti 016)",
     ajouter: "+ Ajouter",
@@ -537,6 +551,12 @@ const I18N = {
     choisisDate: "Choose a start and end date",
     duAu: (s, e) => `From ${s} to ${e}`,
     exporter: "Export CSV (for Numbers/Excel)",
+    sauvegarder: "Download a full backup",
+    sauvegardeAide: "Keep this file somewhere other than the site — on your phone, your computer, or in your email. Make a new one from time to time.",
+    sauvegardeEnCours: "Preparing…",
+    sauvegardeErreur: "Could not create the backup. Try again.",
+    sauvegardeFaite: (r) =>
+      `Backup downloaded.\n\n${r.restaurants} restaurant(s)\n${r.employes} employee(s)\n${r.journees} tip day(s)\n${r.horaires} shift(s)\n${r.messages} message(s)\n${r.photos} photo(s)${r.photosIncluses ? "" : " — NOT included, too large"}\n\nStore this file somewhere other than the site.`,
     ajouterRestaurant: "Add a restaurant",
     nomRestaurantPlaceholder: "Restaurant name (e.g. Coco Frutti 016)",
     ajouter: "+ Add",
@@ -956,6 +976,8 @@ function render() {
         </div>
         <div class="period-label">${periodLabel}</div>
         <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
+        <button class="backup-btn" id="backupBtn">${icon("shield", 14)} ${t("sauvegarder")}</button>
+        <p class="backup-hint">${t("sauvegardeAide")}</p>
       </div>
   `;
 
@@ -1124,6 +1146,7 @@ function render() {
   });
 
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
+  document.getElementById("backupBtn").addEventListener("click", (ev) => downloadBackup(ev.currentTarget));
 
   document.getElementById("addRestaurantBtn").addEventListener("click", async () => {
     const name = document.getElementById("newRestaurantName").value.trim();
@@ -1407,6 +1430,42 @@ function csvEscape(val) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;
+}
+
+// Télécharge une sauvegarde complète (base de données + versions lisibles + photos).
+// On passe par un blob plutôt que par un lien direct, pour pouvoir envoyer le jeton admin.
+async function downloadBackup(btn) {
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = t("sauvegardeEnCours");
+  let objectUrl = null;
+  try {
+    const res = await fetch("/api/admin/backup", { headers: { "X-Admin-Token": TOKEN } });
+    if (!res.ok) throw new Error("backup");
+    const blob = await res.blob();
+
+    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+    const filename = match ? match[1] : "sauvegarde.zip";
+
+    objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    // On annonce ce que contient la sauvegarde : le gérant doit pouvoir constater
+    // qu'elle n'est pas vide sans avoir à ouvrir le fichier.
+    const entete = res.headers.get("X-Backup-Summary");
+    if (entete) alert(t("sauvegardeFaite", JSON.parse(decodeURIComponent(entete))));
+  } catch (e) {
+    alert(t("sauvegardeErreur"));
+  } finally {
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
+  }
 }
 
 function exportCSV() {
