@@ -3,8 +3,15 @@ const path = require("path");
 const fs = require("fs");
 const { db, nanoid, makeAccessCode, PHOTOS_DIR } = require("./db");
 const { buildSchedulePdf, schedulePdfFilename } = require("./pdf-horaire");
+const { guard, noteFailure, clearFailures } = require("./rate-limit");
 
 const app = express();
+
+// Railway place un proxy devant l'app. Sans ça, req.ip vaudrait l'adresse du proxy pour
+// TOUT LE MONDE, et le plafond de tentatives bloquerait tous les utilisateurs d'un coup.
+// On fait confiance à un seul saut : l'adresse ajoutée par le proxy de Railway, et pas
+// un en-tête X-Forwarded-For que le client pourrait fabriquer lui-même.
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "12mb" })); // les photos en base64 sont plus lourdes que du texte
 app.use(
   express.static(path.join(__dirname, "public"), {
@@ -93,6 +100,22 @@ function requireScheduleAccess(req, res, next) {
 // =========================================================
 //  API EMPLOYÉ (accès par code, aucun mot de passe compliqué)
 // =========================================================
+
+// Toutes les routes /api/employee/:code/... passent d'abord ici. On ne compte que les codes
+// INCONNUS : un employé dont le code est bon peut rafraîchir sa page autant qu'il veut.
+// Volontairement, on ne remet pas le compteur à zéro sur un succès — sinon quelqu'un
+// possédant un code valide pourrait effacer son ardoise entre deux essais et deviner
+// tranquillement les codes des autres.
+app.use("/api/employee/:code", guard("employee-code"), (req, res, next) => {
+  const emp = db
+    .prepare("SELECT id FROM employees WHERE access_code = ?")
+    .get((req.params.code || "").toUpperCase());
+  if (!emp) {
+    noteFailure("employee-code", req);
+    return res.status(404).json({ error: "Code inconnu" });
+  }
+  next();
+});
 
 app.get("/api/employee/:code", (req, res) => {
   const emp = db
@@ -253,22 +276,23 @@ app.delete("/api/employee/:code/messages", (req, res) => {
 //  API ADMIN (Alex) — vue sur tous les restaurants/employés
 // =========================================================
 
-app.post("/api/admin/login", (req, res) => {
+app.post("/api/admin/login", guard("admin-login"), (req, res) => {
   if (req.body.password === ADMIN_PASSWORD) {
+    clearFailures("admin-login", req);
     return res.json({ token: ADMIN_PASSWORD });
   }
+  noteFailure("admin-login", req);
   res.status(401).json({ error: "Mot de passe incorrect" });
 });
 
 // Connexion horaire seulement : accepte le mot de passe horaire OU le mot de passe admin,
 // pour que la même page fonctionne peu importe qui se connecte.
-app.post("/api/schedule/login", (req, res) => {
-  if (req.body.password === SCHEDULE_PASSWORD) {
-    return res.json({ token: SCHEDULE_PASSWORD });
+app.post("/api/schedule/login", guard("schedule-login"), (req, res) => {
+  if (req.body.password === SCHEDULE_PASSWORD || req.body.password === ADMIN_PASSWORD) {
+    clearFailures("schedule-login", req);
+    return res.json({ token: req.body.password === SCHEDULE_PASSWORD ? SCHEDULE_PASSWORD : ADMIN_PASSWORD });
   }
-  if (req.body.password === ADMIN_PASSWORD) {
-    return res.json({ token: ADMIN_PASSWORD });
-  }
+  noteFailure("schedule-login", req);
   res.status(401).json({ error: "Mot de passe incorrect" });
 });
 
@@ -290,6 +314,15 @@ app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
 function getRestaurantByCode(code) {
   return db.prepare("SELECT * FROM restaurants WHERE schedule_code = ?").get((code || "").toUpperCase());
 }
+
+// Même protection que pour les codes employés, sur les liens horaire par code.
+app.use("/api/schedule/by-code/:code", guard("schedule-code"), (req, res, next) => {
+  if (!getRestaurantByCode(req.params.code)) {
+    noteFailure("schedule-code", req);
+    return res.status(404).json({ error: "Lien invalide" });
+  }
+  next();
+});
 
 app.get("/api/schedule/by-code/:code", (req, res) => {
   const r = getRestaurantByCode(req.params.code);
