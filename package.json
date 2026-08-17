@@ -4,7 +4,8 @@
   "description": "Suivi des pourboires multi-restaurants avec accès indépendant par employé",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

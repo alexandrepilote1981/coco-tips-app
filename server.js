@@ -4,6 +4,9 @@ const fs = require("fs");
 const { db, nanoid, makeAccessCode, PHOTOS_DIR } = require("./db");
 const { buildSchedulePdf, schedulePdfFilename } = require("./pdf-horaire");
 const { guard, noteFailure, clearFailures } = require("./rate-limit");
+// Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
+// EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
+const { computeEntry } = require("./public/shared/tip-math.js");
 
 const app = express();
 
@@ -16,9 +19,11 @@ app.use(express.json({ limit: "12mb" })); // les photos en base64 sont plus lour
 app.use(
   express.static(path.join(__dirname, "public"), {
     setHeaders: (res, filePath) => {
-      // Les pages HTML changent souvent pendant le développement — on force le navigateur
+      // Les pages HTML et le JavaScript partagé changent souvent — on force le navigateur
       // à toujours redemander la dernière version au lieu de garder une vieille copie en cache.
-      if (filePath.endsWith(".html")) {
+      // Sans ça pour les .js, quelqu'un pourrait se retrouver avec une page à jour qui
+      // appelle du code périmé après un déploiement.
+      if (filePath.endsWith(".html") || filePath.endsWith(".js")) {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
@@ -68,16 +73,6 @@ function deletePhotoFiles(entries) {
 }
 
 // ---------- helpers ----------
-function computeEntry(e) {
-  const ventes = e.ventes || 0;
-  const clients = e.clients || 0;
-  const pct = e.pct || 0;
-  const remis = e.remis || 0;
-  const pourboireBrut = ventes * (pct / 100);
-  const net = pourboireBrut - remis;
-  const moyenne = clients > 0 ? ventes / clients : 0;
-  return { ...e, ventes, clients, pct, remis, pourboireBrut, net, moyenne };
-}
 
 function requireAdmin(req, res, next) {
   const token = req.headers["x-admin-token"];

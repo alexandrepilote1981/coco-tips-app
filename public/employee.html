@@ -145,6 +145,8 @@
 
 <div id="app"></div>
 
+<!-- Même fichier que celui utilisé par le serveur : une seule définition du calcul. -->
+<script src="/shared/tip-math.js"></script>
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
 const ICON_PATHS = {
@@ -384,20 +386,12 @@ function fmtPct(n) {
   return n.toFixed(1) + "%";
 }
 
-// Recalcule les champs dérivés d'une entrée LOCALEMENT (miroir exact du calcul serveur),
-// pour pouvoir mettre à jour l'affichage instantanément sans attendre le serveur.
+// Recalcule les champs dérivés d'une entrée LOCALEMENT, pour mettre à jour l'affichage
+// instantanément sans attendre le serveur. Ce n'est plus un « miroir » du calcul serveur :
+// c'est littéralement le même code, chargé depuis /shared/tip-math.js. Les deux ne peuvent
+// donc plus diverger.
 function recomputeEntry(entry) {
-  const ventes = parseFloat(entry.ventes) || 0;
-  const clients = parseFloat(entry.clients) || 0;
-  const pct = parseFloat(entry.pct) || 0;
-  const remis = parseFloat(entry.remis) || 0;
-  entry.ventes = ventes;
-  entry.clients = clients;
-  entry.pct = pct;
-  entry.remis = remis;
-  entry.pourboireBrut = ventes * (pct / 100);
-  entry.net = entry.pourboireBrut - remis;
-  entry.moyenne = clients > 0 ? ventes / clients : 0;
+  TipMath.applyComputed(entry);
 }
 
 let conversation = [];
