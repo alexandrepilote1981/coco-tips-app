@@ -353,7 +353,29 @@ const ROLES_EMP = {
   hostess: { fr: "Hôtesse", en: "Host" },
 };
 
-let period = { mode: "2w" }; // '2w' | 'month' | 'all'
+const PERIOD_KEY = "coco-period";
+const PERIOD_DEFAUT = { mode: "2w" }; // '2w' | 'month' | 'all'
+
+// Comme pour la langue, la période choisie est gardée d'une visite à l'autre : sinon
+// l'employé qui suit son mois doit recliquer « 30 derniers jours » à chaque ouverture.
+function readPeriod() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PERIOD_KEY));
+    if (!saved || !["2w", "month", "all"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    return { mode: saved.mode };
+  } catch (e) {
+    return { ...PERIOD_DEFAUT };
+  }
+}
+function setPeriod(next) {
+  period = next;
+  try {
+    localStorage.setItem(PERIOD_KEY, JSON.stringify(period));
+  } catch (e) {
+    /* navigation privée ou stockage plein : la période reste en mémoire seulement */
+  }
+}
+let period = readPeriod();
 function resolvePeriod() {
   if (period.mode === "2w") return { start: isoDaysAgoLocal(13), end: todayLocalISO() };
   if (period.mode === "month") return { start: isoDaysAgoLocal(29), end: todayLocalISO() };
@@ -845,7 +867,7 @@ function render() {
 
   document.querySelectorAll('[data-period]').forEach((btn) => {
     btn.addEventListener("click", () => {
-      period = { mode: btn.dataset.period };
+      setPeriod({ mode: btn.dataset.period });
       render();
     });
   });
