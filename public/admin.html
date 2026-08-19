@@ -267,6 +267,7 @@
     background: rgba(255,255,255,0.07); color: #8993A4; flex-shrink: 0;
   }
   .period-error { font-size: 12px; color: #E2685A; margin: -8px 0 12px; }
+  .period-bar.is-busy { opacity: 0.5; pointer-events: none; }
   @media (max-width: 560px) {
     .period-bar > .period-dates { flex: 1 1 100%; }
     .period-dates input { flex: 1 1 40%; }
@@ -438,7 +439,30 @@ let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
 let messages = [];
 let shifts = [];
-let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
+const PERIOD_KEY = "coco-period-admin";
+const PERIOD_DEFAUT = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
+
+// La période choisie survit au rechargement de la page : sinon on retombe toujours sur
+// « 2 dernières semaines », même quand on consulte le même mois plusieurs fois de suite.
+function readPeriod() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PERIOD_KEY));
+    if (!saved || !["2w", "month", "all", "custom"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    if (saved.mode === "custom" && !(saved.start && saved.end)) return { ...PERIOD_DEFAUT };
+    return { mode: saved.mode, start: saved.start || null, end: saved.end || null };
+  } catch (e) {
+    return { ...PERIOD_DEFAUT };
+  }
+}
+function setPeriod(next) {
+  period = next;
+  try {
+    localStorage.setItem(PERIOD_KEY, JSON.stringify(period));
+  } catch (e) {
+    /* mode privé ou stockage plein : on garde la période en mémoire seulement */
+  }
+}
+let period = readPeriod();
 
 // ---------- Traductions ----------
 const I18N = {
@@ -457,6 +481,8 @@ const I18N = {
     a: "à",
     appliquer: "Appliquer",
     effacerPeriode: "Effacer la période personnalisée",
+    dateDebut: "Date de début",
+    dateFin: "Date de fin",
     dateDebutApres: "La date de début doit être avant la date de fin.",
     toutesLesDonnees: "Toutes les données, sans limite de date",
     choisisDate: "Choisis une date de début et de fin",
@@ -579,6 +605,8 @@ const I18N = {
     a: "to",
     appliquer: "Apply",
     effacerPeriode: "Clear the custom range",
+    dateDebut: "Start date",
+    dateFin: "End date",
     dateDebutApres: "The start date must be before the end date.",
     toutesLesDonnees: "All data, no date limit",
     choisisDate: "Choose a start and end date",
@@ -996,21 +1024,21 @@ function render() {
         <div id="messagesInbox"></div>
       </div>
       <div class="card">
-        <div class="section-label">${t("periodeAffichee")}</div>
-        <div class="period-bar">
-          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
-          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
-          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
+        <div class="section-label" id="periodeAfficheeLabel">${t("periodeAffichee")}</div>
+        <div class="period-bar" role="group" aria-labelledby="periodeAfficheeLabel">
+          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w" aria-pressed="${period.mode === "2w"}">${t("p2Semaines")}</button>
+          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month" aria-pressed="${period.mode === "month"}">${t("p30Jours")}</button>
+          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all" aria-pressed="${period.mode === "all"}">${t("pTout")}</button>
           <div class="period-dates ${isCustom ? "active" : ""}">
-            <input type="date" id="customStart" value="${isCustom ? period.start || "" : ""}" />
-            <span>${t("a")}</span>
-            <input type="date" id="customEnd" value="${isCustom ? period.end || "" : ""}" />
+            <input type="date" id="customStart" aria-label="${t("dateDebut")}" title="${t("dateDebut")}" value="${isCustom ? period.start || "" : ""}" />
+            <span aria-hidden="true">${t("a")}</span>
+            <input type="date" id="customEnd" aria-label="${t("dateFin")}" title="${t("dateFin")}" value="${isCustom ? period.end || "" : ""}" />
             <button class="period-apply" id="customApply" ${isCustom && period.start && period.end ? "" : "disabled"}>${t("appliquer")}</button>
-            ${isCustom ? `<button class="period-clear" id="customClear" title="${t("effacerPeriode")}">✕</button>` : ""}
+            ${isCustom ? `<button class="period-clear" id="customClear" title="${t("effacerPeriode")}" aria-label="${t("effacerPeriode")}">✕</button>` : ""}
           </div>
         </div>
-        <div class="period-error" id="periodError" hidden></div>
-        <div class="period-label">${periodLabel}</div>
+        <div class="period-error" id="periodError" role="status" aria-live="polite" hidden></div>
+        <div class="period-label" aria-live="polite">${periodLabel}</div>
         <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
         <button class="backup-btn" id="backupBtn">${icon("shield", 14)} ${t("sauvegarder")}</button>
         <p class="backup-hint">${t("sauvegardeAide")}</p>
@@ -1161,17 +1189,27 @@ function render() {
 
   html += `</div>`; // ferme .content
 
+  // Le tableau de bord est reconstruit en entier à chaque rafraîchissement : sans ça,
+  // changer de période ou confirmer un virement renvoie l'admin en haut de la page.
+  const scrollAvant = window.scrollY;
   document.getElementById("app").innerHTML = html;
+  if (scrollAvant) window.scrollTo(0, scrollAvant);
 
   renderMessagesInbox();
 
   document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
 
+  const changePeriod = async (next) => {
+    setPeriod(next);
+    const bar = document.querySelector(".period-bar");
+    if (bar) {
+      bar.classList.add("is-busy");
+      bar.setAttribute("aria-busy", "true");
+    }
+    await load();
+  };
   document.querySelectorAll("[data-period]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      period = { mode: btn.dataset.period, start: null, end: null };
-      await load();
-    });
+    btn.addEventListener("click", () => changePeriod({ mode: btn.dataset.period, start: null, end: null }));
   });
   const customStart = document.getElementById("customStart");
   const customEnd = document.getElementById("customEnd");
@@ -1192,19 +1230,15 @@ function render() {
   });
   refreshCustomApply();
 
-  customApply.addEventListener("click", async () => {
+  customApply.addEventListener("click", () => {
     const s = customStart.value;
     const e = customEnd.value;
     if (!s || !e || s > e) return;
-    period = { mode: "custom", start: s, end: e };
-    await load();
+    changePeriod({ mode: "custom", start: s, end: e });
   });
   const customClear = document.getElementById("customClear");
   if (customClear) {
-    customClear.addEventListener("click", async () => {
-      period = { mode: "2w", start: null, end: null };
-      await load();
-    });
+    customClear.addEventListener("click", () => changePeriod({ ...PERIOD_DEFAUT }));
   }
 
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
