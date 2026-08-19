@@ -242,12 +242,36 @@
   .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
   .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 20px 0 8px; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .period-btn { background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 12px; padding: 7px 12px; border-radius: 999px; }
+  .period-btn {
+    background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 12px; height: 34px; padding: 0 14px;
+    border-radius: 999px; display: inline-flex; align-items: center; white-space: nowrap;
+  }
   .period-btn.active { background: #6FBF93; color: #10151D; }
-  .period-dates { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #8993A4; }
+  .period-dates {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: #8993A4;
+    border: 1px solid transparent; border-radius: 14px;
+  }
+  .period-dates.active { border-color: rgba(111,191,147,0.45); background: rgba(111,191,147,0.08); padding: 5px 8px; }
   .period-dates input {
-    padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; font-size: 12px;
-    margin-bottom: 0; color: #F1EFEA;
+    height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.1); background: #10151D; font-size: 12px;
+    margin-bottom: 0; color: #F1EFEA; min-width: 0;
+  }
+  .period-dates input:focus { outline: none; border-color: #6FBF93; box-shadow: 0 0 0 3px rgba(111,191,147,0.15); }
+  .period-apply {
+    height: 34px; padding: 0 14px; font-size: 12px; border-radius: 9px; white-space: nowrap;
+    background: transparent; border: 1px solid rgba(111,191,147,0.5); color: #6FBF93;
+  }
+  .period-apply:disabled { border-color: rgba(255,255,255,0.1); color: #5B6577; cursor: not-allowed; }
+  .period-clear {
+    height: 34px; width: 34px; padding: 0; border-radius: 999px; font-size: 13px; line-height: 1;
+    background: rgba(255,255,255,0.07); color: #8993A4; flex-shrink: 0;
+  }
+  .period-error { font-size: 12px; color: #E2685A; margin: -8px 0 12px; }
+  .period-bar.is-busy { opacity: 0.5; pointer-events: none; }
+  @media (max-width: 560px) {
+    .period-bar > .period-dates { flex: 1 1 100%; }
+    .period-dates input { flex: 1 1 40%; }
+    .period-apply { flex: 1 1 120px; }
   }
   .period-label { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #F1EFEA; margin-top: 6px; margin-bottom: 6px; letter-spacing: -0.01em; }
   .export-btn {
@@ -415,7 +439,30 @@ let TOKEN = sessionStorage.getItem("adminToken") || "";
 let overview = null;
 let messages = [];
 let shifts = [];
-let period = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
+const PERIOD_KEY = "coco-period-admin";
+const PERIOD_DEFAUT = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
+
+// La période choisie survit au rechargement de la page : sinon on retombe toujours sur
+// « 2 dernières semaines », même quand on consulte le même mois plusieurs fois de suite.
+function readPeriod() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PERIOD_KEY));
+    if (!saved || !["2w", "month", "all", "custom"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    if (saved.mode === "custom" && !(saved.start && saved.end)) return { ...PERIOD_DEFAUT };
+    return { mode: saved.mode, start: saved.start || null, end: saved.end || null };
+  } catch (e) {
+    return { ...PERIOD_DEFAUT };
+  }
+}
+function setPeriod(next) {
+  period = next;
+  try {
+    localStorage.setItem(PERIOD_KEY, JSON.stringify(period));
+  } catch (e) {
+    /* mode privé ou stockage plein : on garde la période en mémoire seulement */
+  }
+}
+let period = readPeriod();
 
 // ---------- Traductions ----------
 const I18N = {
@@ -433,6 +480,10 @@ const I18N = {
     pTout: "Tout l'historique",
     a: "à",
     appliquer: "Appliquer",
+    effacerPeriode: "Effacer la période personnalisée",
+    dateDebut: "Date de début",
+    dateFin: "Date de fin",
+    dateDebutApres: "La date de début doit être avant la date de fin.",
     toutesLesDonnees: "Toutes les données, sans limite de date",
     choisisDate: "Choisis une date de début et de fin",
     duAu: (s, e) => `Du ${s} au ${e}`,
@@ -553,6 +604,10 @@ const I18N = {
     pTout: "All history",
     a: "to",
     appliquer: "Apply",
+    effacerPeriode: "Clear the custom range",
+    dateDebut: "Start date",
+    dateFin: "End date",
+    dateDebutApres: "The start date must be before the end date.",
     toutesLesDonnees: "All data, no date limit",
     choisisDate: "Choose a start and end date",
     duAu: (s, e) => `From ${s} to ${e}`,
@@ -879,6 +934,7 @@ function render() {
   const periodLabel =
     period.mode === "all" ? t("toutesLesDonnees") :
     start && end ? t("duAu", fmtDateLong(start), fmtDateLong(end)) : t("choisisDate");
+  const isCustom = period.mode === "custom";
 
   let owedByMeCount = 0;
   let owedToMeCount = 0;
@@ -968,19 +1024,21 @@ function render() {
         <div id="messagesInbox"></div>
       </div>
       <div class="card">
-        <div class="section-label">${t("periodeAffichee")}</div>
-        <div class="period-bar">
-          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
-          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
-          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
-          <div class="period-dates">
-            <input type="date" id="customStart" value="${period.mode === "custom" ? period.start || "" : ""}" />
-            <span>${t("a")}</span>
-            <input type="date" id="customEnd" value="${period.mode === "custom" ? period.end || "" : ""}" />
-            <button class="period-btn" id="customApply">${t("appliquer")}</button>
+        <div class="section-label" id="periodeAfficheeLabel">${t("periodeAffichee")}</div>
+        <div class="period-bar" role="group" aria-labelledby="periodeAfficheeLabel">
+          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w" aria-pressed="${period.mode === "2w"}">${t("p2Semaines")}</button>
+          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month" aria-pressed="${period.mode === "month"}">${t("p30Jours")}</button>
+          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all" aria-pressed="${period.mode === "all"}">${t("pTout")}</button>
+          <div class="period-dates ${isCustom ? "active" : ""}">
+            <input type="date" id="customStart" aria-label="${t("dateDebut")}" title="${t("dateDebut")}" value="${isCustom ? period.start || "" : ""}" />
+            <span aria-hidden="true">${t("a")}</span>
+            <input type="date" id="customEnd" aria-label="${t("dateFin")}" title="${t("dateFin")}" value="${isCustom ? period.end || "" : ""}" />
+            <button class="period-apply" id="customApply" ${isCustom && period.start && period.end ? "" : "disabled"}>${t("appliquer")}</button>
+            ${isCustom ? `<button class="period-clear" id="customClear" title="${t("effacerPeriode")}" aria-label="${t("effacerPeriode")}">✕</button>` : ""}
           </div>
         </div>
-        <div class="period-label">${periodLabel}</div>
+        <div class="period-error" id="periodError" role="status" aria-live="polite" hidden></div>
+        <div class="period-label" aria-live="polite">${periodLabel}</div>
         <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
         <button class="backup-btn" id="backupBtn">${icon("shield", 14)} ${t("sauvegarder")}</button>
         <p class="backup-hint">${t("sauvegardeAide")}</p>
@@ -1131,25 +1189,57 @@ function render() {
 
   html += `</div>`; // ferme .content
 
+  // Le tableau de bord est reconstruit en entier à chaque rafraîchissement : sans ça,
+  // changer de période ou confirmer un virement renvoie l'admin en haut de la page.
+  const scrollAvant = window.scrollY;
   document.getElementById("app").innerHTML = html;
+  if (scrollAvant) window.scrollTo(0, scrollAvant);
 
   renderMessagesInbox();
 
   document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
 
-  document.querySelectorAll("[data-period]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      period = { mode: btn.dataset.period, start: null, end: null };
-      await load();
-    });
-  });
-  document.getElementById("customApply").addEventListener("click", async () => {
-    const s = document.getElementById("customStart").value;
-    const e = document.getElementById("customEnd").value;
-    if (!s || !e) return;
-    period = { mode: "custom", start: s, end: e };
+  const changePeriod = async (next) => {
+    setPeriod(next);
+    const bar = document.querySelector(".period-bar");
+    if (bar) {
+      bar.classList.add("is-busy");
+      bar.setAttribute("aria-busy", "true");
+    }
     await load();
+  };
+  document.querySelectorAll("[data-period]").forEach((btn) => {
+    btn.addEventListener("click", () => changePeriod({ mode: btn.dataset.period, start: null, end: null }));
   });
+  const customStart = document.getElementById("customStart");
+  const customEnd = document.getElementById("customEnd");
+  const customApply = document.getElementById("customApply");
+  const periodError = document.getElementById("periodError");
+
+  const refreshCustomApply = () => {
+    const s = customStart.value;
+    const e = customEnd.value;
+    const inverse = s && e && s > e;
+    periodError.hidden = !inverse;
+    periodError.textContent = inverse ? t("dateDebutApres") : "";
+    customApply.disabled = !s || !e || inverse;
+  };
+  [customStart, customEnd].forEach((input) => {
+    input.addEventListener("input", refreshCustomApply);
+    input.addEventListener("change", refreshCustomApply);
+  });
+  refreshCustomApply();
+
+  customApply.addEventListener("click", () => {
+    const s = customStart.value;
+    const e = customEnd.value;
+    if (!s || !e || s > e) return;
+    changePeriod({ mode: "custom", start: s, end: e });
+  });
+  const customClear = document.getElementById("customClear");
+  if (customClear) {
+    customClear.addEventListener("click", () => changePeriod({ ...PERIOD_DEFAUT }));
+  }
 
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
   document.getElementById("backupBtn").addEventListener("click", (ev) => downloadBackup(ev.currentTarget));
