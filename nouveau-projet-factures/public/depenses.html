@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mes dépenses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+    :root {
+      --fond: #10151D; --carte: #161C26; --texte: #F1EFEA; --gris: #8993A4;
+      --vert: #6FBF93; --or: #D4A857; --rouge: #E2685A; --bord: #232B38;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--fond); color: var(--texte);
+      font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
+    }
+    h1, h2, h3 { font-family: Fraunces, Georgia, serif; font-weight: 600; margin: 0 0 .5rem; }
+    a { color: var(--vert); }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+    .carte { background: var(--carte); border: 1px solid var(--bord); border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+    .gris { color: var(--gris); }
+    .or { color: var(--or); }
+    .rouge { color: var(--rouge); }
+    .vert { color: var(--vert); }
+    button, .bouton {
+      font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: .7rem 1.1rem;
+      background: var(--vert); color: #0B1016; cursor: pointer; text-decoration: none; display: inline-block;
+    }
+    button.secondaire { background: transparent; color: var(--texte); border: 1px solid var(--bord); }
+    button.danger { background: transparent; color: var(--rouge); border: 1px solid var(--rouge); }
+    button:disabled { opacity: .5; cursor: default; }
+    input, select, textarea {
+      font: inherit; width: 100%; padding: .6rem .7rem; border-radius: 10px;
+      border: 1px solid var(--bord); background: #0E131B; color: var(--texte);
+    }
+    label { display: block; font-size: .8rem; color: var(--gris); margin: .6rem 0 .2rem; }
+    .grille2 { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .alerte { border-left: 3px solid var(--or); padding: .5rem .75rem; background: #1C1B14; border-radius: 8px; margin: .5rem 0; font-size: .9rem; }
+    .alerte.grave { border-color: var(--rouge); background: #1E1416; }
+    .onglets { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    .onglets button { flex: 1; }
+    .vignette { width: 100%; max-height: 320px; object-fit: contain; border-radius: 10px; background: #0B1016; margin-bottom: .5rem; }
+    .totaux { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .totaux div { flex: 1; min-width: 110px; }
+    .totaux strong { display: block; font-size: 1.25rem; font-family: Fraunces, Georgia, serif; }
+    .ligne { display: flex; justify-content: space-between; gap: .5rem; padding: .5rem 0; border-bottom: 1px solid var(--bord); }
+    .ligne:last-child { border-bottom: 0; }
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<script src="/shared/taxes.js"></script>
+<script>
+let token = sessionStorage.getItem("appToken") || "";
+let factures = [];
+let onglet = "a_valider";
+let ouverte = null;   // id de la facture dépliée
+let erreur = "";
+let charge = false;
+
+const $ = (s) => document.querySelector(s);
+const entetes = () => ({ "X-App-Token": token, "Content-Type": "application/json" });
+const argent = (n) => (Number(n) || 0).toFixed(2) + " $";
+const echappe = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const LIBELLE_ALERTE = {
+  numeros_taxes_manquants: "Numéros de TPS/TVQ du fournisseur absents — un crédit de taxe peut être refusé sans eux.",
+  fournisseur_manquant: "Fournisseur manquant.",
+  date_manquante: "Date manquante.",
+};
+
+function render() {
+  const y = window.scrollY;
+  $("#app").innerHTML = token ? vueRegistre() : vueConnexion();
+  brancher();
+  window.scrollTo(0, y);
+}
+
+function vueConnexion() {
+  return `<h1>Mes dépenses</h1>
+    <div class="carte">
+      <label for="mdp">Mot de passe</label>
+      <input id="mdp" type="password" autocomplete="current-password" />
+      ${erreur ? `<div class="alerte grave">${echappe(erreur)}</div>` : ""}
+      <div style="margin-top:.75rem"><button id="entrer">Entrer</button></div>
+    </div>`;
+}
+
+function vueRegistre() {
+  const aValider = factures.filter((f) => f.statut === "a_valider");
+  const validees = factures.filter((f) => f.statut === "valide");
+  const liste = onglet === "a_valider" ? aValider : validees;
+
+  return `
+    <h1>Mes dépenses</h1>
+    <p><a href="/">← Photographier une facture</a></p>
+    ${erreur ? `<div class="alerte grave">${echappe(erreur)}</div>` : ""}
+    ${onglet === "valide" ? vueTotaux(validees) : ""}
+    <div class="onglets">
+      <button class="${onglet === "a_valider" ? "" : "secondaire"}" data-onglet="a_valider">À valider (${aValider.length})</button>
+      <button class="${onglet === "valide" ? "" : "secondaire"}" data-onglet="valide">Validées (${validees.length})</button>
+    </div>
+    ${!charge ? `<p class="gris">Chargement…</p>` : ""}
+    ${charge && !liste.length ? `<div class="carte gris">${onglet === "a_valider" ? "Rien à valider. Tout est à jour." : "Aucune dépense validée pour l'instant."}</div>` : ""}
+    ${liste.map(carte).join("")}
+    ${onglet === "valide" && validees.length ? `<div class="carte">
+      <h3>Export comptable</h3>
+      <p class="gris" style="font-size:.9rem;margin:.25rem 0 .5rem">Les dépenses validées seulement, en CSV lisible par Excel.</p>
+      <button id="exporter">Télécharger le CSV</button>
+    </div>` : ""}`;
+}
+
+function vueTotaux(validees) {
+  const somme = (c) => validees.reduce((t, f) => t + (Number(f[c]) || 0), 0);
+  return `<div class="carte totaux">
+    <div><span class="gris">Sous-total</span><strong>${argent(somme("sous_total"))}</strong></div>
+    <div><span class="gris">TPS</span><strong class="vert">${argent(somme("tps"))}</strong></div>
+    <div><span class="gris">TVQ</span><strong class="vert">${argent(somme("tvq"))}</strong></div>
+    <div><span class="gris">Total</span><strong class="or">${argent(somme("total"))}</strong></div>
+  </div>`;
+}
+
+function carte(f) {
+  const depliee = ouverte === f.id;
+  const coherence = Taxes.verifierCoherence(f);
+  const drapeaux = [];
+  if (!coherence.coherent) drapeaux.push(`<div class="alerte grave">Sous-total + taxes = ${argent(coherence.somme)}, total inscrit ${argent(coherence.total)}. Écart de ${argent(Math.abs(coherence.ecart))}.</div>`);
+  for (const a of f.alertes || []) if (LIBELLE_ALERTE[a]) drapeaux.push(`<div class="alerte">${LIBELLE_ALERTE[a]}</div>`);
+  if (f.extraction_erreur) drapeaux.push(`<div class="alerte">Analyse automatique indisponible : ${echappe(f.extraction_erreur)}. À saisir à la main.</div>`);
+
+  return `<div class="carte">
+    <div class="ligne" style="border:0;padding:0">
+      <div>
+        <strong>${echappe(f.fournisseur || "Fournisseur à préciser")}</strong><br />
+        <span class="gris">${echappe(f.date || "date à préciser")}${f.categorie ? " · " + echappe(f.categorie) : ""}</span>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <strong class="or">${argent(f.total)}</strong><br />
+        <button class="secondaire" data-ouvrir="${f.id}" style="padding:.3rem .6rem;font-size:.85rem;margin-top:.25rem">${depliee ? "Fermer" : "Ouvrir"}</button>
+      </div>
+    </div>
+    ${drapeaux.join("")}
+    ${depliee ? formulaire(f) : ""}
+  </div>`;
+}
+
+function formulaire(f) {
+  const champ = (cle, libelle, type) => `
+    <div>
+      <label for="c-${cle}">${libelle}</label>
+      <input id="c-${cle}" data-champ="${cle}" type="${type || "text"}" ${type === "number" ? 'step="0.01" inputmode="decimal"' : ""} value="${echappe(f[cle] ?? "")}" />
+    </div>`;
+
+  return `<div style="margin-top:.75rem">
+    ${f.photo_filename ? `<img class="vignette" alt="Photo de la facture" data-photo="${echappe(f.photo_filename)}" />` : ""}
+    ${champ("fournisseur", "Fournisseur")}
+    <div class="grille2">${champ("fournisseur_tps", "N° TPS du fournisseur")}${champ("fournisseur_tvq", "N° TVQ du fournisseur")}</div>
+    <div class="grille2">${champ("date", "Date", "date")}${champ("categorie", "Catégorie")}</div>
+    <div class="grille2">${champ("sous_total", "Sous-total", "number")}${champ("total", "Total", "number")}</div>
+    <div class="grille2">${champ("tps", "TPS", "number")}${champ("tvq", "TVQ", "number")}</div>
+    ${champ("mode_paiement", "Mode de paiement")}
+    ${champ("note", "Note")}
+    <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+      ${f.statut === "a_valider"
+        ? `<button data-valider="${f.id}">Valider et ajouter aux dépenses</button>
+           <button class="secondaire" data-enregistrer="${f.id}">Enregistrer sans valider</button>`
+        : `<button class="secondaire" data-enregistrer="${f.id}">Enregistrer</button>
+           <button class="secondaire" data-devalider="${f.id}">Remettre à valider</button>`}
+      <button class="danger" data-supprimer="${f.id}">Supprimer</button>
+    </div>
+  </div>`;
+}
+
+function brancher() {
+  const mdp = $("#mdp");
+  if (mdp) {
+    mdp.focus();
+    mdp.addEventListener("keydown", (e) => { if (e.key === "Enter") connecter(); });
+    $("#entrer").addEventListener("click", connecter);
+    return;
+  }
+  document.querySelectorAll("[data-onglet]").forEach((b) =>
+    b.addEventListener("click", () => { onglet = b.dataset.onglet; ouverte = null; render(); }));
+  document.querySelectorAll("[data-ouvrir]").forEach((b) =>
+    b.addEventListener("click", () => { ouverte = ouverte === b.dataset.ouvrir ? null : b.dataset.ouvrir; render(); }));
+  document.querySelectorAll("[data-enregistrer]").forEach((b) =>
+    b.addEventListener("click", () => sauver(b.dataset.enregistrer, null)));
+  document.querySelectorAll("[data-valider]").forEach((b) =>
+    b.addEventListener("click", () => sauver(b.dataset.valider, "valide")));
+  document.querySelectorAll("[data-devalider]").forEach((b) =>
+    b.addEventListener("click", () => sauver(b.dataset.devalider, "a_valider")));
+  document.querySelectorAll("[data-supprimer]").forEach((b) =>
+    b.addEventListener("click", () => supprimer(b.dataset.supprimer)));
+  $("#exporter")?.addEventListener("click", exporter);
+  chargerVignettes();
+}
+
+// Une balise <img> ne peut pas porter d'en-tête, et le mot de passe n'a rien à faire dans une
+// URL — il finirait dans l'historique du navigateur et dans les journaux du serveur. On va
+// donc chercher l'image par fetch et on l'affiche depuis un blob local.
+function chargerVignettes() {
+  document.querySelectorAll("[data-photo]").forEach(async (img) => {
+    try {
+      const r = await fetch("/api/photos/" + encodeURIComponent(img.dataset.photo), { headers: { "X-App-Token": token } });
+      if (!r.ok) return;
+      const url = URL.createObjectURL(await r.blob());
+      img.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+      img.src = url;
+    } catch (e) {
+      // vignette absente : la facture reste modifiable sans elle
+    }
+  });
+}
+
+function lireFormulaire() {
+  const corps = {};
+  document.querySelectorAll("[data-champ]").forEach((el) => {
+    const v = el.value.trim();
+    corps[el.dataset.champ] = el.type === "number" ? (v === "" ? 0 : Number(v)) : v;
+  });
+  return corps;
+}
+
+async function connecter() {
+  erreur = "";
+  const valeur = $("#mdp").value;
+  const r = await fetch("/api/session", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ motDePasse: valeur }),
+  });
+  if (!r.ok) {
+    erreur = (await r.json().catch(() => ({}))).error || "Connexion impossible";
+    return render();
+  }
+  token = valeur;
+  sessionStorage.setItem("appToken", token);
+  render();
+  charger();
+}
+
+async function charger() {
+  const r = await fetch("/api/factures", { headers: entetes() });
+  if (r.status === 401) { sessionStorage.removeItem("appToken"); token = ""; return render(); }
+  factures = (await r.json()).factures || [];
+  charge = true;
+  render();
+}
+
+async function sauver(id, statut, forcer) {
+  erreur = "";
+  const corps = lireFormulaire();
+  if (statut) corps.statut = statut;
+  if (forcer) corps.forcer = true;
+
+  const r = await fetch("/api/factures/" + id, { method: "PATCH", headers: entetes(), body: JSON.stringify(corps) });
+  if (r.status === 409) {
+    if (confirm("Une facture validée a déjà ce fournisseur, cette date et ce montant. C'est probablement un doublon. La valider quand même ?")) {
+      return sauver(id, statut, true);
+    }
+    return;
+  }
+  if (!r.ok) {
+    erreur = (await r.json().catch(() => ({}))).error || "Enregistrement impossible";
+    return render();
+  }
+  if (statut === "valide") ouverte = null;
+  await charger();
+}
+
+async function supprimer(id) {
+  if (!confirm("Supprimer cette facture et sa photo ? C'est définitif.")) return;
+  const r = await fetch("/api/factures/" + id, { method: "DELETE", headers: entetes() });
+  if (!r.ok) { erreur = "Suppression impossible"; return render(); }
+  ouverte = null;
+  await charger();
+}
+
+async function exporter() {
+  // fetch plutôt qu'un lien direct : le mot de passe voyage en en-tête, jamais dans l'URL,
+  // où il finirait dans l'historique du navigateur et les journaux du serveur.
+  const r = await fetch("/api/export.csv", { headers: entetes() });
+  if (!r.ok) { erreur = "Export impossible"; return render(); }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "depenses-" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+render();
+if (token) charger();
+</script>
+</body>
+</html>

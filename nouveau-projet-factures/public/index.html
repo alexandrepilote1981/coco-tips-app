@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Factures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+    :root {
+      --fond: #10151D; --carte: #161C26; --texte: #F1EFEA; --gris: #8993A4;
+      --vert: #6FBF93; --or: #D4A857; --rouge: #E2685A; --bord: #232B38;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--fond); color: var(--texte);
+      font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
+    }
+    h1, h2, h3 { font-family: Fraunces, Georgia, serif; font-weight: 600; margin: 0 0 .5rem; }
+    a { color: var(--vert); }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+    .carte { background: var(--carte); border: 1px solid var(--bord); border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+    .gris { color: var(--gris); }
+    .or { color: var(--or); }
+    .rouge { color: var(--rouge); }
+    .vert { color: var(--vert); }
+    button, .bouton {
+      font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: .7rem 1.1rem;
+      background: var(--vert); color: #0B1016; cursor: pointer; text-decoration: none; display: inline-block;
+    }
+    button.secondaire { background: transparent; color: var(--texte); border: 1px solid var(--bord); }
+    button.danger { background: transparent; color: var(--rouge); border: 1px solid var(--rouge); }
+    button:disabled { opacity: .5; cursor: default; }
+    input, select, textarea {
+      font: inherit; width: 100%; padding: .6rem .7rem; border-radius: 10px;
+      border: 1px solid var(--bord); background: #0E131B; color: var(--texte);
+    }
+    label { display: block; font-size: .8rem; color: var(--gris); margin: .6rem 0 .2rem; }
+    .grille2 { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .alerte { border-left: 3px solid var(--or); padding: .5rem .75rem; background: #1C1B14; border-radius: 8px; margin: .5rem 0; font-size: .9rem; }
+    .alerte.grave { border-color: var(--rouge); background: #1E1416; }
+    .geant { width: 100%; padding: 1.4rem; font-size: 1.15rem; border-radius: 16px; }
+    .lien-prive { word-break: break-all; font-size: .85rem; background: #0E131B; padding: .6rem; border-radius: 8px; border: 1px solid var(--bord); }
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<script src="/shared/taxes.js"></script>
+<script src="/shared/capture-photo.js"></script>
+<script>
+// L'état de la page tient dans ces quelques variables. Comme sur Déclara, render() reconstruit
+// TOUT le HTML puis rebranche les écouteurs : après un render(), une référence DOM gardée
+// d'avant ne pointe plus sur rien.
+let token = sessionStorage.getItem("appToken") || "";
+let erreur = "";
+let occupe = false;
+let resultat = null;
+let lienCapture = "";
+
+const $ = (s) => document.querySelector(s);
+const entetes = () => ({ "X-App-Token": token });
+const argent = (n) => (Number(n) || 0).toFixed(2) + " $";
+const echappe = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render() {
+  const y = window.scrollY;
+  $("#app").innerHTML = token ? vueAccueil() : vueConnexion();
+  brancher();
+  window.scrollTo(0, y);
+}
+
+function vueConnexion() {
+  return `
+    <h1>Factures</h1>
+    <p class="gris">Photographiez une facture, elle est lue et versée à vos dépenses après votre confirmation.</p>
+    <div class="carte">
+      <label for="mdp">Mot de passe</label>
+      <input id="mdp" type="password" autocomplete="current-password" />
+      ${erreur ? `<div class="alerte grave">${echappe(erreur)}</div>` : ""}
+      <div style="margin-top:.75rem"><button id="entrer">Entrer</button></div>
+    </div>`;
+}
+
+function vueAccueil() {
+  return `
+    <h1>Factures</h1>
+    <div class="carte">
+      <button id="photographier" class="geant">📷 Photographier une facture</button>
+      <input id="fichier" type="file" accept="image/*" capture="environment" hidden />
+      <p class="gris" style="margin:.75rem 0 0;font-size:.9rem">
+        La caméra s'ouvre directement. Rien n'est ajouté à vos dépenses avant votre confirmation.
+      </p>
+    </div>
+    ${occupe ? `<div class="carte"><strong>Analyse en cours…</strong><p class="gris" style="margin:.25rem 0 0">Quelques secondes.</p></div>` : ""}
+    ${erreur ? `<div class="alerte grave">${echappe(erreur)}</div>` : ""}
+    ${resultat ? vueResultat() : ""}
+    <div class="carte">
+      <a class="bouton" href="/depenses">Voir mes dépenses</a>
+    </div>
+    <div class="carte">
+      <h3>Lien privé pour le téléphone</h3>
+      <p class="gris" style="font-size:.9rem;margin:.25rem 0 .5rem">
+        Ce lien ouvre la caméra sans mot de passe. Il ne permet que de déposer une photo —
+        jamais de voir les montants. À mettre dans les favoris du téléphone.
+      </p>
+      ${lienCapture ? `<div class="lien-prive">${echappe(lienCapture)}</div>` : `<button id="voir-lien" class="secondaire">Afficher le lien</button>`}
+    </div>
+    <p><button id="sortir" class="secondaire">Se déconnecter</button></p>`;
+}
+
+function vueResultat() {
+  if (!resultat.extraite) {
+    return `<div class="carte">
+      <h3>Photo enregistrée</h3>
+      <p class="gris">${echappe(resultat.message || "")}</p>
+      <a class="bouton" href="/depenses">Compléter dans mes dépenses</a>
+    </div>`;
+  }
+  const f = resultat.facture;
+  const c = resultat.coherence;
+  return `<div class="carte">
+    <h3>Lu sur la facture</h3>
+    ${resultat.lisible === false ? `<div class="alerte">La photo est difficile à lire. Vérifiez chaque montant avant de valider.</div>` : ""}
+    ${c && !c.coherent ? `<div class="alerte grave">Sous-total + taxes = ${argent(c.somme)}, mais le total lu est ${argent(c.total)}. Un montant a probablement été mal lu.</div>` : ""}
+    <p style="margin:.5rem 0"><strong>${echappe(f.fournisseur || "Fournisseur inconnu")}</strong><br />
+    <span class="gris">${echappe(f.date || "date inconnue")}</span></p>
+    <p style="margin:.25rem 0">Sous-total ${argent(f.sous_total)} · TPS ${argent(f.tps)} · TVQ ${argent(f.tvq)}<br />
+    <strong class="or">Total ${argent(f.total)}</strong></p>
+    <p class="gris" style="font-size:.9rem">Rien n'est encore dans vos dépenses.</p>
+    <a class="bouton" href="/depenses">Vérifier et valider</a>
+  </div>`;
+}
+
+function brancher() {
+  const mdp = $("#mdp");
+  if (mdp) {
+    mdp.focus();
+    mdp.addEventListener("keydown", (e) => { if (e.key === "Enter") connecter(); });
+    $("#entrer").addEventListener("click", connecter);
+  }
+  $("#photographier")?.addEventListener("click", () => $("#fichier").click());
+  $("#fichier")?.addEventListener("change", envoyer);
+  $("#sortir")?.addEventListener("click", () => { sessionStorage.removeItem("appToken"); token = ""; render(); });
+  $("#voir-lien")?.addEventListener("click", chargerLien);
+}
+
+async function connecter() {
+  const valeur = $("#mdp").value;
+  erreur = "";
+  const r = await fetch("/api/session", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ motDePasse: valeur }),
+  });
+  if (!r.ok) {
+    erreur = (await r.json().catch(() => ({}))).error || "Connexion impossible";
+    return render();
+  }
+  token = valeur;
+  sessionStorage.setItem("appToken", token);
+  render();
+}
+
+async function chargerLien() {
+  const r = await fetch("/api/lien-capture", { headers: entetes() });
+  if (!r.ok) return;
+  lienCapture = location.origin + "/c/" + (await r.json()).code;
+  render();
+}
+
+async function envoyer(e) {
+  const file = e.target.files?.[0];
+  // Le champ est remis à zéro tout de suite : sans ça, rephotographier la même facture ne
+  // déclenche aucun événement « change » et le bouton semble mort.
+  e.target.value = "";
+  if (!file) return;
+
+  occupe = true; erreur = ""; resultat = null; render();
+  try {
+    const dataUrl = await CapturePhoto.compresser(file);
+    let data = await CapturePhoto.deposer(dataUrl, entetes());
+    if (data.doublon) {
+      const quoi = data.facture?.fournisseur ? `${data.facture.fournisseur} — ${argent(data.facture.total)}` : "une facture déjà déposée";
+      if (!confirm(`Cette photo correspond à ${quoi}. L'enregistrer quand même ?`)) {
+        occupe = false; return render();
+      }
+      data = await CapturePhoto.deposer(dataUrl, entetes(), true);
+    }
+    resultat = data;
+  } catch (err) {
+    erreur = err.message || "Envoi impossible";
+  }
+  occupe = false;
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

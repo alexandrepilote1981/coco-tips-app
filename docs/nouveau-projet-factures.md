@@ -37,6 +37,11 @@ légal et financier. Hors périmètre, sauf décision explicite contraire.
 - **Rien n'entre dans les dépenses sans confirmation humaine.** Voir « Le piège principal ».
 - **Aucun compte utilisateur classique** attendu au départ : le propriétaire est
   essentiellement le seul utilisateur.
+- **Même pile que Déclara** : Express + better-sqlite3, pages autonomes sans build,
+  déploiement Railway avec volume. Éprouvée en production et déjà maîtrisée.
+- **Français seulement** à l'écran, sans dictionnaire bilingue : l'utilisateur principal est
+  unique. Le patron `I18N` / `t()` de Déclara reste disponible si l'anglais devient nécessaire.
+- **Nom du dépôt : `factures-app`**, privé — c'est un outil de comptabilité d'entreprise.
 
 ## Le piège principal : jamais d'écriture automatique
 
@@ -121,15 +126,28 @@ Vision par l'API Claude : la photo est envoyée, le modèle retourne les champs 
 - Conventions : commentaires en français expliquant le *pourquoi*, toute chaîne visible passée
   par `t()` avec ses deux dictionnaires FR/EN, pas de dépendance nouvelle sans raison forte.
 
+## Où en est le code
+
+Une première version complète et testée vit dans `nouveau-projet-factures/` **de ce dépôt**.
+
+C'est un **dossier de transit, pas une décision d'architecture** : le dépôt `factures-app`
+n'a pas pu être créé depuis la session (l'accès GitHub y est limité à `coco-tips-app`, la
+création renvoie un 403). Le code est donc committé ici pour ne pas être perdu, et déménagera
+tel quel dès que le dépôt existera. Aucun fichier de Déclara n'est touché.
+
+Ce qui fonctionne :
+
+- caméra en un tap, compression dans le navigateur, dépôt ;
+- extraction par l'API Claude en sortie JSON contrainte, avec la clé `ANTHROPIC_API_KEY` ;
+- sans clé, tout marche quand même : la photo est conservée et la saisie se fait à la main ;
+- contrôle de cohérence des taxes, alertes de CTI, détection de doublons ;
+- registre « à valider » / « validées », export CSV ;
+- lien privé `/c/<code>` pour le téléphone, qui ne peut que déposer.
+
+23 tests passent, dont un parcours complet piloté dans un vrai navigateur.
+
 ## Ce qui reste à décider
 
-- **Nom du projet** et nom du dépôt.
-- **Où vit le dépôt** (compte GitHub, nom).
-- **Pile technique** : reprendre celle de Déclara (Express + better-sqlite3, pages autonomes
-  sans build, déploiement Railway) est le défaut recommandé — elle est éprouvée et déjà
-  maîtrisée — mais rien n'y oblige puisqu'on part de zéro.
-- **Bilingue FR/EN** comme Déclara, ou français seulement ? L'utilisateur principal est unique,
-  ce qui affaiblit le besoin.
 - **Catégories de dépenses** : lesquelles, et alignées sur quel plan comptable ? À valider avec
   le comptable — c'est lui qui reçoit l'export.
 - **Format d'export** attendu par le comptable (CSV brut, gabarit précis, autre ?).
