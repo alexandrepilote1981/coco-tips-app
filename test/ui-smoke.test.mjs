@@ -384,6 +384,113 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.taille(1000);
   });
 
+  // Réutilisé par les tests de déclaration : crée un employé et rend son lien privé.
+  async function creerEmploye(nom) {
+    const resto = await (
+      await api("/api/admin/restaurants", {
+        method: "POST",
+        body: JSON.stringify({ name: `Resto ${nom}` }),
+      })
+    ).json();
+    const employe = await (
+      await api("/api/admin/employees", {
+        method: "POST",
+        body: JSON.stringify({ restaurant_id: resto.id, name: nom }),
+      })
+    ).json();
+    return { restoId: resto.id, employe, lien: `${serveur.base}/e/${employe.access_code}` };
+  }
+
+  await t.test("la serveuse peut envoyer sa déclaration, et la modifier l'annule", async () => {
+    const { lien } = await creerEmploye("Fatima");
+    await onglet.aller(lien, "#addBtn");
+
+    // Une journée neuve : le bouton d'envoi est là, rien n'est encore envoyé.
+    await onglet.ev(`document.getElementById("addBtn").click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="submit"]')`), {
+      quoi: "le bouton d'envoi",
+    });
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".submitted-note")`),
+      false,
+      "rien ne devrait indiquer un envoi avant le clic"
+    );
+
+    // Elle remplit ses ventes, puis envoie.
+    await onglet.ev(`(function () {
+      var champ = document.querySelector('input[data-field="ventes"]');
+      champ.value = "420";
+      champ.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await jusqua(() => onglet.ev(`document.getElementById("kpi-ventes").textContent.indexOf("420") >= 0`), {
+      quoi: "la prise en compte des ventes",
+    });
+
+    await onglet.ev(`document.querySelector('[data-action="submit"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".submitted-note")`), {
+      quoi: "la confirmation d'envoi",
+    });
+    assert.match(
+      await onglet.ev(`document.querySelector(".submitted-note").textContent`),
+      /Envoyée le|Sent on/
+    );
+    assert.equal(
+      await onglet.ev(`!!document.querySelector('[data-action="submit"]')`),
+      false,
+      "le bouton d'envoi ne devrait plus être proposé une fois la journée envoyée"
+    );
+
+    // Elle corrige un montant : la journée redevient à envoyer, et le dit.
+    await onglet.ev(`(function () {
+      var champ = document.querySelector('input[data-field="ventes"]');
+      champ.value = "480";
+      champ.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="submit"]')`), {
+      quoi: "le retour du bouton d'envoi",
+    });
+    assert.equal(await onglet.ev(`!!document.querySelector(".submitted-note")`), false);
+    assert.match(
+      await onglet.ev(`document.querySelector(".submit-hint").textContent`),
+      /depuis l'envoi|after sending/
+    );
+
+    // Après un rechargement, l'état vient du serveur : toujours à envoyer.
+    await onglet.aller(lien, "[data-action='submit']");
+    assert.equal(await onglet.ev(`!!document.querySelector(".submitted-note")`), false);
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".submit-hint")`),
+      false,
+      "le rappel « modifiée depuis l'envoi » ne survit pas au rechargement, par construction"
+    );
+
+    // Renvoyée : l'état tient cette fois au rechargement.
+    await onglet.ev(`document.querySelector('[data-action="submit"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".submitted-note")`), { quoi: "le renvoi" });
+    await onglet.aller(lien, ".submitted-note");
+    assert.equal(await onglet.ev(`!!document.querySelector(".submitted-note")`), true);
+  });
+
+  await t.test("le gérant voit quelles journées ont été envoyées", async () => {
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="toggleReport"]')`), {
+      quoi: "la liste des employés",
+    });
+    await onglet.ev(`document.querySelector('[data-action="toggleReport"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".sent-badge")`), {
+      quoi: "la pastille d'envoi",
+    });
+    assert.match(
+      await onglet.ev(`document.querySelector(".sent-badge").textContent`),
+      /Envoyée|Sent/
+    );
+    assert.equal(
+      await onglet.ev(`document.querySelector(".sent-badge").classList.contains("sent")`),
+      true,
+      "la journée envoyée devrait porter la pastille verte"
+    );
+  });
+
   await t.test("la page employé garde aussi la période choisie", async () => {
     const resto = await (
       await api("/api/admin/restaurants", {

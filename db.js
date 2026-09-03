@@ -99,6 +99,7 @@ for (const col of [
   "delay_dismissed INTEGER DEFAULT 0",
   "modified_dismissed INTEGER DEFAULT 0",
   "data_updated_at TEXT",
+  "submitted_at TEXT",
 ]) {
   try {
     db.exec(`ALTER TABLE entries ADD COLUMN ${col};`);

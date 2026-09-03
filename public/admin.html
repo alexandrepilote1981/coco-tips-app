@@ -148,6 +148,12 @@
   .report-table td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; color: #D8D5CE; }
   .report-table tr:last-child td { border-bottom: none; }
   .report-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); vertical-align: middle; }
+  .sent-badge {
+    display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
+    white-space: nowrap; margin-top: 3px;
+  }
+  .sent-badge.sent { background: rgba(111,191,147,0.15); color: #6FBF93; }
+  .sent-badge.unsent { background: rgba(255,255,255,0.06); color: #8993A4; }
   .delay-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
   .delay-badge.delay-ok { background: rgba(111,191,147,0.15); color: #6FBF93; }
   .delay-badge.delay-warn { background: rgba(212,168,87,0.15); color: #D4A857; }
@@ -550,6 +556,8 @@ const I18N = {
     delaiOk: "À temps",
     delaiJours: (n) => `${n} j.`,
     modifieLe: (date) => `Modifié${date ? " le " + date : ""}`,
+    journeeEnvoyee: "Envoyée",
+    journeeNonEnvoyee: "Non envoyée",
     journeesRetardModif: (late, mod) => {
       const parts = [];
       if (late > 0) parts.push(`${late} déclaration${late > 1 ? "s" : ""} en retard`);
@@ -674,6 +682,8 @@ const I18N = {
     delaiOk: "On time",
     delaiJours: (n) => `${n} d.`,
     modifieLe: (date) => `Modified${date ? " on " + date : ""}`,
+    journeeEnvoyee: "Sent",
+    journeeNonEnvoyee: "Not sent",
     journeesRetardModif: (late, mod) => {
       const parts = [];
       if (late > 0) parts.push(`${late} late declaration${late > 1 ? "s" : ""}`);
@@ -1149,12 +1159,18 @@ function render() {
                   const delayCell = delayDays === 0
                     ? `<span class="delay-badge delay-ok">${t("delaiOk")}</span>`
                     : `<span class="delay-badge ${delayDays >= 3 ? "delay-bad" : "delay-warn"}">${t("delaiJours", delayDays)}</span>`;
+                  // « Non envoyée » reste volontairement gris et discret : les journées
+                  // antérieures à cette fonction n'ont jamais pu être envoyées, et les
+                  // peindre en rouge ferait croire à un retard qui n'existe pas.
+                  const sentBadge = d.submitted_at
+                    ? `<div class="sent-badge sent">${t("journeeEnvoyee")}</div>`
+                    : `<div class="sent-badge unsent">${t("journeeNonEnvoyee")}</div>`;
                   const modifiedBadge = wasModified(d)
                     ? `<div class="modified-badge">${icon("edit", 11)} ${t("modifieLe", fmtModifiedDate(d.data_updated_at))}</div>`
                     : "";
                   return `
                   <tr class="${rowClass}" id="row-${d.id}">
-                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#D4A857; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}</td>
+                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#D4A857; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}${sentBadge}</td>
                     <td>${delayCell}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>

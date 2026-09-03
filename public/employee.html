@@ -77,6 +77,21 @@
     background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 11px; font-weight: 700;
     padding: 8px 12px; border-radius: 10px; cursor: pointer; white-space: nowrap; margin-left: auto;
   }
+  .submit-row { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.07); }
+  .submit-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+    background: #6FBF93; color: #10151D; border: none; border-radius: 12px; padding: 13px;
+    font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(111,191,147,0.28);
+  }
+  .submit-btn.again { background: #D4A857; box-shadow: 0 2px 10px rgba(212,168,87,0.28); }
+  .submit-btn:disabled { opacity: 0.6; cursor: progress; box-shadow: none; }
+  .submit-hint { font-size: 11.5px; color: #D4A857; text-align: center; margin-top: 7px; font-weight: 600; }
+  .submitted-note {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: rgba(111,191,147,0.14); color: #6FBF93; border-radius: 12px; padding: 12px;
+    font-size: 12.5px; font-weight: 700;
+  }
   .remit-section { margin-top: 10px; }
   .hotesse-toggle {
     display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px 10px;
@@ -169,6 +184,7 @@ const ICON_PATHS = {
   tag: '<path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.42 0l8.58-8.58a1 1 0 0 0 0-1.42Z"/><path d="M7 7h.01"/>',
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/>',
 };
 function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
@@ -182,6 +198,10 @@ let currentEntries = []; // liste actuellement affichée (filtrée par période)
 const I18N = {
   fr: {
     savedNote: "Sauvegardé automatiquement",
+    envoyerDeclaration: "Envoyer ma déclaration",
+    envoyeeLe: (quand) => `Envoyée le ${quand}`,
+    modifieeDepuisEnvoi: "Tu as changé un montant depuis l'envoi.",
+    renvoyer: "Renvoyer ma déclaration",
     hello: "Salut",
     ventesTotal: "Ventes totales",
     pourboiresNets: "Pourboires nets",
@@ -240,6 +260,10 @@ const I18N = {
   },
   en: {
     savedNote: "Auto-saved",
+    envoyerDeclaration: "Send my declaration",
+    envoyeeLe: (quand) => `Sent on ${quand}`,
+    modifieeDepuisEnvoi: "You changed an amount after sending.",
+    renvoyer: "Send again",
     hello: "Hi",
     ventesTotal: "Total sales",
     pourboiresNets: "Net tips",
@@ -451,7 +475,29 @@ async function load() {
 }
 
 async function saveEntry(entry) {
-  return api(`/api/employee/${CODE}/entries`, { method: "POST", body: JSON.stringify(entry) });
+  const res = await api(`/api/employee/${CODE}/entries`, { method: "POST", body: JSON.stringify(entry) });
+  // Le serveur remet la journée à « non envoyée » dès qu'un montant change : on reflète la
+  // même chose localement plutôt que de recharger toute la page. Le passage par saveEntry
+  // couvre tous les cas (champs, mode hôtesse, virement), il n'y en a pas d'autre.
+  if (entry.submitted_at) {
+    entry.submitted_at = null;
+    entry.modifieeDepuisEnvoi = true;
+  }
+  return res;
+}
+
+async function submitEntry(entryId) {
+  return api(`/api/employee/${CODE}/entries/${entryId}/submit`, { method: "POST" });
+}
+
+// « Envoyée le 3 septembre à 21 h 47 » — l'heure compte autant que la date : deux versions
+// d'une même journée peuvent partir le même soir.
+function fmtEnvoiMoment(sqliteDatetime) {
+  if (!sqliteDatetime) return "";
+  const d = new Date(sqliteDatetime.replace(" ", "T") + "Z");
+  return d.toLocaleString(t("locale"), {
+    day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+  });
 }
 
 async function deleteEntry(entryId) {
@@ -478,6 +524,31 @@ function refreshTotals() {
   if (kc) kc.textContent = fmtMoney(parClient);
   const dc = document.getElementById("days-count");
   if (dc) dc.textContent = t("journees", currentEntries.length);
+}
+
+// Trois états possibles : jamais envoyée, envoyée, ou envoyée puis modifiée. Le troisième
+// n'existe que le temps de la visite en cours : le serveur ne garde pas le souvenir d'un
+// envoi annulé, et après un rechargement la journée est simplement « à envoyer ».
+function submitRowHtml(entry) {
+  if (entry.submitted_at) {
+    return `<div class="submitted-note">${icon("check", 15)} ${t("envoyeeLe", fmtEnvoiMoment(entry.submitted_at))}</div>`;
+  }
+  const aRenvoyer = !!entry.modifieeDepuisEnvoi;
+  return `
+    <button type="button" class="submit-btn ${aRenvoyer ? "again" : ""}" data-id="${entry.id}" data-action="submit">
+      ${icon("send", 15)} ${aRenvoyer ? t("renvoyer") : t("envoyerDeclaration")}
+    </button>
+    ${aRenvoyer ? `<div class="submit-hint">${t("modifieeDepuisEnvoi")}</div>` : ""}
+  `;
+}
+
+// Redessine le seul bloc d'envoi d'une carte, sans toucher aux champs que la serveuse est
+// peut-être en train de remplir.
+function refreshSubmitRow(card, entry) {
+  const row = card.querySelector(".submit-row");
+  if (!row) return;
+  row.innerHTML = submitRowHtml(entry);
+  attachSubmitListener(card, entry);
 }
 
 function refreshCardSummary(entry) {
@@ -572,6 +643,7 @@ function buildCardElement(e) {
       </div>` : ""}
       `}
     </div>
+    <div class="submit-row">${submitRowHtml(e)}</div>
   `;
   attachCardListeners(card, e);
   return card;
@@ -580,7 +652,26 @@ function buildCardElement(e) {
 // Attache tous les écouteurs d'UNE carte. Les modifications de champs simples ne font QUE
 // mettre à jour cette carte + les totaux, sans jamais reconstruire toute la liste — c'est ce
 // qui évite les bogues d'interaction sur mobile (double-tap, date qui revient en arrière).
+function attachSubmitListener(card, e) {
+  const btn = card.querySelector('[data-action="submit"]');
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = t("envoiEnCours");
+    try {
+      const res = await submitEntry(e.id);
+      e.submitted_at = res.submitted_at;
+      e.modifieeDepuisEnvoi = false;
+      refreshSubmitRow(card, e);
+    } catch (err) {
+      alert(t("erreurSauvegarde"));
+      refreshSubmitRow(card, e); // remet le bouton en état cliquable
+    }
+  });
+}
+
 function attachCardListeners(card, e) {
+  attachSubmitListener(card, e);
   card.querySelectorAll('input[data-field]').forEach((inp) => {
     inp.addEventListener("change", async (ev) => {
       const field = ev.target.dataset.field;
@@ -598,6 +689,7 @@ function attachCardListeners(card, e) {
       try {
         await saveEntry(e);
         flashSaved();
+        refreshSubmitRow(card, e);
       } catch (err) {
         alert(t("erreurSauvegarde"));
       }
@@ -619,6 +711,7 @@ function attachCardListeners(card, e) {
     refreshTotals();
     await saveEntry(e);
     flashSaved();
+    refreshSubmitRow(newCard, e);
   });
 
   card.querySelector('[data-action="del"]').addEventListener("click", async () => {
@@ -661,6 +754,7 @@ function attachCardListeners(card, e) {
       card.replaceWith(newCard);
       await saveEntry(e);
       flashSaved();
+      refreshSubmitRow(newCard, e);
     });
   });
 
@@ -670,6 +764,7 @@ function attachCardListeners(card, e) {
       e.remit_amount = parseFloat(ev.target.value) || 0;
       await saveEntry(e);
       flashSaved();
+      refreshSubmitRow(card, e);
     });
   }
 }

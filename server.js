@@ -146,8 +146,11 @@ app.post("/api/employee/:code/entries", (req, res) => {
     : null;
 
   if (existing) {
+    // submitted_at repasse à NULL : « envoyée » doit toujours désigner le contenu réellement
+    // transmis. Si la serveuse corrige un chiffre après avoir envoyé, la journée redevient à
+    // envoyer, sinon le gérant croirait final un montant qui a changé depuis.
     db.prepare(
-      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?, is_hotesse=?, updated_at=datetime('now'), data_updated_at=datetime('now') WHERE id=?`
+      `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?, is_hotesse=?, submitted_at=NULL, updated_at=datetime('now'), data_updated_at=datetime('now') WHERE id=?`
     ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse, existing.id);
     res.json({ ok: true, id: existing.id });
   } else {
@@ -159,6 +162,28 @@ app.post("/api/employee/:code/entries", (req, res) => {
     ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse);
     res.json({ ok: true, id: newId });
   }
+});
+
+// La serveuse déclare avoir fini de remplir sa journée. Aucune donnée déclarée n'est
+// touchée : on ne fait qu'horodater le moment où elle a dit « c'est complet ». Ajouter le
+// relevé photo ensuite ne l'annule pas — comme data_updated_at, la photo n'est pas une
+// donnée déclarée.
+app.post("/api/employee/:code/entries/:entryId/submit", (req, res) => {
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE access_code = ?")
+    .get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  const entry = db
+    .prepare("SELECT id FROM entries WHERE employee_id = ? AND id = ?")
+    .get(emp.id, req.params.entryId);
+  if (!entry) return res.status(404).json({ error: "Journée introuvable" });
+
+  db.prepare(
+    `UPDATE entries SET submitted_at=datetime('now'), updated_at=datetime('now') WHERE id=?`
+  ).run(entry.id);
+  const { submitted_at } = db.prepare("SELECT submitted_at FROM entries WHERE id = ?").get(entry.id);
+  res.json({ ok: true, submitted_at });
 });
 
 app.delete("/api/employee/:code/entries/:entryId", (req, res) => {
