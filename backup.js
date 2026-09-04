@@ -96,7 +96,7 @@ async function buildBackupZip({ db, photosDir }) {
     const entries = db
       .prepare(`SELECT en.date, r.name AS restaurant, e.name AS employe, en.ventes, en.clients, en.pct, en.remis,
                        en.remit_direction, en.remit_amount, en.transferred, en.transfer_date, en.is_hotesse,
-                       en.photo_filename, en.created_at, en.data_updated_at
+                       en.photo_filename, en.created_at, en.data_updated_at, en.submitted_at
                 FROM entries en
                 LEFT JOIN employees e ON e.id = en.employee_id
                 LEFT JOIN restaurants r ON r.id = e.restaurant_id
@@ -131,7 +131,7 @@ async function buildBackupZip({ db, photosDir }) {
           "date", "restaurant", "employe", "ventes", "clients", "pct", "remis",
           "pourboire_brut", "pourboire_net", "moyenne_par_client",
           "remit_direction", "remit_amount", "transferred", "transfer_date",
-          "is_hotesse", "photo_filename", "created_at", "data_updated_at",
+          "is_hotesse", "photo_filename", "created_at", "data_updated_at", "submitted_at",
         ]),
         "utf8"
       )
