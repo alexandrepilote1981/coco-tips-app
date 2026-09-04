@@ -441,7 +441,26 @@ function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
 }
 
-let TOKEN = sessionStorage.getItem("adminToken") || "";
+// Safari en navigation privée — et tout navigateur réglé pour bloquer les données de site —
+// peut lever une exception sur le simple ACCÈS à localStorage, pas seulement sur l'écriture.
+// Sans ces gardes, la ligne qui lit le jeton au chargement tuait le script en entier : écran
+// blanc, rien ne répond. Ici, la préférence est simplement perdue le temps de la visite.
+function lireStockage(zone, cle) {
+  try {
+    return window[zone].getItem(cle);
+  } catch (e) {
+    return null;
+  }
+}
+function ecrireStockage(zone, cle, valeur) {
+  try {
+    window[zone].setItem(cle, valeur);
+  } catch (e) {
+    /* réglage de confidentialité ou stockage plein : la valeur ne survivra pas à la visite */
+  }
+}
+
+let TOKEN = lireStockage("sessionStorage", "adminToken") || "";
 let overview = null;
 let messages = [];
 let shifts = [];
@@ -452,7 +471,7 @@ const PERIOD_DEFAUT = { mode: "2w", start: null, end: null }; // mode: '2w' | 'm
 // « 2 dernières semaines », même quand on consulte le même mois plusieurs fois de suite.
 function readPeriod() {
   try {
-    const saved = JSON.parse(localStorage.getItem(PERIOD_KEY));
+    const saved = JSON.parse(lireStockage("localStorage", PERIOD_KEY));
     if (!saved || !["2w", "month", "all", "custom"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
     if (saved.mode === "custom" && !(saved.start && saved.end)) return { ...PERIOD_DEFAUT };
     return { mode: saved.mode, start: saved.start || null, end: saved.end || null };
@@ -462,11 +481,7 @@ function readPeriod() {
 }
 function setPeriod(next) {
   period = next;
-  try {
-    localStorage.setItem(PERIOD_KEY, JSON.stringify(period));
-  } catch (e) {
-    /* mode privé ou stockage plein : on garde la période en mémoire seulement */
-  }
+  ecrireStockage("localStorage", PERIOD_KEY, JSON.stringify(period));
 }
 let period = readPeriod();
 
@@ -726,14 +741,14 @@ const I18N = {
   },
 };
 
-let lang = localStorage.getItem("coco-lang-admin") || "fr";
+let lang = lireStockage("localStorage", "coco-lang-admin") || "fr";
 function t(key, ...args) {
   const val = I18N[lang][key];
   return typeof val === "function" ? val(...args) : val;
 }
 function setLang(l) {
   lang = l;
-  localStorage.setItem("coco-lang-admin", l);
+  ecrireStockage("localStorage", "coco-lang-admin", l);
   document.documentElement.lang = l;
   if (overview) render(); else renderLogin();
 }
@@ -823,7 +838,7 @@ async function login(password) {
   if (!r.ok) throw new Error(t("motDePasseIncorrect"));
   const { token } = await r.json();
   TOKEN = token;
-  sessionStorage.setItem("adminToken", token);
+  ecrireStockage("sessionStorage", "adminToken", token);
 }
 
 function renderLogin(errorMsg) {

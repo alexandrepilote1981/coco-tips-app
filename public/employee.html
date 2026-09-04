@@ -322,14 +322,33 @@ const I18N = {
   },
 };
 
-let lang = localStorage.getItem("coco-lang") || "fr";
+// Safari en navigation privée — et tout navigateur réglé pour bloquer les données de site —
+// peut lever une exception sur le simple ACCÈS à localStorage, pas seulement sur l'écriture.
+// Sans ces gardes, la ligne qui lit le jeton au chargement tuait le script en entier : écran
+// blanc, rien ne répond. Ici, la préférence est simplement perdue le temps de la visite.
+function lireStockage(zone, cle) {
+  try {
+    return window[zone].getItem(cle);
+  } catch (e) {
+    return null;
+  }
+}
+function ecrireStockage(zone, cle, valeur) {
+  try {
+    window[zone].setItem(cle, valeur);
+  } catch (e) {
+    /* réglage de confidentialité ou stockage plein : la valeur ne survivra pas à la visite */
+  }
+}
+
+let lang = lireStockage("localStorage", "coco-lang") || "fr";
 function t(key, ...args) {
   const val = I18N[lang][key];
   return typeof val === "function" ? val(...args) : val;
 }
 function setLang(l) {
   lang = l;
-  localStorage.setItem("coco-lang", l);
+  ecrireStockage("localStorage", "coco-lang", l);
   document.documentElement.lang = l;
   render();
 }
@@ -384,7 +403,7 @@ const PERIOD_DEFAUT = { mode: "2w" }; // '2w' | 'month' | 'all'
 // l'employé qui suit son mois doit recliquer « 30 derniers jours » à chaque ouverture.
 function readPeriod() {
   try {
-    const saved = JSON.parse(localStorage.getItem(PERIOD_KEY));
+    const saved = JSON.parse(lireStockage("localStorage", PERIOD_KEY));
     if (!saved || !["2w", "month", "all"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
     return { mode: saved.mode };
   } catch (e) {
@@ -393,11 +412,7 @@ function readPeriod() {
 }
 function setPeriod(next) {
   period = next;
-  try {
-    localStorage.setItem(PERIOD_KEY, JSON.stringify(period));
-  } catch (e) {
-    /* navigation privée ou stockage plein : la période reste en mémoire seulement */
-  }
+  ecrireStockage("localStorage", PERIOD_KEY, JSON.stringify(period));
 }
 let period = readPeriod();
 function resolvePeriod() {

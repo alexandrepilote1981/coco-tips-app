@@ -491,6 +491,49 @@ test("interface", optionsDuTest, async (t) => {
     );
   });
 
+  await t.test("les pages survivent à un navigateur qui refuse le stockage", async () => {
+    // Safari en navigation privée, ou « bloquer tous les témoins », fait lever une exception
+    // au simple accès à localStorage. On reproduit le cas le plus dur : l'accès lui-même
+    // échoue, avant même getItem. Une page qui n'y résiste pas reste blanche.
+    const sabotage = await onglet.envoyer("Page.addScriptToEvaluateOnNewDocument", {
+      source: `["localStorage", "sessionStorage"].forEach(function (zone) {
+        Object.defineProperty(window, zone, {
+          configurable: true,
+          get: function () { throw new DOMException("Stockage bloqué", "SecurityError"); },
+        });
+      });`,
+    });
+
+    const { lien } = await creerEmploye("Nadia");
+    await onglet.aller(lien, "#addBtn");
+    assert.equal(
+      await onglet.ev(`document.querySelectorAll("[data-period]").length`),
+      3,
+      "la page employé devrait s'afficher malgré un stockage inaccessible"
+    );
+    await onglet.ev(`document.querySelector('[data-period="all"]').click()`);
+    assert.equal(await periodeActive(), "all", "changer de période devrait rester possible");
+
+    await onglet.aller(`${serveur.base}/admin`, "#pw");
+    assert.equal(
+      await onglet.ev(`!!document.getElementById("loginBtn")`),
+      true,
+      "l'écran de connexion admin devrait s'afficher malgré un stockage inaccessible"
+    );
+    // La connexion écrit le jeton dans sessionStorage : elle doit aboutir quand même.
+    await onglet.ev(`(function () {
+      document.getElementById("pw").value = ${JSON.stringify(MOT_DE_PASSE)};
+      document.getElementById("loginBtn").click();
+    })()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".period-bar")`), {
+      quoi: "le tableau de bord après connexion sans stockage",
+    });
+
+    await onglet.envoyer("Page.removeScriptToEvaluateOnNewDocument", {
+      identifier: sabotage.result.identifier,
+    });
+  });
+
   await t.test("la page employé garde aussi la période choisie", async () => {
     const resto = await (
       await api("/api/admin/restaurants", {

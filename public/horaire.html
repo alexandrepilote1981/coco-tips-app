@@ -354,8 +354,27 @@
 <!-- Grille d'horaire commune à cette page et à /admin : une seule définition. -->
 <script src="/shared/schedule-ui.js"></script>
 <script>
-let lang = localStorage.getItem("coco-lang") || "fr";
-let TOKEN = sessionStorage.getItem("scheduleToken") || "";
+// Safari en navigation privée — et tout navigateur réglé pour bloquer les données de site —
+// peut lever une exception sur le simple ACCÈS à localStorage, pas seulement sur l'écriture.
+// Sans ces gardes, la ligne qui lit le jeton au chargement tuait le script en entier : écran
+// blanc, rien ne répond. Ici, la préférence est simplement perdue le temps de la visite.
+function lireStockage(zone, cle) {
+  try {
+    return window[zone].getItem(cle);
+  } catch (e) {
+    return null;
+  }
+}
+function ecrireStockage(zone, cle, valeur) {
+  try {
+    window[zone].setItem(cle, valeur);
+  } catch (e) {
+    /* réglage de confidentialité ou stockage plein : la valeur ne survivra pas à la visite */
+  }
+}
+
+let lang = lireStockage("localStorage", "coco-lang") || "fr";
+let TOKEN = lireStockage("sessionStorage", "scheduleToken") || "";
 let roster = null;
 let shifts = [];
 
@@ -432,7 +451,7 @@ function t(key, ...args) {
 }
 function setLang(newLang) {
   lang = newLang;
-  localStorage.setItem("coco-lang", lang);
+  ecrireStockage("localStorage", "coco-lang", lang);
   if (TOKEN) render(); else renderLogin();
 }
 
@@ -458,7 +477,7 @@ async function login(password) {
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || "Erreur");
   TOKEN = data.token;
-  sessionStorage.setItem("scheduleToken", TOKEN);
+  ecrireStockage("sessionStorage", "scheduleToken", TOKEN);
 }
 
 async function api(path, opts) {
