@@ -154,7 +154,7 @@ test("un nom de restaurant accentué ou vide donne quand même un fichier ouvrab
   assert.equal(mise.nomDeFichier("!!!", "2026-09-21", "fr", "png"), "Horaire_restaurant_2026-09-21.png");
 });
 
-test("en cuisine, la tâche du quart remplace le poste sous l'heure", () => {
+test("sur la feuille, le poste et la tâche partagent la même ligne", () => {
   const employees = [{ id: "e0", name: "Lokassa Mbala" }];
   const quarts = [
     { employee_id: "e0", date: "2026-09-21", start_time: "17:30", end_time: "01:30", role: "cuisinier", note: "Prép" },
@@ -167,10 +167,27 @@ test("en cuisine, la tâche du quart remplace le poste sous l'heure", () => {
   });
   const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
 
-  assert.ok(textes.includes("Prép"), "la tâche est écrite");
-  assert.ok(textes.includes("Cuisinier"), "le quart sans tâche garde son poste");
-  assert.equal(textes.filter((x) => x === "Cuisinier").length, 1, "le poste ne s'ajoute pas sous la tâche");
+  assert.ok(textes.includes("Cuisinier · Prép"), "les deux, ensemble, quand la place le permet");
+  assert.ok(textes.includes("Cuisinier"), "le quart sans tâche garde son poste seul");
   assert.ok(textes.includes("17:30–01:30"), "l'heure de fin est là en cuisine");
+});
+
+test("une tâche trop longue pour la colonne fait céder le poste, jamais l'inverse", () => {
+  const employees = [{ id: "e0", name: "Lokassa Mbala" }];
+  const longue = "augmente Lim 18car"; // la tâche la plus longue possible
+  const surface = surfaceTemoin();
+  mise.dessinerHoraire(surface, {
+    restaurantName: "Chez Coco",
+    employees,
+    shifts: [{ employee_id: "e0", date: "2026-09-21", start_time: "17:30", end_time: "01:30", role: "plongeur", note: longue }],
+    weekStartISO: "2026-09-21",
+    lang: "fr",
+    avecHeureFin: true,
+    avecTaches: true,
+  });
+  const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
+  assert.ok(textes.includes(longue), "la tâche survit");
+  assert.ok(!textes.some((x) => x.startsWith("Plongeur ·")), "le poste s'efface plutôt que de la tronquer");
 });
 
 test("en salle, la tâche n'apparaît pas même si elle est enregistrée", () => {

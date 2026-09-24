@@ -207,7 +207,8 @@ window.ScheduleUI = (function () {
                   ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"}"
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
-                       <div class="rl">${sousTitreQuart(shift, secteur, lang)}</div>
+                       <div class="rl">${echapper(libelleRole(shift.role, lang))}</div>
+                       ${tacheDuQuart(shift, secteur) ? `<div class="tk">${echapper(tacheDuQuart(shift, secteur))}</div>` : ""}
                      </div>`
                   : peutModifier
                   ? `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">+</button>`
@@ -255,11 +256,11 @@ window.ScheduleUI = (function () {
       .replace(/"/g, "&quot;");
   }
 
-  // Ce qui s'écrit sous l'heure : la tâche du soir quand il y en a une, le poste sinon. La
-  // couleur de la pastille dit déjà le poste, donc rien ne se perd.
-  function sousTitreQuart(shift, secteur, lang) {
-    const tache = secteur === "cuisine" ? String(shift.note || "").trim() : "";
-    return echapper(tache || libelleRole(shift.role, lang));
+  // La tâche s'ajoute SOUS le poste, elle ne le remplace pas. On avait d'abord misé sur la
+  // couleur de la pastille pour dire le poste — dans une grille de quatorze personnes, on lit
+  // les mots, pas les teintes, et le poste disparaissait dès qu'une tâche était écrite.
+  function tacheDuQuart(shift, secteur) {
+    return secteur === "cuisine" ? String(shift.note || "").trim() : "";
   }
 
   // Les tâches déjà employées dans cette équipe, les plus récentes d'abord. Rien à
