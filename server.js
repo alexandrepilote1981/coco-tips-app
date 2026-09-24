@@ -467,7 +467,7 @@ app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
   const id = nanoid(10);
   db.prepare(
     "INSERT INTO shifts (id, employee_id, date, start_time, end_time, role, note) VALUES (?,?,?,?,?,?,?)"
-  ).run(id, employee_id, date, start_time, end_time, role || "server", note || "");
+  ).run(id, employee_id, date, start_time, end_time, role || "server", tacheValide(note));
   res.json({ id, ok: true });
 });
 
@@ -485,7 +485,7 @@ app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
   const { date, start_time, end_time, role, note } = req.body;
   db.prepare(
     "UPDATE shifts SET date=?, start_time=?, end_time=?, role=?, note=?, updated_at=datetime('now') WHERE id=?"
-  ).run(date, start_time, end_time, role || "server", note || "", req.params.id);
+  ).run(date, start_time, end_time, role || "server", tacheValide(note), req.params.id);
   res.json({ ok: true });
 });
 
@@ -567,6 +567,8 @@ async function sendSchedulePdf(res, restaurant, weekStartISO, lang, secteur) {
     // La cuisine finit à l'heure : son horaire affiche donc l'heure de fin. En salle, une
     // serveuse part quand la salle est vide — l'heure écrite serait une promesse fausse.
     avecHeureFin: secteur === "cuisine",
+    // Les tâches de quart (« Prép », « Commande à défaire ») n'existent qu'en cuisine.
+    avecTaches: secteur === "cuisine",
   });
   // Le nom de fichier porte aussi l'équipe : sans ça, le PDF de la cuisine et celui de la
   // salle de la même semaine s'écrasent l'un l'autre dans le dossier de téléchargements.
@@ -685,7 +687,7 @@ app.post("/api/admin/shifts", requireScheduleAccess, (req, res) => {
   const id = nanoid(10);
   db.prepare(
     "INSERT INTO shifts (id, employee_id, date, start_time, end_time, role, note) VALUES (?,?,?,?,?,?,?)"
-  ).run(id, employee_id, date, start_time, end_time, role || "server", note || "");
+  ).run(id, employee_id, date, start_time, end_time, role || "server", tacheValide(note));
   res.json({ id, ok: true });
 });
 
@@ -693,7 +695,7 @@ app.post("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
   const { date, start_time, end_time, role, note } = req.body;
   db.prepare(
     "UPDATE shifts SET date=?, start_time=?, end_time=?, role=?, note=?, updated_at=datetime('now') WHERE id=?"
-  ).run(date, start_time, end_time, role || "server", note || "", req.params.id);
+  ).run(date, start_time, end_time, role || "server", tacheValide(note), req.params.id);
   res.json({ ok: true });
 });
 
@@ -746,6 +748,13 @@ app.post("/api/admin/restaurants", requireAdmin, (req, res) => {
 
 // Le secteur et le taux n'acceptent que des valeurs connues : tout le reste du code s'y fie
 // pour décider qui voit quoi, on ne laisse donc pas le client écrire ce qu'il veut.
+// La tâche d'un quart est bornée par ce qu'une case d'horaire peut afficher — la limite
+// vient de la mise en page, pas d'un chiffre choisi ici. On la coupe aussi côté serveur :
+// le champ de saisie l'empêche déjà, mais une requête n'a pas à passer par le champ.
+function tacheValide(valeur) {
+  return String(valeur == null ? "" : valeur).trim().slice(0, miseEnPage.TACHE_MAX);
+}
+
 function secteurValide(valeur) {
   return valeur === "cuisine" ? "cuisine" : "salle";
 }

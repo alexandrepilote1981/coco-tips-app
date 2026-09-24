@@ -100,6 +100,12 @@ La **cuisine** ne déclare rien. Son horaire affiche `début → fin`, parce qu'
 (`public/shared/cout-main-oeuvre.js`). C'est le coût du PLAN, pas du réel : personne ne
 poinçonne. Les postes diffèrent aussi (Cuisinier / Plongeur contre Serveur / Hôtesse).
 
+Chaque quart de cuisine peut aussi porter une **tâche** (« Prép », « Commande à défaire »).
+Elle s'écrit à la place du poste sous l'heure — la couleur de la pastille dit déjà le poste,
+et la case n'a pas de place pour les deux. Sa longueur maximale (`TACHE_MAX`) vit dans
+`horaire-mise-en-page.js` parce que c'est la largeur d'une colonne de jour qui la dicte ; le
+champ de saisie et le serveur s'y réfèrent tous les deux.
+
 Les taux horaires ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
 `test/portes-horaire.test.mjs`.
@@ -156,6 +162,17 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 `npm test` lance `node --test`, qui ramasse tout ce qui est sous `test/`.
 
 - `test/tip-math.test.js` — le calcul des pourboires, sans navigateur.
+- `test/noms.test.js` — découpage prénom / nom de famille.
+- `test/cout-main-oeuvre.test.js` — la masse salariale, dont l'exemple chiffré du gérant.
+- `test/horaire-mise-en-page.test.js` — la mise en page, vérifiée par une fausse surface qui
+  note les ordres de dessin au lieu de les exécuter : c'est ainsi qu'on sait que rien ne sort
+  de la feuille et que personne ne disparaît de la liste.
+- `test/pdf-horaire.test.js` — le PDF réellement produit, relu dans son flux.
+- `test/schedule-ui.test.js` — ce que la grille calcule sans toucher au DOM (liste d'heures,
+  postes, échappement) ; le fichier est chargé avec un faux `window`.
+- `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
+  vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
+- `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
   aucun Chrome/Chromium n'est installé.
