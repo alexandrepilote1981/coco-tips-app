@@ -167,6 +167,7 @@
 <div id="app"></div>
 
 <!-- Même fichier que celui utilisé par le serveur : une seule définition du calcul. -->
+<script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/tip-math.js"></script>
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
@@ -211,6 +212,9 @@ const I18N = {
     ajouter: "+ Ajouter",
     multiEntryHint: "Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).",
     monHoraireAvenir: "Mon horaire à venir",
+    tirerPourActualiser: "Tire pour actualiser",
+    relacherPourActualiser: "Relâche pour actualiser",
+    actualisationEnCours: "Actualisation…",
     glisseIndication: "← glisse pour voir plus de journées →",
     aucunQuartSemaine: "Aucun quart prévu cette semaine.",
     prochain: "Prochain",
@@ -273,6 +277,9 @@ const I18N = {
     ajouter: "+ Add",
     multiEntryHint: "You can add several entries for the same day (e.g. lunch and dinner separately).",
     monHoraireAvenir: "My upcoming schedule",
+    tirerPourActualiser: "Pull to refresh",
+    relacherPourActualiser: "Release to refresh",
+    actualisationEnCours: "Refreshing…",
     glisseIndication: "← swipe to see more days →",
     aucunQuartSemaine: "No shifts scheduled this week.",
     prochain: "Next",
@@ -995,6 +1002,12 @@ function render() {
 }
 
 load();
+
+// Tirer vers le bas depuis le haut de la page recharge les données, sans repartir de zéro.
+TirerPourActualiser.init({
+  libelle: (cle) => t(cle),
+  surRafraichir: () => load(),
+});
 </script>
 </body>
 </html>
