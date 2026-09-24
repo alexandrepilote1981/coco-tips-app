@@ -116,12 +116,15 @@ window.ScheduleUI = (function () {
           .map((d) => {
             const dateStr = isoDate(d);
             const shift = shifts.find((s) => s.employee_id === emp.id && s.date === dateStr);
+            // Seule l'heure de début est affichée : la fin d'un quart dépend de l'achalandage
+            // et n'est jamais celle qui avait été inscrite. L'afficher donnait une promesse
+            // fausse. Elle reste enregistrée — c'est elle qui sert à calculer les heures.
             return `
             <div class="shift-cell">
               ${
                 shift
                   ? `<div class="shift-chip role-${shift.role || "server"}" data-action="editShift" data-id="${shift.id}">
-                       <div class="st">${fmtTime(shift.start_time)}–${fmtTime(shift.end_time)}</div>
+                       <div class="st">${fmtTime(shift.start_time)}</div>
                        <div class="rl">${ROLES[shift.role || "server"][lang]}</div>
                      </div>`
                   : `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}">+</button>`

@@ -54,7 +54,7 @@
   .day-pill .dnum { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; margin: 2px 0 6px; color: #F1EFEA; }
   .day-pill.is-today { border-color: rgba(212,168,87,0.5); }
   .day-pill.is-today .dnum { color: #D4A857; }
-  .day-pill .ptime { font-size: 10px; font-weight: 700; color: #F1EFEA; line-height: 1.3; }
+  .day-pill .ptime { font-size: 12px; font-weight: 700; color: #F1EFEA; line-height: 1.3; }
   .day-pill .prole { font-size: 8.5px; color: #8993A4; margin-top: 1px; }
   .swipe-hint { font-size: 10px; color: #6B7280; text-align: center; }
   .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 22px 0 10px; display:flex; justify-content:space-between; align-items:center;}
@@ -849,7 +849,7 @@ function render() {
                   <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
                   <div class="dnum">${d.getDate()}</div>
                   ${shift ? `
-                    <div class="ptime">${shift.start_time}–${shift.end_time}</div>
+                    <div class="ptime">${shift.start_time}</div>
                     <div class="prole">${ROLES_EMP[shift.role || "server"][lang]}</div>
                   ` : ""}
                 </div>
