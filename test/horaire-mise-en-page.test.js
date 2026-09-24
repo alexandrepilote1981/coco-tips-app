@@ -153,3 +153,45 @@ test("un nom de restaurant accentué ou vide donne quand même un fichier ouvrab
   assert.equal(mise.nomDeFichier("", "2026-09-21", "en", "pdf"), "Schedule_restaurant_2026-09-21.pdf");
   assert.equal(mise.nomDeFichier("!!!", "2026-09-21", "fr", "png"), "Horaire_restaurant_2026-09-21.png");
 });
+
+test("en cuisine, la tâche du quart remplace le poste sous l'heure", () => {
+  const employees = [{ id: "e0", name: "Lokassa Mbala" }];
+  const quarts = [
+    { employee_id: "e0", date: "2026-09-21", start_time: "17:30", end_time: "01:30", role: "cuisinier", note: "Prép" },
+    { employee_id: "e0", date: "2026-09-23", start_time: "17:30", end_time: "01:30", role: "cuisinier" },
+  ];
+  const surface = surfaceTemoin();
+  mise.dessinerHoraire(surface, {
+    restaurantName: "Chez Coco", employees, shifts: quarts, weekStartISO: "2026-09-21",
+    lang: "fr", avecHeureFin: true, avecTaches: true,
+  });
+  const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
+
+  assert.ok(textes.includes("Prép"), "la tâche est écrite");
+  assert.ok(textes.includes("Cuisinier"), "le quart sans tâche garde son poste");
+  assert.equal(textes.filter((x) => x === "Cuisinier").length, 1, "le poste ne s'ajoute pas sous la tâche");
+  assert.ok(textes.includes("17:30–01:30"), "l'heure de fin est là en cuisine");
+});
+
+test("en salle, la tâche n'apparaît pas même si elle est enregistrée", () => {
+  const employees = [{ id: "e0", name: "Marie Tremblay" }];
+  const surface = surfaceTemoin();
+  mise.dessinerHoraire(surface, {
+    restaurantName: "Chez Coco",
+    employees,
+    shifts: [{ employee_id: "e0", date: "2026-09-21", start_time: "09:00", end_time: "17:00", role: "server", note: "Prép" }],
+    weekStartISO: "2026-09-21",
+    lang: "fr",
+  });
+  const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
+  assert.ok(!textes.includes("Prép"), "les tâches sont réservées à la cuisine");
+  assert.ok(textes.includes("Serveur"));
+});
+
+test("la limite de longueur d'une tâche est dictée par la mise en page", () => {
+  assert.equal(typeof mise.TACHE_MAX, "number");
+  // Les tâches réelles du restaurant doivent tenir : c'est à ça que sert ce chiffre.
+  for (const tache of ["Prép", "Prise de commande", "Commande à défaire"]) {
+    assert.ok(tache.length <= mise.TACHE_MAX, `« ${tache} » (${tache.length}) doit tenir dans ${mise.TACHE_MAX}`);
+  }
+});

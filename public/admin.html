@@ -407,6 +407,15 @@
     padding: 9px 10px; font-size: 13px; color: #F1EFEA; font-family: inherit;
   }
   #shiftNoteInput { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 9px 10px; font-size: 13px; color: #F1EFEA; }
+  /* Les tâches déjà utilisées se retapent d'un doigt : ce sont toujours les mêmes, et les
+     retaper à la main finissait par donner trois orthographes pour la même affaire. */
+  .taches-recentes { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+  .taches-recentes button {
+    background: rgba(111,191,147,0.12); border: 1px solid rgba(111,191,147,0.28); color: #6FBF93;
+    font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
+  }
+  .tache-reste { font-size: 10px; color: #8993A4; margin-top: 5px; min-height: 13px; }
+  .tache-reste.tache-plein { color: #D4A857; }
 </style>
 </head>
 <body>
@@ -467,7 +476,12 @@
         <select id="shiftEndInput"></select>
       </label>
     </div>
-    <input type="text" id="shiftNoteInput" placeholder="" style="width:100%; margin-top:10px;" />
+    <div id="shiftTacheBloc" style="margin-top:12px;">
+      <div class="employee-stat-label" id="shiftTacheLabel"></div>
+      <div id="shiftTachesRecentes" class="taches-recentes"></div>
+      <input type="text" id="shiftNoteInput" placeholder="" style="width:100%;" />
+      <div class="tache-reste" id="shiftTacheReste"></div>
+    </div>
     <div class="modal-actions" style="margin-top:16px;">
       <button class="secondary danger-text" id="shiftDeleteBtn" style="display:none;"></button>
       <button id="shiftSaveBtn"></button>
@@ -612,7 +626,9 @@ const I18N = {
     modifierQuart: "Modifier le quart",
     supprimerQuart: "Supprimer",
     enregistrer: "Enregistrer",
-    noteQuartPlaceholder: "Note (optionnel)",
+    tacheDuQuart: "Tâche du quart",
+    tachePlaceholder: "Ex. : Prép",
+    tacheReste: (restant, max) => (restant === 0 ? `Limite atteinte (${max} caractères)` : `${restant} caractère${restant > 1 ? "s" : ""} restant${restant > 1 ? "s" : ""}`),
     ajouterQuart: "Ajouter un quart",
     erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
     copierSemaineSuivante: "Copier vers la semaine suivante",
@@ -773,7 +789,9 @@ const I18N = {
     modifierQuart: "Edit shift",
     supprimerQuart: "Delete",
     enregistrer: "Save",
-    noteQuartPlaceholder: "Note (optional)",
+    tacheDuQuart: "Shift task",
+    tachePlaceholder: "e.g. Prep",
+    tacheReste: (restant, max) => (restant === 0 ? `Limit reached (${max} characters)` : `${restant} character${restant > 1 ? "s" : ""} left`),
     ajouterQuart: "Add a shift",
     erreurAjoutQuart: "Error adding the shift. Try again.",
     copierSemaineSuivante: "Copy to next week",

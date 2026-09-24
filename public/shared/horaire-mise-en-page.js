@@ -27,6 +27,12 @@
   // mêmes proportions, simplement agrandie.
   const PAGE = { largeur: 841.89, hauteur: 595.28 };
 
+  // Longueur maximale d'une tâche de quart (« Prép », « Commande à défaire »). Ce n'est pas
+  // un chiffre rond choisi au hasard : c'est ce qu'une colonne de jour peut porter sans
+  // déborder ni pousser la grille, sur un téléphone. La limite vit ici parce que c'est la
+  // mise en page qui la dicte — le champ de saisie et le serveur s'y réfèrent.
+  const TACHE_MAX = 18;
+
   const NOMS_JOURS = {
     fr: ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"],
     en: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
@@ -141,11 +147,21 @@
    * @param {"fr"|"en"} donnees.lang
    * @param {boolean} [donnees.compact]  colle le pied sous le tableau au lieu du bas de page
    * @param {boolean} [donnees.avecHeureFin]  affiche « début–fin » au lieu du début seul
+   * @param {boolean} [donnees.avecTaches]  remplace le poste par la tâche du quart
    * @returns {number} hauteur réellement occupée, pour rogner une image
    */
   function dessinerHoraire(
     surface,
-    { restaurantName, employees, shifts, weekStartISO, lang = "fr", compact = false, avecHeureFin = false }
+    {
+      restaurantName,
+      employees,
+      shifts,
+      weekStartISO,
+      lang = "fr",
+      compact = false,
+      avecHeureFin = false,
+      avecTaches = false,
+    }
   ) {
     const L = lang === "en" ? "en" : "fr";
     const tr = T[L];
@@ -311,8 +327,11 @@
             taille: tailleHeure, gras: true, couleur: encre, largeur: JOUR_L - 6, centre: true,
           });
           if (avecRole) {
-            surface.texte(LIBELLES_ROLE[L][role], x + 3, hautTexte + tailleHeure * INTERLIGNE, {
-              taille: ROLE_T, couleur: encre, largeur: JOUR_L - 6, centre: true,
+            // La tâche prend la place du poste plutôt que d'ajouter une ligne : la couleur de
+            // la pastille dit déjà le poste, et la case n'a pas de place pour les deux.
+            const tache = avecTaches && quarts.length === 1 ? String(quarts[0].note || "").trim() : "";
+            surface.texte(tache || LIBELLES_ROLE[L][role], x + 3, hautTexte + tailleHeure * INTERLIGNE, {
+              taille: ROLE_T, couleur: encre, largeur: JOUR_L - 6, centre: true, tronquer: true,
             });
           }
         });
@@ -385,6 +404,7 @@
 
   return {
     PAGE,
+    TACHE_MAX,
     COULEURS,
     NOMS_JOURS,
     NOMS_MOIS,

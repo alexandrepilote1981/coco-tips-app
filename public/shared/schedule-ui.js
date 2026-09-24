@@ -207,7 +207,7 @@ window.ScheduleUI = (function () {
                   ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"}"
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
-                       <div class="rl">${libelleRole(shift.role, lang)}</div>
+                       <div class="rl">${sousTitreQuart(shift, secteur, lang)}</div>
                      </div>`
                   : peutModifier
                   ? `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">+</button>`
@@ -245,18 +245,58 @@ window.ScheduleUI = (function () {
     return (ROLES[role] || ROLES.server)[lang];
   }
 
+  // Une tâche est du texte tapé à la main, et la grille est construite par concaténation de
+  // chaînes : sans ça, une tâche contenant « < » casserait l'affichage de toute la semaine.
+  function echapper(texte) {
+    return String(texte == null ? "" : texte)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Ce qui s'écrit sous l'heure : la tâche du soir quand il y en a une, le poste sinon. La
+  // couleur de la pastille dit déjà le poste, donc rien ne se perd.
+  function sousTitreQuart(shift, secteur, lang) {
+    const tache = secteur === "cuisine" ? String(shift.note || "").trim() : "";
+    return echapper(tache || libelleRole(shift.role, lang));
+  }
+
+  // Les tâches déjà employées dans cette équipe, les plus récentes d'abord. Rien à
+  // configurer : l'app apprend de ce qui a vraiment été écrit.
+  function tachesRecentes(secteur, employees) {
+    if (secteur !== "cuisine") return [];
+    const ids = new Set((employees || []).map((e) => e.id));
+    const vues = [];
+    const quarts = host
+      .shifts()
+      .filter((q) => ids.has(q.employee_id) && String(q.note || "").trim())
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    for (const q of quarts) {
+      const tache = q.note.trim();
+      if (!vues.some((v) => v.toLowerCase() === tache.toLowerCase())) vues.push(tache);
+      if (vues.length >= 8) break;
+    }
+    return vues;
+  }
+
   // Deux teintes seulement : le poste principal en vert, le second en or.
   function roleSecondaire(role) {
     return role === "hostess" || role === "plongeur";
   }
 
-  // Heures valides de 5 h à 22 h par tranches de 15 min. On construit la liste nous-mêmes
-  // parce que le sélecteur natif <input type="time"> ignore parfois l'attribut step sur iOS.
+  // Les 24 heures par tranches de 15 min. On construit la liste nous-mêmes parce que le
+  // sélecteur natif <input type="time"> ignore parfois l'attribut step sur iOS.
+  //
+  // Elle allait de 5 h à 22 h, ce qui paraissait suffisant pour un restaurant. Ça ne l'était
+  // pas : une cuisine qui ferme à 1 h 30 n'avait pas son heure dans la liste, le sélecteur
+  // retombait silencieusement sur la première (5 h) et le quart repartait avec la mauvaise
+  // heure de fin dès qu'on le rouvrait pour autre chose. Depuis que l'heure de fin sert à
+  // calculer la masse salariale, cette bévue coûtait de l'argent.
   function timeOptionsHTML(selected) {
     let opts = "";
-    for (let h = 5; h <= 22; h++) {
+    for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 15) {
-        if (h === 22 && m > 0) break;
         const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
         opts += `<option value="${val}" ${val === selected ? "selected" : ""}>${val}</option>`;
       }
@@ -265,6 +305,13 @@ window.ScheduleUI = (function () {
   }
 
   // ---------- fenêtre de modification d'un quart ----------
+
+  function restaurantDeEmploye(empId) {
+    for (const r of host.restaurants()) {
+      if (r.employees.some((e) => e.id === empId)) return r.id;
+    }
+    return "";
+  }
 
   function employeeName(empId) {
     for (const r of host.restaurants()) {
@@ -285,6 +332,7 @@ window.ScheduleUI = (function () {
     overlay.dataset.shiftId = shiftId || "";
     overlay.dataset.employeeId = empId;
     overlay.dataset.secteur = equipe;
+    overlay.dataset.resto = restaurantDeEmploye(empId);
 
     document.getElementById("shiftModalTitle").textContent = existing ? t("modifierQuart") : t("ajouterQuart");
     document.getElementById("shiftModalEmpName").textContent = employeeName(existing ? existing.employee_id : employeeId);
@@ -297,8 +345,9 @@ window.ScheduleUI = (function () {
       .join("");
     document.getElementById("shiftRoleInput").value =
       existing && postes.includes(existing.role) ? existing.role : postes[0];
-    document.getElementById("shiftNoteInput").value = existing ? existing.note || "" : "";
-    document.getElementById("shiftNoteInput").placeholder = t("noteQuartPlaceholder");
+    const champTache = document.getElementById("shiftNoteInput");
+    champTache.value = existing ? existing.note || "" : "";
+    preparerBlocTache(equipe, champTache);
     document.getElementById("shiftDeleteBtn").textContent = t("supprimerQuart");
     document.getElementById("shiftDeleteBtn").style.display = existing ? "block" : "none";
     document.getElementById("shiftSaveBtn").textContent = t("enregistrer");
@@ -308,6 +357,43 @@ window.ScheduleUI = (function () {
 
   function closeShiftModal() {
     document.getElementById("shiftModalOverlay").style.display = "none";
+  }
+
+  // Le bloc n'apparaît qu'en cuisine : « Prép » ou « Commande à défaire » ne veulent rien
+  // dire pour une serveuse, et l'utilisateur a demandé que ça reste à la cuisine.
+  function preparerBlocTache(equipe, champ) {
+    const bloc = document.getElementById("shiftTacheBloc");
+    if (!bloc) return;
+    if (equipe !== "cuisine") {
+      bloc.style.display = "none";
+      return;
+    }
+    bloc.style.display = "block";
+
+    const max = window.HoraireMiseEnPage.TACHE_MAX;
+    champ.maxLength = max;
+    champ.placeholder = host.t("tachePlaceholder");
+    document.getElementById("shiftTacheLabel").textContent = host.t("tacheDuQuart");
+
+    const reste = document.getElementById("shiftTacheReste");
+    const majReste = () => {
+      const restant = max - champ.value.length;
+      reste.textContent = host.t("tacheReste", restant, max);
+      reste.classList.toggle("tache-plein", restant === 0);
+    };
+    champ.oninput = majReste;
+    majReste();
+
+    const ctx = contexteDe(document.getElementById("shiftModalOverlay").dataset.resto || "", equipe);
+    const boutons = document.getElementById("shiftTachesRecentes");
+    const recentes = tachesRecentes(equipe, ctx.employees);
+    boutons.innerHTML = recentes.map((tache) => `<button type="button">${echapper(tache)}</button>`).join("");
+    [...boutons.children].forEach((bouton, i) => {
+      bouton.addEventListener("click", () => {
+        champ.value = recentes[i];
+        majReste();
+      });
+    });
   }
 
   async function saveShiftFromModal() {
@@ -529,6 +615,7 @@ window.ScheduleUI = (function () {
           weekStartISO: weekISO,
           lang: host.lang(),
           avecHeureFin: ctx.secteur === "cuisine",
+          avecTaches: ctx.secteur === "cuisine",
         });
         const nomFichier = window.HoraireImage.nomImage(nomFeuille, weekISO, host.lang());
         await partagerOuEnregistrer(blob, nomFichier, host.t("titrePartage"));
@@ -611,6 +698,8 @@ window.ScheduleUI = (function () {
     duplicateWeekToNext,
     clearWeekShifts,
     rolesDe,
+    echapper,
+    tachesRecentes,
     downloadWeekImage,
     downloadWeekPdf,
     bindGridEvents,

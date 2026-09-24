@@ -235,6 +235,22 @@ test("les trois portes de l'horaire", async (t) => {
     assert.equal(negatif.charges_pct, 0);
   });
 
+  await t.test("la tâche d'un quart est coupée à ce qui rentre dans une case", async () => {
+    const { TACHE_MAX } = await import("../public/shared/horaire-mise-en-page.js").then((m) => m.default || m);
+    const trop = "Commande à défaire et prise de commande au comptoir";
+    const res = await admin("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({
+        employee_id: plongeur.id, date: "2026-12-01", start_time: "17:00", end_time: "23:00",
+        role: "plongeur", note: `   ${trop}   `,
+      }),
+    });
+    assert.equal(res.status, 200);
+    const quart = (await (await admin("/api/admin/shifts?startDate=2026-12-01&endDate=2026-12-01")).json()).shifts[0];
+    assert.equal(quart.note, trop.slice(0, TACHE_MAX), "coupée à la limite, et sans les espaces autour");
+    assert.ok(quart.note.length <= TACHE_MAX);
+  });
+
   await t.test("un code inconnu n'ouvre rien", async () => {
     assert.equal((await parCode("ZZZZZZ")).status, 404);
     assert.equal((await parCode("ZZZZZZ", "/shifts")).status, 404);
