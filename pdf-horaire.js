@@ -4,6 +4,13 @@ const { splitName } = require("./public/shared/noms.js");
 // Génération du PDF d'horaire hebdomadaire (lundi → dimanche), en paysage.
 // Volontairement en thème clair : c'est fait pour être imprimé ou envoyé aux employés,
 // pas pour être lu dans l'app (qui est en thème sombre).
+//
+// Seule l'heure de DÉBUT est imprimée. La fin d'un quart dépend de l'achalandage du soir :
+// l'heure inscrite n'est presque jamais celle où la personne part réellement, et la feuille
+// affichée au mur faisait donc une promesse fausse. Les totaux d'heures ont disparu avec
+// elle, pour la même raison — un total bâti sur des fins variables se lisait comme une
+// garantie qu'il n'était pas. La fin reste enregistrée en base, elle n'est simplement plus
+// montrée.
 
 const DAY_NAMES = {
   fr: ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"],
@@ -23,8 +30,6 @@ const ROLE_LABELS = {
 const T = {
   fr: {
     titre: "Horaire",
-    total: "Total",
-    totalJour: "Total / jour",
     aucunEmploye: "Aucun employé pour ce restaurant.",
     genereLe: (d) => `Généré le ${d}`,
     page: (n, tot) => `Page ${n} de ${tot}`,
@@ -32,8 +37,6 @@ const T = {
   },
   en: {
     titre: "Schedule",
-    total: "Total",
-    totalJour: "Total / day",
     aucunEmploye: "No employees for this restaurant.",
     genereLe: (d) => `Generated on ${d}`,
     page: (n, tot) => `Page ${n} of ${tot}`,
@@ -48,7 +51,6 @@ const COLORS = {
   lineStrong: "#B9C1CC",
   weekendBg: "#F5F7FA",
   headBg: "#EFF2F6",
-  totalBg: "#F8F5EC",
   green: "#6FBF93",
   serverBg: "#E7F4EC",
   serverInk: "#2E7A56",
@@ -108,31 +110,6 @@ function fmtTimestamp(d, lang) {
   return `${fmtLongDate(d, lang)}, ${hh}:${mm}`;
 }
 
-// ---------- heures ----------
-
-function minutesOf(hhmm) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || "");
-  if (!m) return null;
-  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-}
-
-// Durée d'un quart en heures. Un quart qui finit "avant" son début a franchi minuit
-// (ex: 18:00 → 02:00) : on ajoute 24 h plutôt que de retourner un négatif.
-function shiftHours(shift) {
-  const start = minutesOf(shift.start_time);
-  const end = minutesOf(shift.end_time);
-  if (start === null || end === null) return 0;
-  const diff = end >= start ? end - start : end + 24 * 60 - start;
-  return diff / 60;
-}
-
-function fmtHours(h, lang) {
-  if (!h) return "—";
-  const rounded = Math.round(h * 100) / 100;
-  const str = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0$/, "");
-  return `${lang === "fr" ? str.replace(".", ",") : str} h`;
-}
-
 // ---------- rendu ----------
 
 function roundedBox(doc, x, y, w, h, r, fill) {
@@ -176,17 +153,15 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
   const tableW = pageW - M * 2;
 
   const NAME_W = 108;
-  const TOTAL_W = 62;
-  const DAY_W = (tableW - NAME_W - TOTAL_W) / 7;
+  const DAY_W = (tableW - NAME_W) / 7;
 
   const HEAD_H = 34;
   const ROW_H = 34;
-  const TOTALS_ROW_H = 26;
 
   const headerBlockH = 76;
   const footerH = 26;
   const tableTop = M + headerBlockH;
-  const availableForRows = pageH - M - footerH - tableTop - HEAD_H - TOTALS_ROW_H;
+  const availableForRows = pageH - M - footerH - tableTop - HEAD_H;
   const rowsPerPage = Math.max(1, Math.floor(availableForRows / ROW_H));
   const pages = employees.length === 0 ? 1 : Math.ceil(employees.length / rowsPerPage);
 
@@ -224,11 +199,6 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
       doc.font("Helvetica-Bold").fontSize(12).fillColor(COLORS.ink)
         .text(String(d.getDate()), x, y + 18, { width: DAY_W, align: "center", lineBreak: false });
     });
-
-    const tx = tableX + NAME_W + 7 * DAY_W;
-    doc.save().rect(tx, y, TOTAL_W, HEAD_H).fill(COLORS.totalBg).restore();
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.muted)
-      .text(tr.total.toUpperCase(), tx, y + 13, { width: TOTAL_W, align: "center", lineBreak: false });
   }
 
   function drawEmployeeRow(emp, y) {
@@ -255,7 +225,6 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
         .text(sousLigne, tableX + 8, y + 21, { width: NAME_W - 14, lineBreak: false, ellipsis: true });
     }
 
-    let totalHours = 0;
     dates.forEach((d, i) => {
       const dateStr = dateStrs[i];
       const dayShifts = weekShifts.filter((s) => s.employee_id === emp.id && s.date === dateStr);
@@ -268,7 +237,6 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
       // Plusieurs quarts la même journée : on les empile en plus petit plutôt que d'en cacher un.
       const stacked = dayShifts.length > 1;
       dayShifts.forEach((shift, k) => {
-        totalHours += shiftHours(shift);
         const role = shift.role === "hostess" ? "hostess" : "server";
         const bg = role === "hostess" ? COLORS.hostessBg : COLORS.serverBg;
         const fg = role === "hostess" ? COLORS.hostessInk : COLORS.serverInk;
@@ -277,59 +245,29 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
         roundedBox(doc, x + 3, chipY, DAY_W - 6, chipH, 4, bg);
         if (stacked) {
           doc.font("Helvetica-Bold").fontSize(6.8).fillColor(fg)
-            .text(`${shift.start_time}–${shift.end_time}`, x + 3, chipY + chipH / 2 - 4, {
+            .text(shift.start_time, x + 3, chipY + chipH / 2 - 4, {
               width: DAY_W - 6, align: "center", lineBreak: false,
             });
         } else {
-          doc.font("Helvetica-Bold").fontSize(9).fillColor(fg)
-            .text(`${shift.start_time}–${shift.end_time}`, x + 3, chipY + 4, { width: DAY_W - 6, align: "center", lineBreak: false });
+          doc.font("Helvetica-Bold").fontSize(11).fillColor(fg)
+            .text(shift.start_time, x + 3, chipY + 4, { width: DAY_W - 6, align: "center", lineBreak: false });
           doc.font("Helvetica").fontSize(7).fillColor(fg)
             .text(ROLE_LABELS[L][role], x + 3, chipY + 15, { width: DAY_W - 6, align: "center", lineBreak: false });
         }
       });
     });
 
-    const tx = tableX + NAME_W + 7 * DAY_W;
-    doc.save().rect(tx, y, TOTAL_W, ROW_H).fill(COLORS.totalBg).restore();
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(totalHours ? COLORS.ink : "#C3CAD3")
-      .text(fmtHours(totalHours, L), tx, y + 12, { width: TOTAL_W, align: "center", lineBreak: false });
-
     doc.save().moveTo(tableX, y + ROW_H).lineTo(tableX + tableW, y + ROW_H)
       .lineWidth(0.5).strokeColor(COLORS.line).stroke().restore();
   }
 
-  // Totaux de TOUTE la semaine, pas seulement des employés de la page courante — c'est
-  // pour ça qu'on ne dessine cette ligne que sur la dernière page.
-  function drawTotalsRow(y) {
-    doc.save().rect(tableX, y, tableW, TOTALS_ROW_H).fill(COLORS.headBg).restore();
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.muted)
-      .text(tr.totalJour.toUpperCase(), tableX + 8, y + 9, { width: NAME_W - 16, lineBreak: false });
-
-    let grand = 0;
-    dates.forEach((d, i) => {
-      const dayTotal = weekShifts
-        .filter((s) => s.date === dateStrs[i])
-        .reduce((sum, s) => sum + shiftHours(s), 0);
-      grand += dayTotal;
-      doc.font("Helvetica-Bold").fontSize(8.5).fillColor(dayTotal ? COLORS.ink : "#C3CAD3")
-        .text(fmtHours(dayTotal, L), colX(i), y + 9, { width: DAY_W, align: "center", lineBreak: false });
-    });
-
-    const tx = tableX + NAME_W + 7 * DAY_W;
-    doc.save().rect(tx, y, TOTAL_W, TOTALS_ROW_H).fill("#F0E7CF").restore();
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(COLORS.ink)
-      .text(fmtHours(grand, L), tx, y + 9, { width: TOTAL_W, align: "center", lineBreak: false });
-  }
-
   function drawTableBorder(bottomY) {
     doc.save().rect(tableX, tableTop, tableW, bottomY - tableTop).lineWidth(0.8).strokeColor(COLORS.lineStrong).stroke();
-    // Séparateurs verticaux : après le nom, entre chaque jour, puis avant la colonne Total.
-    for (let i = 0; i <= 7; i++) {
+    // Séparateurs verticaux : après le nom, puis entre chaque jour.
+    for (let i = 0; i <= 6; i++) {
       const x = colX(i);
       doc.moveTo(x, tableTop).lineTo(x, bottomY).lineWidth(0.5).strokeColor(COLORS.line).stroke();
     }
-    doc.moveTo(tableX + NAME_W + 7 * DAY_W, tableTop).lineTo(tableX + NAME_W + 7 * DAY_W, bottomY)
-      .lineWidth(0.8).strokeColor(COLORS.lineStrong).stroke();
     doc.moveTo(tableX, tableTop + HEAD_H).lineTo(tableX + tableW, tableTop + HEAD_H)
       .lineWidth(0.8).strokeColor(COLORS.lineStrong).stroke();
     doc.restore();
@@ -360,10 +298,6 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
       for (const emp of pageEmployees) {
         drawEmployeeRow(emp, y);
         y += ROW_H;
-      }
-      if (p === pages - 1) {
-        drawTotalsRow(y);
-        y += TOTALS_ROW_H;
       }
       drawTableBorder(y);
       drawFooter(p + 1);
