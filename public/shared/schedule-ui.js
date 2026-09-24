@@ -95,6 +95,7 @@ window.ScheduleUI = (function () {
     <div class="week-actions">
       <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
       <button class="pdf-week-btn" data-action="pdfWeek" data-resto="${restaurantId}">${icon("download", 13)} ${t("telechargerPdf")}</button>
+      <button class="photo-week-btn" data-action="photoWeek" data-resto="${restaurantId}">${icon("image", 13)} ${t("photoSemaine")}</button>
       <button class="clear-week-btn" data-action="clearWeek" data-resto="${restaurantId}">${icon("trash2", 13)} ${t("effacerSemaine")}</button>
     </div>
     <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
@@ -335,43 +336,100 @@ window.ScheduleUI = (function () {
     }
   }
 
-  // ---------- PDF ----------
+  // ---------- exports : PDF et photo ----------
 
-  // Le fichier est récupéré en blob plutôt que par un lien <a href> direct, parce qu'il faut
+  // Sur un téléphone, le partage natif propose directement Messenger, Photos, les courriels…
+  // C'est ce que le gérant veut faire de la feuille : l'envoyer au groupe, pas la retrouver
+  // dans un dossier de téléchargements. Sur un ordinateur, ou si le partage est refusé, on
+  // retombe sur l'enregistrement classique.
+  async function partagerOuEnregistrer(blob, nomFichier, titre) {
+    const fichier = typeof File === "function" ? new File([blob], nomFichier, { type: blob.type }) : null;
+    if (fichier && navigator.canShare && navigator.canShare({ files: [fichier] })) {
+      try {
+        await navigator.share({ files: [fichier], title: titre });
+        return;
+      } catch (err) {
+        // AbortError = la feuille de partage a été fermée volontairement. On s'arrête là :
+        // lui imposer un téléchargement qu'elle vient de refuser serait pire que rien.
+        if (err && err.name === "AbortError") return;
+      }
+    }
+    enregistrer(blob, nomFichier);
+  }
+
+  function enregistrer(blob, nomFichier) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nomFichier;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // On libère l'URL après coup : la révoquer tout de suite couperait le téléchargement
+    // sur certains navigateurs mobiles.
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  }
+
+  // Pendant qu'un export travaille, son bouton dit ce qu'il fait et ne peut pas être
+  // recliqué. Il est remis en état dans tous les cas, même en cas d'échec.
+  async function pendantExport(btn, libelle, travail) {
+    const avant = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = host.t(libelle);
+    try {
+      await travail();
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = avant;
+    }
+  }
+
+  // Le PDF est récupéré en blob plutôt que par un lien <a href> direct, parce qu'il faut
   // pouvoir envoyer le jeton d'accès en en-tête.
   async function downloadWeekPdf(restaurantId, btn) {
     const weekISO = isoDate(weekStart);
     const { url, options } = host.pdfRequest(restaurantId, weekISO, host.lang());
 
-    const originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = host.t("pdfEnCours");
-    let objectUrl = null;
-    try {
-      const res = await fetch(url, options || {});
-      if (!res.ok) throw new Error("PDF");
-      const blob = await res.blob();
+    await pendantExport(btn, "pdfEnCours", async () => {
+      try {
+        const res = await fetch(url, options || {});
+        if (!res.ok) throw new Error("PDF");
+        const blob = await res.blob();
 
-      // Le serveur propose déjà un nom propre (Horaire_Chez-Coco_2026-08-17.pdf).
-      const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
-      const filename = match ? match[1] : `horaire-${weekISO}.pdf`;
+        // Le serveur propose déjà un nom propre (Horaire_Chez-Coco_2026-08-17.pdf).
+        const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+        const nomFichier = match ? match[1] : `horaire-${weekISO}.pdf`;
 
-      objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e) {
-      alert(host.t("erreurPdf"));
-    } finally {
-      // On libère l'URL après coup : la révoquer tout de suite couperait le téléchargement
-      // sur certains navigateurs mobiles.
-      if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-    }
+        await partagerOuEnregistrer(blob, nomFichier, host.t("titrePartage"));
+      } catch (e) {
+        alert(host.t("erreurPdf"));
+      }
+    });
+  }
+
+  // La photo est dessinée ici, dans le navigateur, à partir des quarts déjà chargés : aucun
+  // aller-retour au serveur, et la feuille est exactement celle du PDF — même mise en page,
+  // même fichier partagé (public/shared/horaire-mise-en-page.js).
+  async function downloadWeekImage(restaurantId, btn) {
+    const restaurant = host.restaurants().find((r) => r.id === restaurantId);
+    if (!restaurant) return;
+    const weekISO = isoDate(weekStart);
+
+    await pendantExport(btn, "photoEnCours", async () => {
+      try {
+        const blob = await window.HoraireImage.construireImageHoraire({
+          restaurantName: restaurant.name,
+          employees: restaurant.employees,
+          shifts: host.shifts(),
+          weekStartISO: weekISO,
+          lang: host.lang(),
+        });
+        const nomFichier = window.HoraireImage.nomImage(restaurant.name, weekISO, host.lang());
+        await partagerOuEnregistrer(blob, nomFichier, host.t("titrePartage"));
+      } catch (e) {
+        alert(host.t("erreurPhoto"));
+      }
+    });
   }
 
   // ---------- branchement des boutons ----------
@@ -408,6 +466,9 @@ window.ScheduleUI = (function () {
     document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn));
     });
+    document.querySelectorAll('[data-action="photoWeek"]').forEach((btn) => {
+      btn.addEventListener("click", () => downloadWeekImage(btn.dataset.resto, btn));
+    });
     document.querySelectorAll('[data-action="clearWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => clearWeekShifts(btn.dataset.resto, btn));
     });
@@ -441,6 +502,7 @@ window.ScheduleUI = (function () {
     deleteShiftFromModal,
     duplicateWeekToNext,
     clearWeekShifts,
+    downloadWeekImage,
     downloadWeekPdf,
     bindGridEvents,
     bindShiftModal,
