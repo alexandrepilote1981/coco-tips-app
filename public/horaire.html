@@ -368,6 +368,7 @@
 </div>
 
 <!-- Grille d'horaire commune à cette page et à /admin : une seule définition. -->
+<script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/horaire-mise-en-page.js"></script>
 <script src="/shared/horaire-image.js"></script>
@@ -426,6 +427,9 @@ const I18N = {
     copieEnCours: "Copie en cours…",
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    tirerPourActualiser: "Tire pour actualiser",
+    relacherPourActualiser: "Relâche pour actualiser",
+    actualisationEnCours: "Actualisation…",
     photoSemaine: "Photo de la semaine",
     photoEnCours: "Préparation…",
     erreurPhoto: "Impossible de créer la photo. Réessaie.",
@@ -466,6 +470,9 @@ const I18N = {
     copieEnCours: "Copying…",
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     confirmSupprimerQuart: "Delete this shift?",
+    tirerPourActualiser: "Pull to refresh",
+    relacherPourActualiser: "Release to refresh",
+    actualisationEnCours: "Refreshing…",
     photoSemaine: "Week photo",
     photoEnCours: "Preparing…",
     erreurPhoto: "Could not create the photo. Try again.",
@@ -690,6 +697,14 @@ ScheduleUI.bindShiftModal();
 if (RESTAURANT_CODE) load();
 else if (TOKEN) load();
 else renderLogin();
+// Tirer vers le bas depuis le haut de la page recharge les données, sans repartir de zéro.
+TirerPourActualiser.init({
+  libelle: (cle) => t(cle),
+  surRafraichir: async () => {
+    if (RESTAURANT_CODE || TOKEN) await load();
+  },
+});
+
 </script>
 </body>
 </html>

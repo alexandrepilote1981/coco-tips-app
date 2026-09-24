@@ -432,6 +432,7 @@
 </div>
 
 <!-- Grille d'horaire commune à cette page et à /horaire : une seule définition. -->
+<script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/horaire-mise-en-page.js"></script>
 <script src="/shared/horaire-image.js"></script>
@@ -568,6 +569,9 @@ const I18N = {
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     erreurSuppression: "Erreur lors de la suppression. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    tirerPourActualiser: "Tire pour actualiser",
+    relacherPourActualiser: "Relâche pour actualiser",
+    actualisationEnCours: "Actualisation…",
     photoSemaine: "Photo de la semaine",
     photoEnCours: "Préparation…",
     erreurPhoto: "Impossible de créer la photo. Réessaie.",
@@ -704,6 +708,9 @@ const I18N = {
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     erreurSuppression: "Error deleting. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
+    tirerPourActualiser: "Pull to refresh",
+    relacherPourActualiser: "Release to refresh",
+    actualisationEnCours: "Refreshing…",
     photoSemaine: "Week photo",
     photoEnCours: "Preparing…",
     erreurPhoto: "Could not create the photo. Try again.",
@@ -1827,6 +1834,14 @@ ScheduleUI.init({
 ScheduleUI.bindShiftModal();
 
 if (TOKEN) load(); else renderLogin();
+// Tirer vers le bas depuis le haut de la page recharge les données, sans repartir de zéro.
+TirerPourActualiser.init({
+  libelle: (cle) => t(cle),
+  surRafraichir: async () => {
+    if (TOKEN) await load();
+  },
+});
+
 </script>
 </body>
 </html>
