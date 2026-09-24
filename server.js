@@ -330,6 +330,26 @@ app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
   res.json({ restaurants: data });
 });
 
+// ---------- Effacement d'une semaine entière ----------
+
+function isISODate(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+// Une seule requête SQL plutôt qu'un DELETE par quart : si la connexion tombe en chemin, la
+// semaine ne peut pas rester à moitié vidée — et il n'y a aucune annulation possible après
+// coup. Le sous-select enferme l'effacement dans un seul restaurant : un code d'horaire ne
+// peut pas vider la semaine du restaurant d'à côté.
+function deleteShiftsBetween(restaurantId, from, to) {
+  return db
+    .prepare(`
+      DELETE FROM shifts
+      WHERE date >= ? AND date <= ?
+        AND employee_id IN (SELECT id FROM employees WHERE restaurant_id = ?)
+    `)
+    .run(from, to, restaurantId);
+}
+
 // ---------- Accès horaire par lien direct (un code par restaurant, aucun mot de passe) ----------
 // Même logique que les liens employés : le code lui-même sert de clé d'accès.
 function getRestaurantByCode(code) {
@@ -396,6 +416,16 @@ app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
     "UPDATE shifts SET date=?, start_time=?, end_time=?, role=?, note=?, updated_at=datetime('now') WHERE id=?"
   ).run(date, start_time, end_time, role || "server", note || "", req.params.id);
   res.json({ ok: true });
+});
+
+app.delete("/api/schedule/by-code/:code/shifts", (req, res) => {
+  const r = getRestaurantByCode(req.params.code);
+  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const { from, to } = req.query;
+  if (!isISODate(from) || !isISODate(to)) {
+    return res.status(400).json({ error: "from et to (AAAA-MM-JJ) requis" });
+  }
+  res.json({ deleted: deleteShiftsBetween(r.id, from, to).changes });
 });
 
 app.delete("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
@@ -571,6 +601,14 @@ app.post("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
     "UPDATE shifts SET date=?, start_time=?, end_time=?, role=?, note=?, updated_at=datetime('now') WHERE id=?"
   ).run(date, start_time, end_time, role || "server", note || "", req.params.id);
   res.json({ ok: true });
+});
+
+app.delete("/api/admin/shifts", requireScheduleAccess, (req, res) => {
+  const { restaurant_id, from, to } = req.query;
+  if (!restaurant_id || !isISODate(from) || !isISODate(to)) {
+    return res.status(400).json({ error: "restaurant_id, from et to (AAAA-MM-JJ) requis" });
+  }
+  res.json({ deleted: deleteShiftsBetween(restaurant_id, from, to).changes });
 });
 
 app.delete("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
