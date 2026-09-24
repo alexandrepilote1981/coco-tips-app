@@ -101,10 +101,14 @@ La **cuisine** ne déclare rien. Son horaire affiche `début → fin`, parce qu'
 poinçonne. Les postes diffèrent aussi (Cuisinier / Plongeur contre Serveur / Hôtesse).
 
 Chaque quart de cuisine peut aussi porter une **tâche** (« Prép », « Commande à défaire »).
-Elle s'écrit à la place du poste sous l'heure — la couleur de la pastille dit déjà le poste,
-et la case n'a pas de place pour les deux. Sa longueur maximale (`TACHE_MAX`) vit dans
-`horaire-mise-en-page.js` parce que c'est la largeur d'une colonne de jour qui la dicte ; le
-champ de saisie et le serveur s'y réfèrent tous les deux.
+Elle s'ajoute SOUS le poste, elle ne le remplace pas : on avait d'abord misé sur la couleur
+de la pastille pour dire le poste, mais dans une grille de quatorze personnes on lit les
+mots, pas les teintes. À l'écran, trois lignes ; sur la feuille imprimée, où une case fait
+26 points de haut, les deux partagent une ligne (« Cuisinier · Prép ») et c'est le poste qui
+cède quand l'ensemble déborde — sa couleur le dit encore, la tâche n'est écrite nulle part
+ailleurs. Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
+c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
+réfèrent tous les deux.
 
 Les taux horaires ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par

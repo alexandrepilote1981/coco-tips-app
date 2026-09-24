@@ -319,18 +319,31 @@
           // Le texte rétrécit aussi quand plusieurs heures partagent la largeur d'une colonne.
           const tailleHeure = Math.min(HEURE_T, pastilleH * 0.62, (JOUR_L - 10) / (heures.length * 0.58));
           // Le rôle n'apparaît que si la pastille porte deux lignes sans les écraser.
-          const avecRole = role !== null && quarts.length === 1 && pastilleH >= (tailleHeure + ROLE_T) * INTERLIGNE + 2;
-          const hauteurTexte = (avecRole ? tailleHeure + ROLE_T : tailleHeure) * INTERLIGNE;
+          // Sous l'heure, le poste ET la tâche. À l'écran ils tiennent sur deux lignes ; ici la
+          // pastille n'en a qu'une — une case de PDF fait 26 points de haut, pas assez pour
+          // trois lignes sans écraser l'heure, qui est ce qu'on lit en premier. On les met
+          // donc côte à côte, et on mesure avant : si l'ensemble déborde de la colonne, c'est
+          // le poste qui cède, parce que sa couleur le dit encore tandis que la tâche n'est
+          // écrite nulle part ailleurs.
+          const tache = avecTaches && quarts.length === 1 ? String(quarts[0].note || "").trim() : "";
+          let seconde = "";
+          if (role !== null && quarts.length === 1 && pastilleH >= (tailleHeure + ROLE_T) * INTERLIGNE + 2) {
+            const poste = LIBELLES_ROLE[L][role];
+            if (!tache) seconde = poste;
+            else {
+              const ensemble = `${poste} · ${tache}`;
+              seconde = surface.mesurer(ensemble, { taille: ROLE_T }) <= JOUR_L - 8 ? ensemble : tache;
+            }
+          }
+
+          const hauteurTexte = (tailleHeure + (seconde ? ROLE_T : 0)) * INTERLIGNE;
           const hautTexte = pastilleY + (pastilleH - hauteurTexte) / 2;
 
           surface.texte(heures, x + 3, hautTexte, {
             taille: tailleHeure, gras: true, couleur: encre, largeur: JOUR_L - 6, centre: true,
           });
-          if (avecRole) {
-            // La tâche prend la place du poste plutôt que d'ajouter une ligne : la couleur de
-            // la pastille dit déjà le poste, et la case n'a pas de place pour les deux.
-            const tache = avecTaches && quarts.length === 1 ? String(quarts[0].note || "").trim() : "";
-            surface.texte(tache || LIBELLES_ROLE[L][role], x + 3, hautTexte + tailleHeure * INTERLIGNE, {
+          if (seconde) {
+            surface.texte(seconde, x + 3, hautTexte + tailleHeure * INTERLIGNE, {
               taille: ROLE_T, couleur: encre, largeur: JOUR_L - 6, centre: true, tronquer: true,
             });
           }
