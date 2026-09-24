@@ -136,6 +136,16 @@ window.ScheduleUI = (function () {
     `;
   }
 
+  // Largeur minimale d'une colonne de jour. En dessous, tout se coupe : sur un téléphone,
+  // « 08:00 » devenait « 08:0 » et « Serveur » devenait « Ser… ». La grille glisse
+  // latéralement plutôt que d'écraser ce qu'on est venu lire.
+  //
+  // La cuisine en demande plus : elle affiche une plage (« 17:30–01:30 »), et lui donner la
+  // place de tenir sur une seule ligne garde aussi la case à la même hauteur qu'ailleurs.
+  // 96 px en cuisine : c'est ce qu'il faut pour qu'une tâche de longueur maximale
+  // (TACHE_MAX, soit « Commande à défaire ») s'écrive en entier plutôt que de finir en « … ».
+  const COLONNE_MIN = { salle: 62, cuisine: 100 };
+
   // ---------- grille ----------
 
   /**
@@ -177,7 +187,7 @@ window.ScheduleUI = (function () {
       <button class="photo-week-btn" data-action="photoWeek" ${marque}>${icon("image", 13)} ${t("photoSemaine")}</button>
       ${peutModifier ? `<button class="clear-week-btn" data-action="clearWeek" ${marque}>${icon("trash2", 13)} ${t("effacerSemaine")}</button>` : ""}
     </div>
-    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(0, 1fr));">
+    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(${COLONNE_MIN[secteur]}px, 1fr));">
       <div></div>
       ${dates
         .map(
