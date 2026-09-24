@@ -101,12 +101,18 @@ La **cuisine** ne déclare rien. Son horaire affiche `début → fin`, parce qu'
 poinçonne. Les postes diffèrent aussi (Cuisinier / Plongeur contre Serveur / Hôtesse).
 
 Chaque quart de cuisine peut aussi porter une **tâche** (« Prép », « Commande à défaire »).
-Elle s'ajoute SOUS le poste, elle ne le remplace pas : on avait d'abord misé sur la couleur
-de la pastille pour dire le poste, mais dans une grille de quatorze personnes on lit les
-mots, pas les teintes. À l'écran, trois lignes ; sur la feuille imprimée, où une case fait
-26 points de haut, les deux partagent une ligne (« Cuisinier · Prép ») et c'est le poste qui
-cède quand l'ensemble déborde — sa couleur le dit encore, la tâche n'est écrite nulle part
-ailleurs. Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
+Elle s'ajoute au poste sans le remplacer : on avait d'abord misé sur la couleur de la
+pastille pour dire le poste, mais dans une grille de quatorze personnes on lit les mots, pas
+les teintes. Les deux partagent **une seule ligne** (« Cuisinier · Prép »), à l'écran comme
+sur la feuille — une case ne doit pas s'allonger parce qu'on a écrit une tâche, sinon la
+grille ne tient plus sur un écran.
+
+Cette ligne ne revient jamais à la ligne (`white-space: nowrap`), et les colonnes de jour
+sont en `minmax(0, 1fr)` pour qu'un texte long ne les élargisse pas : sans ça, la semaine
+débordait latéralement dès qu'une tâche était écrite. Quand les deux ne rentrent pas, c'est
+le POSTE qui cède — sa couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Le
+PDF le décide en mesurant (`surface.mesurer`), la grille en laissant le navigateur répondre
+(`ajusterLignesDeTache`, après chaque rendu). Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
 réfèrent tous les deux.
 

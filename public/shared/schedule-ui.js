@@ -177,7 +177,7 @@ window.ScheduleUI = (function () {
       <button class="photo-week-btn" data-action="photoWeek" ${marque}>${icon("image", 13)} ${t("photoSemaine")}</button>
       ${peutModifier ? `<button class="clear-week-btn" data-action="clearWeek" ${marque}>${icon("trash2", 13)} ${t("effacerSemaine")}</button>` : ""}
     </div>
-    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, 1fr);">
+    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(0, 1fr));">
       <div></div>
       ${dates
         .map(
@@ -207,8 +207,11 @@ window.ScheduleUI = (function () {
                   ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"}"
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
-                       <div class="rl">${echapper(libelleRole(shift.role, lang))}</div>
-                       ${tacheDuQuart(shift, secteur) ? `<div class="tk">${echapper(tacheDuQuart(shift, secteur))}</div>` : ""}
+                       <div class="rl" ${tacheDuQuart(shift, secteur) ? `data-tache="${echapper(tacheDuQuart(shift, secteur))}"` : ""}>${echapper(
+                         tacheDuQuart(shift, secteur)
+                           ? `${libelleRole(shift.role, lang)} · ${tacheDuQuart(shift, secteur)}`
+                           : libelleRole(shift.role, lang)
+                       )}</div>
                      </div>`
                   : peutModifier
                   ? `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">+</button>`
@@ -628,8 +631,22 @@ window.ScheduleUI = (function () {
 
   // ---------- branchement des boutons ----------
 
+  // Le poste et la tâche partagent UNE ligne, qui ne revient jamais à la ligne : sans ça la
+  // case s'allonge, et une grille de quatorze personnes ne tient plus sur un écran.
+  //
+  // Reste à savoir ce qu'on garde quand les deux ne rentrent pas — et ça dépend de la
+  // largeur de l'écran, pas d'un nombre de caractères. On laisse donc le navigateur
+  // répondre : si la ligne déborde, on retire le poste et on garde la tâche seule. Le poste
+  // est encore dit par la couleur de la pastille ; la tâche n'est écrite nulle part ailleurs.
+  function ajusterLignesDeTache() {
+    document.querySelectorAll(".shift-chip .rl[data-tache]").forEach((ligne) => {
+      if (ligne.scrollWidth > ligne.clientWidth + 1) ligne.textContent = ligne.dataset.tache;
+    });
+  }
+
   // À rappeler après chaque rendu : les boutons sont recréés à chaque fois.
   function bindGridEvents() {
+    ajusterLignesDeTache();
     document.querySelectorAll('[data-action="prevWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => {
         weekStart = addDays(weekStart, -7);
@@ -698,6 +715,7 @@ window.ScheduleUI = (function () {
     deleteShiftFromModal,
     duplicateWeekToNext,
     clearWeekShifts,
+    ajusterLignesDeTache,
     rolesDe,
     echapper,
     tachesRecentes,
