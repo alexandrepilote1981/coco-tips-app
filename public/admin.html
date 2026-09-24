@@ -316,13 +316,18 @@
     font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
     display: flex; align-items: center; gap: 6px;
   }
-  /* Rouge et à droite des deux autres : on ne l'atteint pas par accident en visant « PDF ». */
+  .photo-week-btn {
+    background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.32); color: #6FBF93;
+    font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  /* Rouge et en dernier : on ne l'atteint pas par accident en visant un export. */
   .clear-week-btn {
     background: rgba(226,104,90,0.12); border: 1px solid rgba(226,104,90,0.3); color: #E2685A;
     font-size: 11.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px;
     display: flex; align-items: center; gap: 6px;
   }
-  .pdf-week-btn:disabled, .duplicate-week-btn:disabled, .clear-week-btn:disabled { opacity: 0.55; }
+  .pdf-week-btn:disabled, .duplicate-week-btn:disabled, .clear-week-btn:disabled, .photo-week-btn:disabled { opacity: 0.55; }
   .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
   .day-head { text-align: center; padding: 6px 2px; }
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
@@ -428,6 +433,8 @@
 
 <!-- Grille d'horaire commune à cette page et à /horaire : une seule définition. -->
 <script src="/shared/noms.js"></script>
+<script src="/shared/horaire-mise-en-page.js"></script>
+<script src="/shared/horaire-image.js"></script>
 <script src="/shared/schedule-ui.js"></script>
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
@@ -448,6 +455,7 @@ const ICON_PATHS = {
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
 };
 function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
@@ -560,6 +568,10 @@ const I18N = {
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     erreurSuppression: "Erreur lors de la suppression. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    photoSemaine: "Photo de la semaine",
+    photoEnCours: "Préparation…",
+    erreurPhoto: "Impossible de créer la photo. Réessaie.",
+    titrePartage: "Horaire de la semaine",
     effacerSemaine: "Effacer la semaine",
     aucunQuartAEffacer: "Aucun quart à effacer dans cette semaine.",
     confirmEffacerSemaine: (n, semaine) =>
@@ -692,6 +704,10 @@ const I18N = {
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     erreurSuppression: "Error deleting. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
+    photoSemaine: "Week photo",
+    photoEnCours: "Preparing…",
+    erreurPhoto: "Could not create the photo. Try again.",
+    titrePartage: "This week's schedule",
     effacerSemaine: "Clear the week",
     aucunQuartAEffacer: "No shifts to clear this week.",
     confirmEffacerSemaine: (n, semaine) =>
