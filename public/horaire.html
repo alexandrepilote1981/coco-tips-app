@@ -331,19 +331,22 @@
   .shift-cell { border-top: 1px solid rgba(255,255,255,0.06); padding: 3px; min-height: 46px; display: flex; align-items: center; justify-content: center; }
   .shift-chip {
     width: 100%; height: 100%; background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.3); border-radius: 8px;
-    padding: 4px 3px; text-align: center; cursor: pointer;
+    padding: 3px; text-align: center; cursor: pointer;
+    display: flex; flex-direction: column; justify-content: center;
   }
   .shift-chip.role-hostess { background: rgba(212,168,87,0.14); border-color: rgba(212,168,87,0.3); }
   .shift-chip .st { font-size: 13px; font-weight: 700; color: #6FBF93; line-height: 1.25; }
   .shift-chip.role-hostess .st { color: #D4A857; }
-  /* Une seule ligne, qui ne revient jamais à la ligne : c'est ce qui garantit que la case
-     ne s'allonge pas quand on écrit une tâche. */
-  .shift-chip .rl {
-    font-size: 8px; color: #8993A4; margin-top: 1px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* Le poste et la tâche ont chacun leur ligne, mais AUCUNE des deux ne revient à la ligne :
+     c'est ce qui garantit que la case ne s'allonge pas quand on écrit une tâche. Ce qui
+     dépasse est coupé — le texte complet reste visible en ouvrant le quart. */
+  .shift-chip .rl, .shift-chip .tk {
+    max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .shift-chip .rl[data-tache] { color: #D8DEE8; font-weight: 700; }
-  .shift-chip .st { min-width: 0; }
+  /* Les corps sont serrés exprès : les trois lignes doivent tenir dans la hauteur que la
+     case avait déjà, sinon écrire une tâche allonge toute la grille. */
+  .shift-chip .rl { font-size: 8px; line-height: 1.15; color: #8993A4; }
+  .shift-chip .tk { font-size: 8.5px; line-height: 1.15; font-weight: 700; color: #D8DEE8; }
   .empty-cell {
     width: 100%; height: 100%; min-height: 40px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.12);
     background: none; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.2); font-size: 15px; cursor: pointer;

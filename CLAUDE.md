@@ -107,12 +107,17 @@ les teintes. Les deux partagent **une seule ligne** (« Cuisinier · Prép »), 
 sur la feuille — une case ne doit pas s'allonger parce qu'on a écrit une tâche, sinon la
 grille ne tient plus sur un écran.
 
-Cette ligne ne revient jamais à la ligne (`white-space: nowrap`), et les colonnes de jour
-sont en `minmax(0, 1fr)` pour qu'un texte long ne les élargisse pas : sans ça, la semaine
-débordait latéralement dès qu'une tâche était écrite. Quand les deux ne rentrent pas, c'est
-le POSTE qui cède — sa couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Le
-PDF le décide en mesurant (`surface.mesurer`), la grille en laissant le navigateur répondre
-(`ajusterLignesDeTache`, après chaque rendu). Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
+À l'écran, la tâche a sa propre ligne sous le poste, et les corps de texte de la pastille
+sont serrés exprès pour que les trois lignes tiennent dans la hauteur que la case avait
+déjà : écrire une tâche ne doit pas allonger la grille. Ni le poste ni la tâche ne reviennent
+à la ligne (`white-space: nowrap` + ellipsis), et les colonnes de jour sont en
+`minmax(0, 1fr)` pour qu'un texte long ne les élargisse pas — sans ça, la semaine débordait
+latéralement. Le texte complet reste visible en ouvrant le quart.
+
+Sur la feuille imprimée il n'y a de place que pour deux lignes (une case fait 26 points de
+haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép ». Quand les deux
+ne rentrent pas dans la colonne, mesurée par `surface.mesurer`, c'est le POSTE qui cède — sa
+couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
 réfèrent tous les deux.
 
