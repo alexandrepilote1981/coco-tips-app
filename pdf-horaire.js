@@ -5,6 +5,10 @@ const { splitName } = require("./public/shared/noms.js");
 // Volontairement en thème clair : c'est fait pour être imprimé ou envoyé aux employés,
 // pas pour être lu dans l'app (qui est en thème sombre).
 //
+// L'horaire tient toujours sur UNE page : la hauteur des lignes, et tout ce qui est écrit
+// dedans, se calcule à partir du nombre d'employés. Auparavant la liste était coupée à onze
+// et le douzième partait sur une deuxième page que personne ne décrochait du mur.
+//
 // Seule l'heure de DÉBUT est imprimée. La fin d'un quart dépend de l'achalandage du soir :
 // l'heure inscrite n'est presque jamais celle où la personne part réellement, et la feuille
 // affichée au mur faisait donc une promesse fausse. Les totaux d'heures ont disparu avec
@@ -32,14 +36,12 @@ const T = {
     titre: "Horaire",
     aucunEmploye: "Aucun employé pour ce restaurant.",
     genereLe: (d) => `Généré le ${d}`,
-    page: (n, tot) => `Page ${n} de ${tot}`,
     semaine: (d1, d2) => `Semaine du ${d1} au ${d2}`,
   },
   en: {
     titre: "Schedule",
     aucunEmploye: "No employees for this restaurant.",
     genereLe: (d) => `Generated on ${d}`,
-    page: (n, tot) => `Page ${n} of ${tot}`,
     semaine: (d1, d2) => `Week of ${d1} to ${d2}`,
   },
 };
@@ -156,14 +158,33 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
   const DAY_W = (tableW - NAME_W) / 7;
 
   const HEAD_H = 34;
-  const ROW_H = 34;
+  const MAX_ROW_H = 34;
 
   const headerBlockH = 76;
   const footerH = 26;
   const tableTop = M + headerBlockH;
   const availableForRows = pageH - M - footerH - tableTop - HEAD_H;
-  const rowsPerPage = Math.max(1, Math.floor(availableForRows / ROW_H));
-  const pages = employees.length === 0 ? 1 : Math.ceil(employees.length / rowsPerPage);
+
+  // L'horaire tient TOUJOURS sur une seule page : la feuille est affichée au mur, et une
+  // deuxième page se décroche, se perd, ou se lit sans la première. On ne coupe donc jamais
+  // la liste — on partage la hauteur disponible entre tous les employés, et ce qui est écrit
+  // dans la ligne rétrécit avec elle. Vers la trentaine d'employés le texte devient petit,
+  // mais il reste sur une feuille, ce qui est le but.
+  const ROW_H =
+    employees.length > 0 ? Math.min(MAX_ROW_H, availableForRows / employees.length) : MAX_ROW_H;
+
+  // Les corps de texte suivent la hauteur de ligne, avec un plancher pour rester lisibles.
+  const reduction = ROW_H / MAX_ROW_H;
+  const corps = (base, plancher) => Math.max(plancher, base * reduction);
+  const NAME_SIZE = corps(9.5, 5);
+  const SUB_SIZE = corps(7.5, 4.5);
+  const TIME_SIZE = corps(11, 5.5);
+  const ROLE_SIZE = corps(7, 4);
+  const LIGNE = 1.15; // hauteur d'une ligne de texte, en multiples du corps
+
+  // Sous cette hauteur, deux lignes de nom se chevaucheraient : prénom et nom de famille
+  // passent alors sur la même ligne.
+  const NOM_SUR_DEUX_LIGNES = ROW_H >= 26;
 
   function colX(i) {
     return tableX + NAME_W + i * DAY_W;
@@ -214,15 +235,18 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
     const sousLigne = [last, emp.employee_number ? `#${emp.employee_number}` : ""]
       .filter(Boolean)
       .join("  ·  ");
-    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(COLORS.ink)
-      .text(first, tableX + 8, y + (sousLigne ? 8 : 12), {
-        width: NAME_W - 14,
-        lineBreak: false,
-        ellipsis: true,
-      });
-    if (sousLigne) {
-      doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.muted)
-        .text(sousLigne, tableX + 8, y + 21, { width: NAME_W - 14, lineBreak: false, ellipsis: true });
+    const optionsNom = { width: NAME_W - 14, lineBreak: false, ellipsis: true };
+
+    if (sousLigne && NOM_SUR_DEUX_LIGNES) {
+      const haut = y + (ROW_H - (NAME_SIZE + SUB_SIZE) * LIGNE) / 2;
+      doc.font("Helvetica-Bold").fontSize(NAME_SIZE).fillColor(COLORS.ink)
+        .text(first, tableX + 8, haut, optionsNom);
+      doc.font("Helvetica").fontSize(SUB_SIZE).fillColor(COLORS.muted)
+        .text(sousLigne, tableX + 8, haut + NAME_SIZE * LIGNE, optionsNom);
+    } else {
+      const surUneLigne = sousLigne ? `${first} ${sousLigne}` : first;
+      doc.font("Helvetica-Bold").fontSize(NAME_SIZE).fillColor(COLORS.ink)
+        .text(surUneLigne, tableX + 8, y + (ROW_H - NAME_SIZE * LIGNE) / 2, optionsNom);
     }
 
     dates.forEach((d, i) => {
@@ -230,29 +254,46 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
       const dayShifts = weekShifts.filter((s) => s.employee_id === emp.id && s.date === dateStr);
       const x = colX(i);
       if (dayShifts.length === 0) {
-        doc.font("Helvetica").fontSize(10).fillColor("#C3CAD3")
-          .text("—", x, y + 12, { width: DAY_W, align: "center", lineBreak: false });
+        const tiret = Math.min(10, TIME_SIZE);
+        doc.font("Helvetica").fontSize(tiret).fillColor("#C3CAD3")
+          .text("—", x, y + (ROW_H - tiret * LIGNE) / 2, { width: DAY_W, align: "center", lineBreak: false });
         return;
       }
-      // Plusieurs quarts la même journée : on les empile en plus petit plutôt que d'en cacher un.
-      const stacked = dayShifts.length > 1;
-      dayShifts.forEach((shift, k) => {
-        const role = shift.role === "hostess" ? "hostess" : "server";
-        const bg = role === "hostess" ? COLORS.hostessBg : COLORS.serverBg;
-        const fg = role === "hostess" ? COLORS.hostessInk : COLORS.serverInk;
-        const chipH = stacked ? (ROW_H - 8) / dayShifts.length - 1 : ROW_H - 8;
-        const chipY = y + 4 + k * (chipH + 1);
-        roundedBox(doc, x + 3, chipY, DAY_W - 6, chipH, 4, bg);
-        if (stacked) {
-          doc.font("Helvetica-Bold").fontSize(6.8).fillColor(fg)
-            .text(shift.start_time, x + 3, chipY + chipH / 2 - 4, {
+      // Plusieurs quarts la même journée : on les empile en plus petit plutôt que d'en cacher
+      // un. Mais sur une liste très longue, les lignes sont trop basses pour être coupées en
+      // deux — les deux pastilles deviendraient illisibles. Dans ce cas on n'en fait qu'une,
+      // portant les heures de début côte à côte : « 08:00 / 17:00 ».
+      const marge = Math.max(1.5, Math.min(4, ROW_H * 0.12));
+      const hauteurEmpilee = (ROW_H - marge * 2 - (dayShifts.length - 1)) / dayShifts.length;
+      const empile = dayShifts.length > 1 && hauteurEmpilee >= 9;
+      const tranches = empile ? dayShifts : [dayShifts];
+      const ecart = empile ? 1 : 0;
+      const chipH = Math.max(2, (ROW_H - marge * 2 - ecart * (tranches.length - 1)) / tranches.length);
+      tranches.forEach((tranche, k) => {
+        const quarts = empile ? [tranche] : tranche;
+        // Une pastille qui rassemble deux rôles différents n'en annonce aucun : elle reste neutre.
+        const roles = new Set(quarts.map((q) => (q.role === "hostess" ? "hostess" : "server")));
+        const role = roles.size === 1 ? [...roles][0] : null;
+        const bg = role === null ? COLORS.headBg : role === "hostess" ? COLORS.hostessBg : COLORS.serverBg;
+        const fg = role === null ? COLORS.ink : role === "hostess" ? COLORS.hostessInk : COLORS.serverInk;
+        const chipY = y + marge + k * (chipH + ecart);
+        roundedBox(doc, x + 3, chipY, DAY_W - 6, chipH, Math.min(4, chipH / 3), bg);
+
+        // Le rôle n'apparaît que si la pastille porte deux lignes sans les écraser ; sinon
+        // l'heure seule, centrée, plutôt qu'un empilement illisible.
+        const heures = quarts.map((q) => q.start_time).join(" / ");
+        // Le texte rétrécit aussi quand plusieurs heures partagent la largeur d'une colonne.
+        const heure = Math.min(TIME_SIZE, chipH * 0.62, (DAY_W - 10) / (heures.length * 0.58));
+        const avecRole = role !== null && quarts.length === 1 && chipH >= (heure + ROLE_SIZE) * LIGNE + 2;
+        const hauteurTexte = (avecRole ? heure + ROLE_SIZE : heure) * LIGNE;
+        const hautTexte = chipY + (chipH - hauteurTexte) / 2;
+        doc.font("Helvetica-Bold").fontSize(heure).fillColor(fg)
+          .text(heures, x + 3, hautTexte, { width: DAY_W - 6, align: "center", lineBreak: false });
+        if (avecRole) {
+          doc.font("Helvetica").fontSize(ROLE_SIZE).fillColor(fg)
+            .text(ROLE_LABELS[L][role], x + 3, hautTexte + heure * LIGNE, {
               width: DAY_W - 6, align: "center", lineBreak: false,
             });
-        } else {
-          doc.font("Helvetica-Bold").fontSize(11).fillColor(fg)
-            .text(shift.start_time, x + 3, chipY + 4, { width: DAY_W - 6, align: "center", lineBreak: false });
-          doc.font("Helvetica").fontSize(7).fillColor(fg)
-            .text(ROLE_LABELS[L][role], x + 3, chipY + 15, { width: DAY_W - 6, align: "center", lineBreak: false });
         }
       });
     });
@@ -273,12 +314,10 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
     doc.restore();
   }
 
-  function drawFooter(pageNum) {
+  function drawFooter() {
     const y = pageH - M - 12;
     doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.muted)
-      .text(tr.genereLe(fmtTimestamp(new Date(), L)), M, y, { width: tableW / 2, lineBreak: false });
-    doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.muted)
-      .text(tr.page(pageNum, pages), M + tableW / 2, y, { width: tableW / 2, align: "right", lineBreak: false });
+      .text(tr.genereLe(fmtTimestamp(new Date(), L)), M, y, { width: tableW, lineBreak: false });
   }
 
   if (employees.length === 0) {
@@ -287,21 +326,17 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
     doc.font("Helvetica").fontSize(10).fillColor(COLORS.muted)
       .text(tr.aucunEmploye, tableX, tableTop + HEAD_H + 24, { width: tableW, align: "center" });
     drawTableBorder(tableTop + HEAD_H);
-    drawFooter(1);
+    drawFooter();
   } else {
-    for (let p = 0; p < pages; p++) {
-      if (p > 0) doc.addPage();
-      const pageEmployees = employees.slice(p * rowsPerPage, (p + 1) * rowsPerPage);
-      drawPageHeader();
-      drawTableHead();
-      let y = tableTop + HEAD_H;
-      for (const emp of pageEmployees) {
-        drawEmployeeRow(emp, y);
-        y += ROW_H;
-      }
-      drawTableBorder(y);
-      drawFooter(p + 1);
+    drawPageHeader();
+    drawTableHead();
+    let y = tableTop + HEAD_H;
+    for (const emp of employees) {
+      drawEmployeeRow(emp, y);
+      y += ROW_H;
     }
+    drawTableBorder(y);
+    drawFooter();
   }
 
   doc.end();
