@@ -1,4 +1,5 @@
 const PDFDocument = require("pdfkit");
+const { splitName } = require("./public/shared/noms.js");
 
 // Génération du PDF d'horaire hebdomadaire (lundi → dimanche), en paysage.
 // Volontairement en thème clair : c'est fait pour être imprimé ou envoyé aux employés,
@@ -236,16 +237,22 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
       doc.save().rect(colX(i), y, DAY_W, ROW_H).fill(COLORS.weekendBg).restore();
     }
 
-    const firstName = (emp.name || "").trim();
+    // Prénom en gras, nom de famille juste en dessous. Sans le nom de famille, deux
+    // employées prénommées Marie donnaient deux lignes identiques sur la feuille affichée
+    // au mur, et personne ne savait quel quart appartenait à qui.
+    const { first, last } = splitName(emp.name);
+    const sousLigne = [last, emp.employee_number ? `#${emp.employee_number}` : ""]
+      .filter(Boolean)
+      .join("  ·  ");
     doc.font("Helvetica-Bold").fontSize(9.5).fillColor(COLORS.ink)
-      .text(firstName, tableX + 8, y + (emp.employee_number ? 8 : 12), {
+      .text(first, tableX + 8, y + (sousLigne ? 8 : 12), {
         width: NAME_W - 14,
         lineBreak: false,
         ellipsis: true,
       });
-    if (emp.employee_number) {
-      doc.font("Helvetica").fontSize(7).fillColor(COLORS.muted)
-        .text(`#${emp.employee_number}`, tableX + 8, y + 21, { width: NAME_W - 14, lineBreak: false, ellipsis: true });
+    if (sousLigne) {
+      doc.font("Helvetica").fontSize(7.5).fillColor(COLORS.muted)
+        .text(sousLigne, tableX + 8, y + 21, { width: NAME_W - 14, lineBreak: false, ellipsis: true });
     }
 
     let totalHours = 0;

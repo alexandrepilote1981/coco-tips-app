@@ -323,9 +323,14 @@
   .day-head .dnum { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; margin-top: 2px; color: #F1EFEA; }
   .day-head.today .dnum { color: #D4A857; }
   .emp-name-cell {
-    display: flex; align-items: center; font-size: 11.5px; font-weight: 700; color: #F1EFEA;
-    padding: 6px 6px 6px 0; border-top: 1px solid rgba(255,255,255,0.06); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start; color: #F1EFEA;
+    padding: 6px 6px 6px 0; border-top: 1px solid rgba(255,255,255,0.06); overflow: hidden;
   }
+  .emp-name-cell span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
+  .emp-name-cell .emp-first { font-size: 11.5px; font-weight: 700; }
+  /* Le nom de famille est le seul moyen de distinguer deux employées qui portent le même
+     prénom : il doit rester lisible, juste un cran plus discret que le prénom. */
+  .emp-name-cell .emp-last { font-size: 10px; font-weight: 600; color: #8993A4; }
   .shift-cell { border-top: 1px solid rgba(255,255,255,0.06); padding: 3px; min-height: 46px; display: flex; align-items: center; justify-content: center; }
   .shift-chip {
     width: 100%; height: 100%; background: rgba(111,191,147,0.14); border: 1px solid rgba(111,191,147,0.3); border-radius: 8px;
@@ -416,6 +421,7 @@
 </div>
 
 <!-- Grille d'horaire commune à cette page et à /horaire : une seule définition. -->
+<script src="/shared/noms.js"></script>
 <script src="/shared/schedule-ui.js"></script>
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------

@@ -111,7 +111,7 @@ window.ScheduleUI = (function () {
       ${employees
         .map(
           (emp) => `
-        <div class="emp-name-cell">${emp.name.split(" ")[0]}</div>
+        ${empNameCellHTML(emp)}
         ${dates
           .map((d) => {
             const dateStr = isoDate(d);
@@ -135,6 +135,16 @@ window.ScheduleUI = (function () {
         .join("")}
     </div>
   `;
+  }
+
+  // Prénom sur une ligne, nom de famille en dessous. Deux employées prénommées Marie
+  // donnaient auparavant deux lignes rigoureusement identiques dans la grille.
+  function empNameCellHTML(emp) {
+    const { first, last } = window.Noms.splitName(emp.name);
+    return `<div class="emp-name-cell">
+        <span class="emp-first">${first}</span>
+        ${last ? `<span class="emp-last">${last}</span>` : ""}
+      </div>`;
   }
 
   // Heures valides de 5 h à 22 h par tranches de 15 min. On construit la liste nous-mêmes
