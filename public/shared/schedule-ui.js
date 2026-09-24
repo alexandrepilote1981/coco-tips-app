@@ -95,6 +95,7 @@ window.ScheduleUI = (function () {
     <div class="week-actions">
       <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
       <button class="pdf-week-btn" data-action="pdfWeek" data-resto="${restaurantId}">${icon("download", 13)} ${t("telechargerPdf")}</button>
+      <button class="clear-week-btn" data-action="clearWeek" data-resto="${restaurantId}">${icon("trash2", 13)} ${t("effacerSemaine")}</button>
     </div>
     <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
       <div></div>
@@ -296,6 +297,44 @@ window.ScheduleUI = (function () {
     }
   }
 
+  // ---------- effacement d'une semaine ----------
+
+  // Vide d'un coup la semaine affichée. Le serveur le fait en une seule requête : effacer
+  // quart par quart depuis le navigateur laisserait une grille à moitié vide si la connexion
+  // tombait au milieu, et rien ne permet de revenir en arrière ensuite. La confirmation
+  // nomme la semaine ET le nombre de quarts, parce qu'on efface souvent en ayant la mauvaise
+  // semaine sous les yeux.
+  async function clearWeekShifts(restaurantId, btn) {
+    const restaurant = host.restaurants().find((r) => r.id === restaurantId);
+    if (!restaurant) return;
+    const empIds = restaurant.employees.map((e) => e.id);
+    const dates = weekDates(weekStart).map((d) => isoDate(d));
+    const weekShifts = host.shifts().filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
+
+    if (weekShifts.length === 0) {
+      alert(host.t("aucunQuartAEffacer"));
+      return;
+    }
+    if (!confirm(host.t("confirmEffacerSemaine", weekShifts.length, fmtWeekLabel(weekStart)))) return;
+
+    btn.disabled = true;
+    btn.textContent = host.t("effacementEnCours");
+    try {
+      const params = `restaurant_id=${encodeURIComponent(restaurantId)}&from=${dates[0]}&to=${dates[6]}`;
+      await host.shiftApi(`/shifts?${params}`, { method: "DELETE" });
+      host.setShifts(await host.reloadShifts());
+      host.rerender();
+    } catch (err) {
+      // On recharge quand même avant de redessiner : si l'effacement est passé côté serveur
+      // mais que la réponse s'est perdue, l'écran doit montrer l'état réel, pas l'ancien.
+      try {
+        host.setShifts(await host.reloadShifts());
+      } catch (_) {}
+      host.rerender();
+      alert(host.t("erreurEffacerSemaine"));
+    }
+  }
+
   // ---------- PDF ----------
 
   // Le fichier est récupéré en blob plutôt que par un lien <a href> direct, parce qu'il faut
@@ -369,6 +408,9 @@ window.ScheduleUI = (function () {
     document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn));
     });
+    document.querySelectorAll('[data-action="clearWeek"]').forEach((btn) => {
+      btn.addEventListener("click", () => clearWeekShifts(btn.dataset.resto, btn));
+    });
   }
 
   // À appeler une fois au chargement : ferme la fenêtre de quart et branche ses boutons.
@@ -398,6 +440,7 @@ window.ScheduleUI = (function () {
     saveShiftFromModal,
     deleteShiftFromModal,
     duplicateWeekToNext,
+    clearWeekShifts,
     downloadWeekPdf,
     bindGridEvents,
     bindShiftModal,
