@@ -63,7 +63,7 @@ function surfacePdf(doc) {
  * @param {"fr"|"en"} opts.lang
  * @returns {Promise<Buffer>}
  */
-function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lang = "fr" }) {
+function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lang = "fr", avecHeureFin = false }) {
   const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 32 });
   const morceaux = [];
   doc.on("data", (c) => morceaux.push(c));
@@ -72,7 +72,7 @@ function buildSchedulePdf({ restaurantName, employees, shifts, weekStartISO, lan
     doc.on("error", reject);
   });
 
-  mise.dessinerHoraire(surfacePdf(doc), { restaurantName, employees, shifts, weekStartISO, lang });
+  mise.dessinerHoraire(surfacePdf(doc), { restaurantName, employees, shifts, weekStartISO, lang, avecHeureFin });
 
   doc.end();
   return fini;

@@ -71,34 +71,113 @@ window.ScheduleUI = (function () {
   const ROLES = {
     server: { fr: "Serveur", en: "Server" },
     hostess: { fr: "Hôtesse", en: "Host" },
+    cuisinier: { fr: "Cuisinier", en: "Cook" },
+    plongeur: { fr: "Plongeur", en: "Dishwasher" },
   };
+
+  // Chaque secteur a ses propres postes : proposer « Hôtesse » à un plongeur n'a aucun sens,
+  // et l'inverse non plus.
+  const ROLES_PAR_SECTEUR = {
+    salle: ["server", "hostess"],
+    cuisine: ["cuisinier", "plongeur"],
+  };
+
+  function rolesDe(secteur) {
+    return ROLES_PAR_SECTEUR[secteur] || ROLES_PAR_SECTEUR.salle;
+  }
+
+  // Une même page peut afficher deux grilles (la salle et la cuisine). Les boutons portent
+  // donc leur secteur, et on garde ici de quoi retrouver le contexte de chacune au moment du
+  // clic — les nœuds sont refaits à chaque rendu, mais pas cet objet.
+  const contextes = {};
+  const secteurParEmploye = {};
+
+  function cle(restaurantId, secteur) {
+    return `${restaurantId}:${secteur}`;
+  }
+
+  function contexteDe(restaurantId, secteur) {
+    return contextes[cle(restaurantId, secteur)] || { secteur: secteur || "salle", employees: [], peutModifier: true, voitMontants: false, chargesPct: 0 };
+  }
+
+  // Ce que la semaine affichée va coûter — et surtout combien elle coûte DE MOINS que la
+  // précédente. C'est le troisième chiffre qui compte : un total tout seul ne dit rien, un
+  // total qui baisse se regarde. Et c'est le coût du PLAN : personne ne poinçonne.
+  function barreCoutHTML(restaurantId, secteur, employees, chargesPct) {
+    const t = host.t;
+    const lang = host.lang();
+    const C = window.CoutMainOeuvre;
+    const quarts = host.shifts();
+
+    const actuelle = C.coutSurPeriode(employees, quarts, weekDates(weekStart).map(isoDate), chargesPct);
+    const precedente = C.coutSurPeriode(employees, quarts, weekDates(addDays(weekStart, -7)).map(isoDate), chargesPct);
+    const diff = C.ecart(actuelle, precedente);
+    const sens = diff.cout < -0.005 ? "baisse" : diff.cout > 0.005 ? "hausse" : "egal";
+
+    return `
+      <div class="cout-bar" data-resto="${restaurantId}" data-secteur="${secteur}">
+        <div class="cout-bloc">
+          <div class="cout-etiq">${t("heuresSemaine")}</div>
+          <div class="cout-val">${C.fmtHeures(actuelle.heures, lang)}</div>
+        </div>
+        <div class="cout-bloc">
+          <div class="cout-etiq">${t("masseSalariale")}</div>
+          <div class="cout-val cout-gros">${C.fmtMontant(actuelle.cout, lang)}</div>
+        </div>
+        <div class="cout-bloc">
+          <div class="cout-etiq">${t("vsSemainePassee")}</div>
+          <div class="cout-val cout-${sens}">${C.fmtEcart(diff.cout, lang)}</div>
+        </div>
+      </div>
+      <div class="cout-notes">
+        <span>${chargesPct > 0 ? t("chargesIncluses", chargesPct) : t("chargesNonIncluses")}</span>
+        ${actuelle.sansTaux > 0 ? `<span class="cout-manque">${t("employesSansTaux", actuelle.sansTaux)}</span>` : ""}
+      </div>
+    `;
+  }
 
   // ---------- grille ----------
 
-  function renderWeekGrid(restaurantId, employees) {
+  /**
+   * @param {object} [options]
+   * @param {"salle"|"cuisine"} [options.secteur]
+   * @param {boolean} [options.peutModifier]  false = lien en lecture seule (les cuisiniers)
+   * @param {boolean} [options.voitMontants]  true = affiche la masse salariale
+   * @param {number}  [options.chargesPct]
+   */
+  function renderWeekGrid(restaurantId, employees, options = {}) {
+    const secteur = options.secteur === "cuisine" ? "cuisine" : "salle";
+    const peutModifier = options.peutModifier !== false;
+    const voitMontants = !!options.voitMontants;
+    const chargesPct = options.chargesPct || 0;
+    contextes[cle(restaurantId, secteur)] = { secteur, employees, peutModifier, voitMontants, chargesPct };
+    for (const emp of employees) secteurParEmploye[emp.id] = secteur;
+
     const dates = weekDates(weekStart);
     const todayStr = todayISO();
     const t = host.t;
     const icon = host.icon;
     const lang = host.lang();
     const shifts = host.shifts();
+    const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
 
     return `
+    ${voitMontants ? barreCoutHTML(restaurantId, secteur, employees, chargesPct) : ""}
     <div class="week-header">
       <div class="week-title">${fmtWeekLabel(weekStart)}</div>
       <div class="week-nav">
-        <button data-action="prevWeek" data-resto="${restaurantId}">‹</button>
-        <button data-action="thisWeek" data-resto="${restaurantId}">${t("aujourdhui")}</button>
-        <button data-action="nextWeek" data-resto="${restaurantId}">›</button>
+        <button data-action="prevWeek" ${marque}>‹</button>
+        <button data-action="thisWeek" ${marque}>${t("aujourdhui")}</button>
+        <button data-action="nextWeek" ${marque}>›</button>
       </div>
     </div>
     <div class="week-actions">
-      <button class="duplicate-week-btn" data-action="duplicateWeek" data-resto="${restaurantId}">${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>
-      <button class="pdf-week-btn" data-action="pdfWeek" data-resto="${restaurantId}">${icon("download", 13)} ${t("telechargerPdf")}</button>
-      <button class="photo-week-btn" data-action="photoWeek" data-resto="${restaurantId}">${icon("image", 13)} ${t("photoSemaine")}</button>
-      <button class="clear-week-btn" data-action="clearWeek" data-resto="${restaurantId}">${icon("trash2", 13)} ${t("effacerSemaine")}</button>
+      ${peutModifier ? `<button class="duplicate-week-btn" data-action="duplicateWeek" ${marque}>${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>` : ""}
+      <button class="pdf-week-btn" data-action="pdfWeek" ${marque}>${icon("download", 13)} ${t("telechargerPdf")}</button>
+      <button class="photo-week-btn" data-action="photoWeek" ${marque}>${icon("image", 13)} ${t("photoSemaine")}</button>
+      ${peutModifier ? `<button class="clear-week-btn" data-action="clearWeek" ${marque}>${icon("trash2", 13)} ${t("effacerSemaine")}</button>` : ""}
     </div>
-    <div class="week-grid" style="grid-template-columns: 96px repeat(7, 1fr);">
+    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, 1fr);">
       <div></div>
       ${dates
         .map(
@@ -125,11 +204,14 @@ window.ScheduleUI = (function () {
             <div class="shift-cell">
               ${
                 shift
-                  ? `<div class="shift-chip role-${shift.role || "server"}" data-action="editShift" data-id="${shift.id}">
-                       <div class="st">${fmtTime(shift.start_time)}</div>
-                       <div class="rl">${ROLES[shift.role || "server"][lang]}</div>
+                  ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"}"
+                          ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
+                       <div class="st">${heuresAffichees(shift, secteur)}</div>
+                       <div class="rl">${libelleRole(shift.role, lang)}</div>
                      </div>`
-                  : `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}">+</button>`
+                  : peutModifier
+                  ? `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">+</button>`
+                  : `<div class="empty-cell lecture">—</div>`
               }
             </div>
           `;
@@ -150,6 +232,22 @@ window.ScheduleUI = (function () {
         <span class="emp-first">${first}</span>
         ${last ? `<span class="emp-last">${last}</span>` : ""}
       </div>`;
+  }
+
+  // En cuisine, l'heure de fin est prévisible : on l'affiche, elle sert à tout le monde. En
+  // salle, une serveuse part quand la salle est vide — l'écrire serait une promesse fausse.
+  function heuresAffichees(shift, secteur) {
+    if (secteur === "cuisine" && shift.end_time) return `${fmtTime(shift.start_time)}–${fmtTime(shift.end_time)}`;
+    return fmtTime(shift.start_time);
+  }
+
+  function libelleRole(role, lang) {
+    return (ROLES[role] || ROLES.server)[lang];
+  }
+
+  // Deux teintes seulement : le poste principal en vert, le second en or.
+  function roleSecondaire(role) {
+    return role === "hostess" || role === "plongeur";
   }
 
   // Heures valides de 5 h à 22 h par tranches de 15 min. On construit la liste nous-mêmes
@@ -176,22 +274,29 @@ window.ScheduleUI = (function () {
     return "";
   }
 
-  function openShiftModal({ shiftId, employeeId, date }) {
+  function openShiftModal({ shiftId, employeeId, date, secteur }) {
     const overlay = document.getElementById("shiftModalOverlay");
     const existing = shiftId ? host.shifts().find((s) => s.id === shiftId) : null;
     const t = host.t;
+    const empId = existing ? existing.employee_id : employeeId;
+    // Les postes proposés suivent l'équipe de la personne : on ne propose pas « Hôtesse » à
+    // un plongeur. Pour un quart existant, l'équipe se déduit de l'employé.
+    const equipe = secteur || secteurParEmploye[empId] || "salle";
     overlay.dataset.shiftId = shiftId || "";
-    overlay.dataset.employeeId = existing ? existing.employee_id : employeeId;
+    overlay.dataset.employeeId = empId;
+    overlay.dataset.secteur = equipe;
 
     document.getElementById("shiftModalTitle").textContent = existing ? t("modifierQuart") : t("ajouterQuart");
     document.getElementById("shiftModalEmpName").textContent = employeeName(existing ? existing.employee_id : employeeId);
     document.getElementById("shiftDateInput").value = existing ? existing.date : date;
     document.getElementById("shiftStartInput").innerHTML = timeOptionsHTML(existing ? existing.start_time : "09:00");
     document.getElementById("shiftEndInput").innerHTML = timeOptionsHTML(existing ? existing.end_time : "17:00");
-    document.getElementById("shiftRoleInput").innerHTML = Object.entries(ROLES)
-      .map(([val, labels]) => `<option value="${val}">${labels[host.lang()]}</option>`)
+    const postes = rolesDe(equipe);
+    document.getElementById("shiftRoleInput").innerHTML = postes
+      .map((val) => `<option value="${val}">${ROLES[val][host.lang()]}</option>`)
       .join("");
-    document.getElementById("shiftRoleInput").value = existing ? existing.role || "server" : "server";
+    document.getElementById("shiftRoleInput").value =
+      existing && postes.includes(existing.role) ? existing.role : postes[0];
     document.getElementById("shiftNoteInput").value = existing ? existing.note || "" : "";
     document.getElementById("shiftNoteInput").placeholder = t("noteQuartPlaceholder");
     document.getElementById("shiftDeleteBtn").textContent = t("supprimerQuart");
@@ -250,10 +355,9 @@ window.ScheduleUI = (function () {
 
   // Copie tous les quarts de la semaine affichée vers la suivante (mêmes employés, mêmes
   // heures, même rôle), en sautant les cases déjà remplies pour ne rien écraser.
-  async function duplicateWeekToNext(restaurantId, btn) {
-    const restaurant = host.restaurants().find((r) => r.id === restaurantId);
-    if (!restaurant) return;
-    const empIds = restaurant.employees.map((e) => e.id);
+  async function duplicateWeekToNext(restaurantId, btn, secteur) {
+    const ctx = contexteDe(restaurantId, secteur);
+    const empIds = ctx.employees.map((e) => e.id);
     const dates = weekDates(weekStart).map((d) => isoDate(d));
     const weekShifts = host.shifts().filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
 
@@ -305,10 +409,9 @@ window.ScheduleUI = (function () {
   // tombait au milieu, et rien ne permet de revenir en arrière ensuite. La confirmation
   // nomme la semaine ET le nombre de quarts, parce qu'on efface souvent en ayant la mauvaise
   // semaine sous les yeux.
-  async function clearWeekShifts(restaurantId, btn) {
-    const restaurant = host.restaurants().find((r) => r.id === restaurantId);
-    if (!restaurant) return;
-    const empIds = restaurant.employees.map((e) => e.id);
+  async function clearWeekShifts(restaurantId, btn, secteur) {
+    const ctx = contexteDe(restaurantId, secteur);
+    const empIds = ctx.employees.map((e) => e.id);
     const dates = weekDates(weekStart).map((d) => isoDate(d));
     const weekShifts = host.shifts().filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
 
@@ -321,7 +424,7 @@ window.ScheduleUI = (function () {
     btn.disabled = true;
     btn.textContent = host.t("effacementEnCours");
     try {
-      const params = `restaurant_id=${encodeURIComponent(restaurantId)}&from=${dates[0]}&to=${dates[6]}`;
+      const params = `restaurant_id=${encodeURIComponent(restaurantId)}&from=${dates[0]}&to=${dates[6]}&secteur=${ctx.secteur}`;
       await host.shiftApi(`/shifts?${params}`, { method: "DELETE" });
       host.setShifts(await host.reloadShifts());
       host.rerender();
@@ -386,9 +489,9 @@ window.ScheduleUI = (function () {
 
   // Le PDF est récupéré en blob plutôt que par un lien <a href> direct, parce qu'il faut
   // pouvoir envoyer le jeton d'accès en en-tête.
-  async function downloadWeekPdf(restaurantId, btn) {
+  async function downloadWeekPdf(restaurantId, btn, secteur) {
     const weekISO = isoDate(weekStart);
-    const { url, options } = host.pdfRequest(restaurantId, weekISO, host.lang());
+    const { url, options } = host.pdfRequest(restaurantId, weekISO, host.lang(), contexteDe(restaurantId, secteur).secteur);
 
     await pendantExport(btn, "pdfEnCours", async () => {
       try {
@@ -410,21 +513,24 @@ window.ScheduleUI = (function () {
   // La photo est dessinée ici, dans le navigateur, à partir des quarts déjà chargés : aucun
   // aller-retour au serveur, et la feuille est exactement celle du PDF — même mise en page,
   // même fichier partagé (public/shared/horaire-mise-en-page.js).
-  async function downloadWeekImage(restaurantId, btn) {
+  async function downloadWeekImage(restaurantId, btn, secteur) {
     const restaurant = host.restaurants().find((r) => r.id === restaurantId);
     if (!restaurant) return;
+    const ctx = contexteDe(restaurantId, secteur);
     const weekISO = isoDate(weekStart);
+    const nomFeuille = window.HoraireMiseEnPage.nomFeuille(restaurant.name, ctx.secteur, host.lang());
 
     await pendantExport(btn, "photoEnCours", async () => {
       try {
         const blob = await window.HoraireImage.construireImageHoraire({
-          restaurantName: restaurant.name,
-          employees: restaurant.employees,
+          restaurantName: nomFeuille,
+          employees: ctx.employees,
           shifts: host.shifts(),
           weekStartISO: weekISO,
           lang: host.lang(),
+          avecHeureFin: ctx.secteur === "cuisine",
         });
-        const nomFichier = window.HoraireImage.nomImage(restaurant.name, weekISO, host.lang());
+        const nomFichier = window.HoraireImage.nomImage(nomFeuille, weekISO, host.lang());
         await partagerOuEnregistrer(blob, nomFichier, host.t("titrePartage"));
       } catch (e) {
         alert(host.t("erreurPhoto"));
@@ -455,22 +561,24 @@ window.ScheduleUI = (function () {
       });
     });
     document.querySelectorAll('[data-action="newShift"]').forEach((btn) => {
-      btn.addEventListener("click", () => openShiftModal({ employeeId: btn.dataset.emp, date: btn.dataset.date }));
+      btn.addEventListener("click", () =>
+        openShiftModal({ employeeId: btn.dataset.emp, date: btn.dataset.date, secteur: btn.dataset.secteur })
+      );
     });
     document.querySelectorAll('[data-action="editShift"]').forEach((btn) => {
       btn.addEventListener("click", () => openShiftModal({ shiftId: btn.dataset.id }));
     });
     document.querySelectorAll('[data-action="duplicateWeek"]').forEach((btn) => {
-      btn.addEventListener("click", () => duplicateWeekToNext(btn.dataset.resto, btn));
+      btn.addEventListener("click", () => duplicateWeekToNext(btn.dataset.resto, btn, btn.dataset.secteur));
     });
     document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
-      btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn));
+      btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn, btn.dataset.secteur));
     });
     document.querySelectorAll('[data-action="photoWeek"]').forEach((btn) => {
-      btn.addEventListener("click", () => downloadWeekImage(btn.dataset.resto, btn));
+      btn.addEventListener("click", () => downloadWeekImage(btn.dataset.resto, btn, btn.dataset.secteur));
     });
     document.querySelectorAll('[data-action="clearWeek"]').forEach((btn) => {
-      btn.addEventListener("click", () => clearWeekShifts(btn.dataset.resto, btn));
+      btn.addEventListener("click", () => clearWeekShifts(btn.dataset.resto, btn, btn.dataset.secteur));
     });
   }
 
@@ -502,6 +610,7 @@ window.ScheduleUI = (function () {
     deleteShiftFromModal,
     duplicateWeekToNext,
     clearWeekShifts,
+    rolesDe,
     downloadWeekImage,
     downloadWeekPdf,
     bindGridEvents,

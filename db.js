@@ -19,6 +19,18 @@ CREATE TABLE IF NOT EXISTS restaurants (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   schedule_code TEXT,
+  -- Trois portes différentes sur l'horaire, parce qu'elles ne montrent pas la même chose :
+  -- schedule_code                 : horaire de la salle, aucun montant
+  -- schedule_code_cuisine         : horaire de la cuisine POUR LE GÉRANT — salaires compris,
+  --                                 donc ce lien-là ne se partage pas à l'équipe
+  -- schedule_code_cuisine_lecture : le même horaire pour les cuisiniers, en lecture seule
+  --                                 et sans un sou affiché
+  schedule_code_cuisine TEXT,
+  schedule_code_cuisine_lecture TEXT,
+  -- Ce que l'employeur paie EN PLUS du salaire (vacances, CNESST, RRQ…), en pourcentage du
+  -- taux horaire. Reste à 0 tant que le comptable n'a pas donné le vrai chiffre : mieux vaut
+  -- un coût visiblement incomplet qu'un coût inventé.
+  charges_pct REAL DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -28,6 +40,10 @@ CREATE TABLE IF NOT EXISTS employees (
   name TEXT NOT NULL,
   employee_number TEXT,
   access_code TEXT UNIQUE NOT NULL,
+  -- 'salle' | 'cuisine'. La salle déclare des pourboires, la cuisine non : c'est ce champ
+  -- qui décide quel écran, quels postes et quel horaire s'appliquent à la personne.
+  secteur TEXT DEFAULT 'salle',
+  taux_horaire REAL DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -121,6 +137,17 @@ try {
   // colonne déjà présente — rien à faire
 }
 
+// Secteur et taux horaire. Le défaut 'salle' est volontaire : tout le monde déjà en place
+// reste exactement où il était, et c'est le gérant qui déplace ensuite les gens en cuisine.
+for (const col of ["secteur TEXT DEFAULT 'salle'", "taux_horaire REAL DEFAULT 0"]) {
+  try {
+    db.exec(`ALTER TABLE employees ADD COLUMN ${col};`);
+  } catch (e) {
+    // colonne déjà présente — rien à faire
+  }
+}
+db.exec(`UPDATE employees SET secteur = 'salle' WHERE secteur IS NULL OR secteur = '';`);
+
 function makeAccessCode() {
   // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus.
   // Tirage cryptographique et non Math.random() : ce code EST la clé d'accès d'un employé,
@@ -138,18 +165,47 @@ try {
 } catch (e) {
   // colonne déjà présente — rien à faire
 }
-const restaurantsSansCode = db.prepare(`SELECT id FROM restaurants WHERE schedule_code IS NULL OR schedule_code = ''`).all();
-for (const r of restaurantsSansCode) {
+for (const col of ["schedule_code_cuisine TEXT", "schedule_code_cuisine_lecture TEXT", "charges_pct REAL DEFAULT 0"]) {
+  try {
+    db.exec(`ALTER TABLE restaurants ADD COLUMN ${col};`);
+  } catch (e) {
+    // colonne déjà présente — rien à faire
+  }
+}
+
+// Un code d'horaire doit désigner UNE seule porte : /horaire/<code> ne peut pas être à la
+// fois la salle et la cuisine. On vérifie donc l'unicité sur les trois colonnes à la fois.
+function codeDejaPris(code) {
+  return !!db
+    .prepare(
+      `SELECT 1 FROM restaurants
+       WHERE schedule_code = ? OR schedule_code_cuisine = ? OR schedule_code_cuisine_lecture = ?`
+    )
+    .get(code, code, code);
+}
+
+function codeLibre() {
   let code;
   do {
     code = makeAccessCode();
-  } while (db.prepare(`SELECT 1 FROM restaurants WHERE schedule_code = ?`).get(code));
-  db.prepare(`UPDATE restaurants SET schedule_code = ? WHERE id = ?`).run(code, r.id);
+  } while (codeDejaPris(code));
+  return code;
 }
+
+// Donne à chaque restaurant les codes qui lui manquent — ceux créés avant cette mise à jour
+// n'ont que celui de la salle.
+for (const colonne of ["schedule_code", "schedule_code_cuisine", "schedule_code_cuisine_lecture"]) {
+  const sansCode = db.prepare(`SELECT id FROM restaurants WHERE ${colonne} IS NULL OR ${colonne} = ''`).all();
+  for (const r of sansCode) {
+    db.prepare(`UPDATE restaurants SET ${colonne} = ? WHERE id = ?`).run(codeLibre(), r.id);
+  }
+}
+db.exec(`UPDATE restaurants SET charges_pct = 0 WHERE charges_pct IS NULL;`);
 
 module.exports = {
   db,
   nanoid,
   makeAccessCode,
+  codeLibre,
   PHOTOS_DIR,
 };

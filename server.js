@@ -1,8 +1,11 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
-const { db, nanoid, makeAccessCode, PHOTOS_DIR } = require("./db");
+const { db, nanoid, makeAccessCode, codeLibre, PHOTOS_DIR } = require("./db");
 const { buildSchedulePdf, schedulePdfFilename } = require("./pdf-horaire");
+// Le titre de la feuille est le même pour le PDF et pour la photo exportée par le
+// navigateur : il vit donc avec la mise en page, pas ici.
+const miseEnPage = require("./public/shared/horaire-mise-en-page.js");
 const { guard, noteFailure, clearFailures } = require("./rate-limit");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
@@ -340,7 +343,18 @@ function isISODate(value) {
 // semaine ne peut pas rester à moitié vidée — et il n'y a aucune annulation possible après
 // coup. Le sous-select enferme l'effacement dans un seul restaurant : un code d'horaire ne
 // peut pas vider la semaine du restaurant d'à côté.
-function deleteShiftsBetween(restaurantId, from, to) {
+function deleteShiftsBetween(restaurantId, from, to, secteur) {
+  // Sans secteur, on efface toute la semaine du restaurant — c'est ce que fait le tableau de
+  // bord. Avec, on reste dans son équipe : le gérant de cuisine ne vide pas la salle.
+  if (secteur) {
+    return db
+      .prepare(`
+        DELETE FROM shifts
+        WHERE date >= ? AND date <= ?
+          AND employee_id IN (SELECT id FROM employees WHERE restaurant_id = ? AND secteur = ?)
+      `)
+      .run(from, to, restaurantId, secteur);
+  }
   return db
     .prepare(`
       DELETE FROM shifts
@@ -352,8 +366,49 @@ function deleteShiftsBetween(restaurantId, from, to) {
 
 // ---------- Accès horaire par lien direct (un code par restaurant, aucun mot de passe) ----------
 // Même logique que les liens employés : le code lui-même sert de clé d'accès.
+// Un code d'horaire n'ouvre pas qu'un restaurant : il ouvre une PORTE précise, avec ses
+// propres droits. Ce qu'on a le droit de voir et de modifier se déduit de la colonne où le
+// code a été trouvé — jamais de ce que le client demande.
+//
+//   schedule_code                 salle,   modification,  aucun montant
+//   schedule_code_cuisine         cuisine, modification,  salaires visibles  ← lien du gérant
+//   schedule_code_cuisine_lecture cuisine, lecture seule, aucun montant      ← lien des cuisiniers
+function porteParCode(code) {
+  const c = (code || "").toUpperCase();
+  const r = db
+    .prepare(`
+      SELECT * FROM restaurants
+      WHERE schedule_code = ? OR schedule_code_cuisine = ? OR schedule_code_cuisine_lecture = ?
+    `)
+    .get(c, c, c);
+  if (!r) return null;
+  if (r.schedule_code_cuisine === c) {
+    return { restaurant: r, secteur: "cuisine", peutModifier: true, voitMontants: true };
+  }
+  if (r.schedule_code_cuisine_lecture === c) {
+    return { restaurant: r, secteur: "cuisine", peutModifier: false, voitMontants: false };
+  }
+  return { restaurant: r, secteur: "salle", peutModifier: true, voitMontants: false };
+}
+
 function getRestaurantByCode(code) {
-  return db.prepare("SELECT * FROM restaurants WHERE schedule_code = ?").get((code || "").toUpperCase());
+  const porte = porteParCode(code);
+  return porte ? porte.restaurant : undefined;
+}
+
+function employesDuSecteur(restaurantId, secteur) {
+  return db
+    .prepare(`
+      SELECT id, name, employee_number, secteur, taux_horaire
+      FROM employees WHERE restaurant_id = ? AND secteur = ? ORDER BY created_at ASC
+    `)
+    .all(restaurantId, secteur);
+}
+
+// Les montants ne sont pas simplement cachés à l'écran : ils ne sortent pas du serveur.
+// Une porte sans droit aux salaires ne reçoit jamais le champ, même vide.
+function sansMontants(employes) {
+  return employes.map(({ taux_horaire, ...reste }) => reste);
 }
 
 // Même protection que pour les codes employés, sur les liens horaire par code.
@@ -366,37 +421,49 @@ app.use("/api/schedule/by-code/:code", guard("schedule-code"), (req, res, next) 
 });
 
 app.get("/api/schedule/by-code/:code", (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
-  const employees = db
-    .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
-    .all(r.id);
-  res.json({ restaurant: { id: r.id, name: r.name }, employees });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  const { restaurant: r, secteur, peutModifier, voitMontants } = porte;
+  const employees = employesDuSecteur(r.id, secteur);
+  res.json({
+    restaurant: { id: r.id, name: r.name },
+    employees: voitMontants ? employees : sansMontants(employees),
+    secteur,
+    peutModifier,
+    voitMontants,
+    charges_pct: voitMontants ? r.charges_pct || 0 : undefined,
+  });
 });
 
 app.get("/api/schedule/by-code/:code/shifts", (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
   const shifts = db
     .prepare(`
       SELECT s.* FROM shifts s
       JOIN employees e ON e.id = s.employee_id
-      WHERE e.restaurant_id = ?
+      WHERE e.restaurant_id = ? AND e.secteur = ?
       ORDER BY s.date ASC, s.start_time ASC
     `)
-    .all(r.id);
+    .all(porte.restaurant.id, porte.secteur);
   res.json({ shifts });
 });
 
 app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
+  const r = porte.restaurant;
   const { employee_id, date, start_time, end_time, role, note } = req.body;
   if (!employee_id || !date || !start_time || !end_time) {
     return res.status(400).json({ error: "employee_id, date, start_time et end_time requis" });
   }
-  const emp = db.prepare("SELECT * FROM employees WHERE id = ? AND restaurant_id = ?").get(employee_id, r.id);
-  if (!emp) return res.status(403).json({ error: "Cet employé n'appartient pas à ce restaurant" });
+  // Le secteur compte autant que le restaurant : le lien cuisine ne doit pas pouvoir
+  // céduler une serveuse, ni l'inverse.
+  const emp = db
+    .prepare("SELECT * FROM employees WHERE id = ? AND restaurant_id = ? AND secteur = ?")
+    .get(employee_id, r.id, porte.secteur);
+  if (!emp) return res.status(403).json({ error: "Cet employé n'est pas dans cette équipe" });
   const id = nanoid(10);
   db.prepare(
     "INSERT INTO shifts (id, employee_id, date, start_time, end_time, role, note) VALUES (?,?,?,?,?,?,?)"
@@ -405,11 +472,15 @@ app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
 });
 
 app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
   const shift = db
-    .prepare("SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id WHERE s.id = ? AND e.restaurant_id = ?")
-    .get(req.params.id, r.id);
+    .prepare(`
+      SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id
+      WHERE s.id = ? AND e.restaurant_id = ? AND e.secteur = ?
+    `)
+    .get(req.params.id, porte.restaurant.id, porte.secteur);
   if (!shift) return res.status(404).json({ error: "Quart introuvable" });
   const { date, start_time, end_time, role, note } = req.body;
   db.prepare(
@@ -419,21 +490,26 @@ app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
 });
 
 app.delete("/api/schedule/by-code/:code/shifts", (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
   const { from, to } = req.query;
   if (!isISODate(from) || !isISODate(to)) {
     return res.status(400).json({ error: "from et to (AAAA-MM-JJ) requis" });
   }
-  res.json({ deleted: deleteShiftsBetween(r.id, from, to).changes });
+  res.json({ deleted: deleteShiftsBetween(porte.restaurant.id, from, to, porte.secteur).changes });
 });
 
 app.delete("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
   const shift = db
-    .prepare("SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id WHERE s.id = ? AND e.restaurant_id = ?")
-    .get(req.params.id, r.id);
+    .prepare(`
+      SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id
+      WHERE s.id = ? AND e.restaurant_id = ? AND e.secteur = ?
+    `)
+    .get(req.params.id, porte.restaurant.id, porte.secteur);
   if (!shift) return res.status(404).json({ error: "Quart introuvable" });
   db.prepare("DELETE FROM shifts WHERE id=?").run(req.params.id);
   res.json({ ok: true });
@@ -449,9 +525,18 @@ function isoOrToday(value) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function employeesOf(restaurantId) {
+function employeesOf(restaurantId, secteur) {
+  // Même ordre que la grille à l'écran, pour que le PDF se lise comme ce que le gérant vient
+  // de voir. Sans secteur : tout le restaurant (l'ancien comportement).
+  if (secteur) {
+    return db
+      .prepare(`
+        SELECT id, name, employee_number FROM employees
+        WHERE restaurant_id = ? AND secteur = ? ORDER BY created_at ASC
+      `)
+      .all(restaurantId, secteur);
+  }
   return db
-    // Même ordre que la grille à l'écran, pour que le PDF se lise comme ce que le gérant vient de voir.
     .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
     .all(restaurantId);
 }
@@ -470,15 +555,22 @@ function shiftsOfWeek(restaurantId, weekStartISO) {
     .all(restaurantId, weekStartISO, weekStartISO);
 }
 
-async function sendSchedulePdf(res, restaurant, weekStartISO, lang) {
+async function sendSchedulePdf(res, restaurant, weekStartISO, lang, secteur) {
+  const employes = employeesOf(restaurant.id, secteur);
+  const ids = new Set(employes.map((e) => e.id));
   const buffer = await buildSchedulePdf({
-    restaurantName: restaurant.name,
-    employees: employeesOf(restaurant.id),
-    shifts: shiftsOfWeek(restaurant.id, weekStartISO),
+    restaurantName: miseEnPage.nomFeuille(restaurant.name, secteur, lang),
+    employees: employes,
+    shifts: shiftsOfWeek(restaurant.id, weekStartISO).filter((q) => ids.has(q.employee_id)),
     weekStartISO,
     lang,
+    // La cuisine finit à l'heure : son horaire affiche donc l'heure de fin. En salle, une
+    // serveuse part quand la salle est vide — l'heure écrite serait une promesse fausse.
+    avecHeureFin: secteur === "cuisine",
   });
-  const filename = schedulePdfFilename(restaurant.name, weekStartISO, lang);
+  // Le nom de fichier porte aussi l'équipe : sans ça, le PDF de la cuisine et celui de la
+  // salle de la même semaine s'écrasent l'un l'autre dans le dossier de téléchargements.
+  const filename = schedulePdfFilename(miseEnPage.nomFeuille(restaurant.name, secteur, lang), weekStartISO, lang);
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.setHeader("Content-Length", buffer.length);
@@ -488,10 +580,11 @@ async function sendSchedulePdf(res, restaurant, weekStartISO, lang) {
 
 // Mode lien direct (/horaire/CODE) : le code fait office de clé, comme pour les autres routes by-code.
 app.get("/api/schedule/by-code/:code/pdf", async (req, res) => {
-  const r = getRestaurantByCode(req.params.code);
-  if (!r) return res.status(404).json({ error: "Lien invalide" });
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  const r = porte.restaurant;
   try {
-    await sendSchedulePdf(res, r, isoOrToday(req.query.week), req.query.lang === "en" ? "en" : "fr");
+    await sendSchedulePdf(res, r, isoOrToday(req.query.week), req.query.lang === "en" ? "en" : "fr", porte.secteur);
   } catch (err) {
     console.error("PDF horaire (by-code) :", err);
     res.status(500).json({ error: "Impossible de générer le PDF" });
@@ -502,8 +595,9 @@ app.get("/api/schedule/by-code/:code/pdf", async (req, res) => {
 app.get("/api/admin/schedule/pdf", requireScheduleAccess, async (req, res) => {
   const restaurant = db.prepare("SELECT * FROM restaurants WHERE id = ?").get(req.query.restaurantId);
   if (!restaurant) return res.status(404).json({ error: "Restaurant introuvable" });
+  const secteur = req.query.secteur === "cuisine" ? "cuisine" : req.query.secteur === "salle" ? "salle" : null;
   try {
-    await sendSchedulePdf(res, restaurant, isoOrToday(req.query.week), req.query.lang === "en" ? "en" : "fr");
+    await sendSchedulePdf(res, restaurant, isoOrToday(req.query.week), req.query.lang === "en" ? "en" : "fr", secteur);
   } catch (err) {
     console.error("PDF horaire (admin) :", err);
     res.status(500).json({ error: "Impossible de générer le PDF" });
@@ -570,7 +664,7 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
 app.get("/api/admin/shifts", requireScheduleAccess, (req, res) => {
   const { startDate, endDate } = req.query;
   let query = `
-    SELECT s.*, e.name AS employee_name, e.restaurant_id
+    SELECT s.*, e.name AS employee_name, e.restaurant_id, e.secteur
     FROM shifts s
     JOIN employees e ON e.id = s.employee_id
     WHERE 1=1
@@ -608,7 +702,8 @@ app.delete("/api/admin/shifts", requireScheduleAccess, (req, res) => {
   if (!restaurant_id || !isISODate(from) || !isISODate(to)) {
     return res.status(400).json({ error: "restaurant_id, from et to (AAAA-MM-JJ) requis" });
   }
-  res.json({ deleted: deleteShiftsBetween(restaurant_id, from, to).changes });
+  const secteur = req.query.secteur === "cuisine" ? "cuisine" : req.query.secteur === "salle" ? "salle" : null;
+  res.json({ deleted: deleteShiftsBetween(restaurant_id, from, to, secteur).changes });
 });
 
 app.delete("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
@@ -633,13 +728,32 @@ app.post("/api/admin/restaurants", requireAdmin, (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "Nom requis" });
   const id = nanoid(10);
-  let scheduleCode;
-  do {
-    scheduleCode = makeAccessCode();
-  } while (db.prepare("SELECT 1 FROM restaurants WHERE schedule_code = ?").get(scheduleCode));
-  db.prepare("INSERT INTO restaurants (id, name, schedule_code) VALUES (?, ?, ?)").run(id, name, scheduleCode);
-  res.json({ id, name, schedule_code: scheduleCode });
+  const scheduleCode = codeLibre();
+  const codeCuisine = codeLibre();
+  const codeCuisineLecture = codeLibre();
+  db.prepare(`
+    INSERT INTO restaurants (id, name, schedule_code, schedule_code_cuisine, schedule_code_cuisine_lecture)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, name, scheduleCode, codeCuisine, codeCuisineLecture);
+  res.json({
+    id,
+    name,
+    schedule_code: scheduleCode,
+    schedule_code_cuisine: codeCuisine,
+    schedule_code_cuisine_lecture: codeCuisineLecture,
+  });
 });
+
+// Le secteur et le taux n'acceptent que des valeurs connues : tout le reste du code s'y fie
+// pour décider qui voit quoi, on ne laisse donc pas le client écrire ce qu'il veut.
+function secteurValide(valeur) {
+  return valeur === "cuisine" ? "cuisine" : "salle";
+}
+function tauxValide(valeur) {
+  const n = typeof valeur === "number" ? valeur : parseFloat(valeur);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, 1000); // un taux à quatre chiffres est une faute de frappe, pas un salaire
+}
 
 app.post("/api/admin/employees", requireAdmin, (req, res) => {
   const { restaurant_id, name, employee_number } = req.body;
@@ -651,11 +765,40 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
   } while (db.prepare("SELECT 1 FROM employees WHERE access_code = ?").get(code));
 
   const id = nanoid(10);
-  db.prepare(
-    "INSERT INTO employees (id, restaurant_id, name, employee_number, access_code) VALUES (?,?,?,?,?)"
-  ).run(id, restaurant_id, name, employee_number || "", code);
+  const secteur = secteurValide(req.body.secteur);
+  const taux = tauxValide(req.body.taux_horaire);
+  db.prepare(`
+    INSERT INTO employees (id, restaurant_id, name, employee_number, access_code, secteur, taux_horaire)
+    VALUES (?,?,?,?,?,?,?)
+  `).run(id, restaurant_id, name, employee_number || "", code, secteur, taux);
 
-  res.json({ id, name, employee_number, access_code: code });
+  res.json({ id, name, employee_number, access_code: code, secteur, taux_horaire: taux });
+});
+
+// Modifier un employé : c'est par ici qu'on entre un taux horaire, qu'on corrige un nom, ou
+// qu'on déplace quelqu'un de la salle vers la cuisine.
+app.post("/api/admin/employees/:id", requireAdmin, (req, res) => {
+  const emp = db.prepare("SELECT * FROM employees WHERE id = ?").get(req.params.id);
+  if (!emp) return res.status(404).json({ error: "Employé introuvable" });
+
+  const name = typeof req.body.name === "string" && req.body.name.trim() ? req.body.name.trim() : emp.name;
+  const numero = req.body.employee_number === undefined ? emp.employee_number : String(req.body.employee_number || "");
+  const secteur = req.body.secteur === undefined ? emp.secteur : secteurValide(req.body.secteur);
+  const taux = req.body.taux_horaire === undefined ? emp.taux_horaire : tauxValide(req.body.taux_horaire);
+
+  db.prepare("UPDATE employees SET name=?, employee_number=?, secteur=?, taux_horaire=? WHERE id=?")
+    .run(name, numero, secteur, taux, emp.id);
+  res.json({ id: emp.id, name, employee_number: numero, secteur, taux_horaire: taux });
+});
+
+// Le supplément que l'employeur paie par-dessus le salaire (vacances, CNESST, RRQ…).
+app.post("/api/admin/restaurants/:id/charges", requireAdmin, (req, res) => {
+  const r = db.prepare("SELECT * FROM restaurants WHERE id = ?").get(req.params.id);
+  if (!r) return res.status(404).json({ error: "Restaurant introuvable" });
+  const n = parseFloat(req.body.charges_pct);
+  const pct = Number.isFinite(n) && n >= 0 ? Math.min(n, 100) : 0;
+  db.prepare("UPDATE restaurants SET charges_pct = ? WHERE id = ?").run(pct, r.id);
+  res.json({ charges_pct: pct });
 });
 
 app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {

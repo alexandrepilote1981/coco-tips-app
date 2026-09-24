@@ -328,6 +328,50 @@
     display: flex; align-items: center; gap: 6px;
   }
   .pdf-week-btn:disabled, .duplicate-week-btn:disabled, .clear-week-btn:disabled, .photo-week-btn:disabled { opacity: 0.55; }
+  /* Masse salariale de la semaine affichée. Collée en haut : le chiffre sert pendant qu'on
+     bouge un quart, pas après — et sur un téléphone, il sortirait sinon de l'écran dès qu'on
+     descend dans la grille. */
+  .cout-bar {
+    position: sticky; top: 8px; z-index: 40;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+    background: #10151D; border: 1px solid rgba(111,191,147,0.22); border-radius: 14px;
+    padding: 10px 14px; margin-bottom: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .cout-bloc { flex: 1 1 88px; min-width: 88px; }
+  .cout-etiq { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; }
+  .cout-val { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: #F1EFEA; margin-top: 2px; }
+  .cout-val.cout-gros { font-size: 20px; color: #D4A857; }
+  .cout-val.cout-baisse { color: #6FBF93; }
+  .cout-val.cout-hausse { color: #E2685A; }
+  .cout-val.cout-egal { color: #8993A4; }
+  .cout-notes { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; color: #8993A4; margin-bottom: 12px; }
+  .cout-notes .cout-manque { color: #D4A857; }
+  /* Section « Employés cuisine », repliée par défaut. */
+  .secteur-toggle {
+    width: 100%; display: flex; align-items: center; gap: 8px; margin-top: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: #F1EFEA; font-size: 12px; font-weight: 700; padding: 10px 14px; border-radius: 12px;
+  }
+  .secteur-toggle.ouvert { background: rgba(111,191,147,0.1); border-color: rgba(111,191,147,0.25); }
+  .secteur-fleche { color: #6FBF93; font-size: 11px; }
+  .secteur-body { padding: 14px 2px 4px; }
+  .cuisine-row {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between;
+    padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .cuisine-taux { min-width: 170px; }
+  .taux-champ { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .taux-champ input { max-width: 82px; }
+  .taux-champ span { font-size: 11px; color: #8993A4; font-weight: 700; }
+  .charges-form { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06); }
+  /* Ce lien porte des salaires : il ne se partage pas comme les autres, et ça doit se voir. */
+  .lien-confidentiel { border-left: 2px solid #D4A857; padding-left: 12px; }
+  .lien-avis { font-size: 10px; color: #D4A857; margin-top: 5px; display: flex; align-items: center; }
+  /* En cuisine la pastille porte deux heures : le texte passe volontairement sur deux
+     lignes plutôt que de déborder de la colonne. */
+  .week-grid.grille-cuisine .shift-chip .st { font-size: 10.5px; line-height: 1.15; }
+  .shift-chip.lecture { cursor: default; }
+  .empty-cell.lecture { border-style: solid; border-color: rgba(255,255,255,0.05); color: rgba(255,255,255,0.14); cursor: default; }
   .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
   .day-head { text-align: center; padding: 6px 2px; }
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
@@ -434,6 +478,7 @@
 <!-- Grille d'horaire commune à cette page et à /horaire : une seule définition. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
+<script src="/shared/cout-main-oeuvre.js"></script>
 <script src="/shared/horaire-mise-en-page.js"></script>
 <script src="/shared/horaire-image.js"></script>
 <script src="/shared/schedule-ui.js"></script>
@@ -456,6 +501,7 @@ const ICON_PATHS = {
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
+  chef: '<path d="M6 20h12"/><path d="M7 16h10a4 4 0 0 0 .6-7.95 4.5 4.5 0 0 0-8.4-1.6A3.5 3.5 0 0 0 7 16Z"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
 };
 function icon(name, size, extraStyle) {
@@ -484,6 +530,13 @@ function ecrireStockage(zone, cle, valeur) {
 let TOKEN = lireStockage("sessionStorage", "adminToken") || "";
 let overview = null;
 let messages = [];
+// Quelles sections « cuisine » sont déployées. Vit ici et pas dans le HTML : render()
+// reconstruit toute la page, et une section refermée à chaque rafraîchissement serait
+// insupportable.
+const cuisinesOuvertes = new Set();
+function cuisineOuverte(rid) {
+  return cuisinesOuvertes.has(rid);
+}
 let shifts = [];
 const PERIOD_KEY = "coco-period-admin";
 const PERIOD_DEFAUT = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
@@ -569,6 +622,28 @@ const I18N = {
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     erreurSuppression: "Erreur lors de la suppression. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    sousCuisine: "Voit son horaire par le lien cuisine — pas de page personnelle",
+    versCuisine: "→ Cuisine",
+    versSalle: "→ Salle",
+    confirmVersCuisine: "Déplacer cette personne en cuisine ?\n\nElle ne déclarera plus de pourboires. Ses quarts déjà cédulés la suivent.",
+    confirmVersSalle: "Déplacer cette personne en salle ?\n\nElle pourra de nouveau déclarer ses pourboires. Ses quarts déjà cédulés la suivent.",
+    employesCuisine: (n) => `Employés cuisine (${n})`,
+    aucunEmployeCuisine: "Personne en cuisine pour l'instant. Ajoute quelqu'un ci-dessous, ou déplace une personne de la salle.",
+    lienGerantCuisine: "Lien gérant cuisine",
+    lienGerantCuisineAvis: "Ce lien montre les salaires — ne le partage pas à l'équipe.",
+    lienCuisiniers: "Lien cuisiniers (lecture seule, aucun montant)",
+    tauxHoraire: "Taux horaire",
+    enregistrerTaux: "Enregistrer",
+    chargesEmployeur: "Charges de l'employeur",
+    chargesAide: "Ce que tu paies en plus du salaire (vacances, CNESST, RRQ…). Laisse à 0 tant que ton comptable ne t'a pas donné le vrai chiffre.",
+    salle: "Salle",
+    cuisine: "Cuisine",
+    heuresSemaine: "Heures cédulées",
+    masseSalariale: "Masse salariale",
+    vsSemainePassee: "vs semaine passée",
+    chargesIncluses: (pct) => `Charges de l'employeur incluses (${String(pct).replace(".", ",")} %)`,
+    chargesNonIncluses: "Salaires seulement — charges de l'employeur non incluses",
+    employesSansTaux: (n) => `${n} personne${n > 1 ? "s" : ""} cédulée${n > 1 ? "s" : ""} sans taux horaire`,
     tirerPourActualiser: "Tire pour actualiser",
     relacherPourActualiser: "Relâche pour actualiser",
     actualisationEnCours: "Actualisation…",
@@ -708,6 +783,28 @@ const I18N = {
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     erreurSuppression: "Error deleting. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
+    sousCuisine: "Sees their schedule through the kitchen link — no personal page",
+    versCuisine: "→ Kitchen",
+    versSalle: "→ Dining room",
+    confirmVersCuisine: "Move this person to the kitchen?\n\nThey will no longer declare tips. Shifts already scheduled follow them.",
+    confirmVersSalle: "Move this person to the dining room?\n\nThey will be able to declare tips again. Shifts already scheduled follow them.",
+    employesCuisine: (n) => `Kitchen staff (${n})`,
+    aucunEmployeCuisine: "Nobody in the kitchen yet. Add someone below, or move someone from the dining room.",
+    lienGerantCuisine: "Kitchen manager link",
+    lienGerantCuisineAvis: "This link shows wages — do not share it with the team.",
+    lienCuisiniers: "Kitchen staff link (read-only, no amounts)",
+    tauxHoraire: "Hourly rate",
+    enregistrerTaux: "Save",
+    chargesEmployeur: "Employer costs",
+    chargesAide: "What you pay on top of the wage (vacation, workers' comp, pension…). Leave at 0 until your accountant gives you the real figure.",
+    salle: "Dining room",
+    cuisine: "Kitchen",
+    heuresSemaine: "Scheduled hours",
+    masseSalariale: "Payroll",
+    vsSemainePassee: "vs last week",
+    chargesIncluses: (pct) => `Employer costs included (${pct}%)`,
+    chargesNonIncluses: "Wages only — employer costs not included",
+    employesSansTaux: (n) => `${n} scheduled ${n > 1 ? "people have" : "person has"} no hourly rate`,
     tirerPourActualiser: "Pull to refresh",
     relacherPourActualiser: "Release to refresh",
     actualisationEnCours: "Refreshing…",
@@ -1147,7 +1244,12 @@ function render() {
           </div>
         </div>
     `;
-    r.employees.forEach((e) => {
+    // La salle déclare des pourboires, la cuisine non : les deux listes n'ont pas les mêmes
+    // colonnes, et mélanger les deux remplirait la page de 0,00 $ sans signification.
+    const equipeSalle = r.employees.filter((e) => e.secteur !== "cuisine");
+    const equipeCuisine = r.employees.filter((e) => e.secteur === "cuisine");
+
+    equipeSalle.forEach((e) => {
       const link = `${origin}/e/${e.access_code}`;
       const empPending = pendingByEmployee.find((p) => p.empId === e.id);
       html += `
@@ -1163,6 +1265,7 @@ function render() {
             </div>
             <div class="employee-row-actions">
               <button class="secondary-btn" data-action="messageEmployee" data-id="${e.id}" data-name="${e.name}" data-resto="${r.name}">${icon("mail", 12)} ${t("messageTab")}</button>
+              <button class="secondary-btn" data-action="changerSecteur" data-id="${e.id}" data-vers="cuisine">${t("versCuisine")}</button>
               <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
             </div>
           </div>
@@ -1257,11 +1360,76 @@ function render() {
           <input type="text" placeholder="${t("numEmployePlaceholder")}" data-restaurant="${r.id}" class="empNumber" style="max-width:100px;" />
           <button data-action="addEmployee" data-id="${r.id}">${t("ajouterEmploye")}</button>
         </div>
+
+        <button class="secteur-toggle ${cuisineOuverte(r.id) ? "ouvert" : ""}" data-action="toggleCuisine" data-resto="${r.id}">
+          <span class="secteur-fleche">${cuisineOuverte(r.id) ? "▾" : "▸"}</span>
+          ${icon("chef", 13)} ${t("employesCuisine", equipeCuisine.length)}
+        </button>
+        <div class="secteur-body" id="cuisine-${r.id}" style="display:${cuisineOuverte(r.id) ? "block" : "none"};">
+          <div class="lien-confidentiel">
+            <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienGerantCuisine")}</div>
+            <div class="link-row">
+              <div class="link-box">${origin}/horaire/${r.schedule_code_cuisine}</div>
+              <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine}">${icon("copy", 13)} ${t("copier")}</button>
+            </div>
+            <div class="lien-avis">${icon("alert", 11, "margin-right:4px;")}${t("lienGerantCuisineAvis")}</div>
+          </div>
+          <div style="margin:14px 0;">
+            <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienCuisiniers")}</div>
+            <div class="link-row">
+              <div class="link-box">${origin}/horaire/${r.schedule_code_cuisine_lecture}</div>
+              <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine_lecture}">${icon("copy", 13)} ${t("copier")}</button>
+            </div>
+          </div>
+
+          ${equipeCuisine.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployeCuisine")}</p>` : ""}
+          ${equipeCuisine.map((e) => `
+            <div class="cuisine-row">
+              <div>
+                <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
+                <div class="employee-sub">${t("sousCuisine")}</div>
+              </div>
+              <div class="cuisine-taux">
+                <label class="employee-stat-label" for="taux-${e.id}">${t("tauxHoraire")}</label>
+                <div class="taux-champ">
+                  <input type="number" step="0.05" min="0" id="taux-${e.id}" class="tauxInput" data-emp="${e.id}" value="${e.taux_horaire || ""}" placeholder="0,00" />
+                  <span>$/h</span>
+                  <button class="copy-btn" data-action="saveTaux" data-emp="${e.id}">${t("enregistrerTaux")}</button>
+                </div>
+              </div>
+              <div class="employee-row-actions">
+                <button class="secondary-btn" data-action="changerSecteur" data-id="${e.id}" data-vers="salle">${t("versSalle")}</button>
+                <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
+              </div>
+            </div>
+          `).join("")}
+
+          <div class="add-form">
+            <input type="text" placeholder="${t("nomEmployePlaceholder")}" data-restaurant="${r.id}" class="cuisName" />
+            <input type="number" step="0.05" min="0" placeholder="${t("tauxHoraire")}" data-restaurant="${r.id}" class="cuisTaux" style="max-width:120px;" />
+            <button data-action="addCuisine" data-id="${r.id}">${t("ajouterEmploye")}</button>
+          </div>
+
+          <div class="charges-form">
+            <label class="employee-stat-label" for="charges-${r.id}">${t("chargesEmployeur")}</label>
+            <div class="taux-champ">
+              <input type="number" step="0.5" min="0" max="100" id="charges-${r.id}" class="chargesInput" data-resto="${r.id}" value="${r.charges_pct || ""}" placeholder="0" />
+              <span>%</span>
+              <button class="copy-btn" data-action="saveCharges" data-resto="${r.id}">${t("enregistrerTaux")}</button>
+            </div>
+            <div class="lien-avis" style="margin-top:6px;">${t("chargesAide")}</div>
+          </div>
+        </div>
       </div>
       <div class="card">
-        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${t("horaireTitre")}</div>
-        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, r.employees)}
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${t("horaireTitre")} — ${t("salle")}</div>
+        ${equipeSalle.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, equipeSalle, { secteur: "salle" })}
       </div>
+      ${equipeCuisine.length === 0 ? "" : `
+      <div class="card">
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${t("horaireTitre")} — ${t("cuisine")}</div>
+        ${ScheduleUI.renderWeekGrid(r.id, equipeCuisine, { secteur: "cuisine", voitMontants: true, chargesPct: r.charges_pct || 0 })}
+      </div>`}
     `;
   });
 
@@ -1340,6 +1508,81 @@ function render() {
         body: JSON.stringify({ restaurant_id: rid, name, employee_number: number }),
       });
       await load();
+    });
+  });
+
+  document.querySelectorAll('[data-action="toggleCuisine"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const rid = btn.dataset.resto;
+      if (cuisinesOuvertes.has(rid)) cuisinesOuvertes.delete(rid);
+      else cuisinesOuvertes.add(rid);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="addCuisine"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const rid = btn.dataset.id;
+      const nom = document.querySelector(`.cuisName[data-restaurant="${rid}"]`).value.trim();
+      const taux = document.querySelector(`.cuisTaux[data-restaurant="${rid}"]`).value;
+      if (!nom) return;
+      cuisinesOuvertes.add(rid); // la section reste ouverte : on vient d'y ajouter quelqu'un
+      await api("/api/admin/employees", {
+        method: "POST",
+        body: JSON.stringify({ restaurant_id: rid, name: nom, secteur: "cuisine", taux_horaire: taux }),
+      });
+      await load();
+    });
+  });
+
+  document.querySelectorAll('[data-action="saveTaux"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.emp;
+      const champ = document.getElementById(`taux-${id}`);
+      if (!champ) return;
+      btn.disabled = true;
+      try {
+        await api(`/api/admin/employees/${id}`, { method: "POST", body: JSON.stringify({ taux_horaire: champ.value }) });
+        await load();
+      } catch (err) {
+        alert(t("erreurEnregistrement"));
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-action="saveCharges"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const rid = btn.dataset.resto;
+      const champ = document.getElementById(`charges-${rid}`);
+      if (!champ) return;
+      btn.disabled = true;
+      try {
+        await api(`/api/admin/restaurants/${rid}/charges`, { method: "POST", body: JSON.stringify({ charges_pct: champ.value }) });
+        await load();
+      } catch (err) {
+        alert(t("erreurEnregistrement"));
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Déplacer quelqu'un d'une équipe à l'autre. Ses quarts déjà cédulés le suivent : ils sont
+  // attachés à la personne, pas à l'équipe — c'est voulu, on ne perd pas un horaire déjà fait.
+  document.querySelectorAll('[data-action="changerSecteur"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const vers = btn.dataset.vers;
+      if (!confirm(t(vers === "cuisine" ? "confirmVersCuisine" : "confirmVersSalle"))) return;
+      if (vers === "cuisine") {
+        const carte = btn.closest(".card");
+        if (carte) cuisinesOuvertes.add(btn.dataset.resto || "");
+      }
+      try {
+        await api(`/api/admin/employees/${btn.dataset.id}`, { method: "POST", body: JSON.stringify({ secteur: vers }) });
+        await load();
+      } catch (err) {
+        alert(t("erreurEnregistrement"));
+      }
     });
   });
 
@@ -1825,8 +2068,8 @@ ScheduleUI.init({
   setShifts: (s) => { shifts = s; },
   reloadShifts: async () => (await api("/api/admin/shifts")).shifts,
   shiftApi: (path, opts) => api(`/api/admin${path}`, opts),
-  pdfRequest: (restaurantId, weekISO, langue) => ({
-    url: `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${langue}`,
+  pdfRequest: (restaurantId, weekISO, langue, secteur) => ({
+    url: `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${langue}${secteur ? `&secteur=${secteur}` : ""}`,
     options: { headers: { "X-Admin-Token": TOKEN } },
   }),
   rerender: () => render(),

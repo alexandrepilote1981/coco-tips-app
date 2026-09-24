@@ -291,6 +291,29 @@
     display: flex; align-items: center; gap: 6px;
   }
   .pdf-week-btn:disabled, .duplicate-week-btn:disabled, .clear-week-btn:disabled, .photo-week-btn:disabled { opacity: 0.55; }
+  /* Masse salariale de la semaine affichée. Collée en haut : le chiffre sert pendant qu'on
+     bouge un quart, pas après — et sur un téléphone, il sortirait sinon de l'écran dès qu'on
+     descend dans la grille. */
+  .cout-bar {
+    position: sticky; top: 8px; z-index: 40;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+    background: #10151D; border: 1px solid rgba(111,191,147,0.22); border-radius: 14px;
+    padding: 10px 14px; margin-bottom: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .cout-bloc { flex: 1 1 88px; min-width: 88px; }
+  .cout-etiq { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; }
+  .cout-val { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: #F1EFEA; margin-top: 2px; }
+  .cout-val.cout-gros { font-size: 20px; color: #D4A857; }
+  .cout-val.cout-baisse { color: #6FBF93; }
+  .cout-val.cout-hausse { color: #E2685A; }
+  .cout-val.cout-egal { color: #8993A4; }
+  .cout-notes { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; color: #8993A4; margin-bottom: 12px; }
+  .cout-notes .cout-manque { color: #D4A857; }
+  /* En cuisine la pastille porte deux heures : le texte passe volontairement sur deux
+     lignes plutôt que de déborder de la colonne. */
+  .week-grid.grille-cuisine .shift-chip .st { font-size: 10.5px; line-height: 1.15; }
+  .shift-chip.lecture { cursor: default; }
+  .empty-cell.lecture { border-style: solid; border-color: rgba(255,255,255,0.05); color: rgba(255,255,255,0.14); cursor: default; }
   .week-grid { display: grid; gap: 4px; overflow-x: auto; font-size: 11px; }
   .day-head { text-align: center; padding: 6px 2px; }
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
@@ -370,6 +393,7 @@
 <!-- Grille d'horaire commune à cette page et à /admin : une seule définition. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
+<script src="/shared/cout-main-oeuvre.js"></script>
 <script src="/shared/horaire-mise-en-page.js"></script>
 <script src="/shared/horaire-image.js"></script>
 <script src="/shared/schedule-ui.js"></script>
@@ -397,6 +421,9 @@ let lang = lireStockage("localStorage", "coco-lang") || "fr";
 let TOKEN = lireStockage("sessionStorage", "scheduleToken") || "";
 let roster = null;
 let shifts = [];
+// Ce que la porte ouverte par ce lien permet de voir et de faire. Par mot de passe (sans
+// code dans l'URL) on est sur l'horaire de la salle, comme avant.
+let porte = { secteur: "salle", peutModifier: true, voitMontants: false, chargesPct: 0 };
 
 // Si l'URL est /horaire/CODE, on est en mode lien direct pour un seul restaurant —
 // aucun mot de passe requis, comme les liens employés.
@@ -427,6 +454,14 @@ const I18N = {
     copieEnCours: "Copie en cours…",
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
+    salle: "Salle",
+    cuisine: "Cuisine",
+    heuresSemaine: "Heures cédulées",
+    masseSalariale: "Masse salariale",
+    vsSemainePassee: "vs semaine passée",
+    chargesIncluses: (pct) => `Charges de l'employeur incluses (${String(pct).replace(".", ",")} %)`,
+    chargesNonIncluses: "Salaires seulement — charges de l'employeur non incluses",
+    employesSansTaux: (n) => `${n} personne${n > 1 ? "s" : ""} cédulée${n > 1 ? "s" : ""} sans taux horaire`,
     tirerPourActualiser: "Tire pour actualiser",
     relacherPourActualiser: "Relâche pour actualiser",
     actualisationEnCours: "Actualisation…",
@@ -470,6 +505,14 @@ const I18N = {
     copieEnCours: "Copying…",
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     confirmSupprimerQuart: "Delete this shift?",
+    salle: "Dining room",
+    cuisine: "Kitchen",
+    heuresSemaine: "Scheduled hours",
+    masseSalariale: "Payroll",
+    vsSemainePassee: "vs last week",
+    chargesIncluses: (pct) => `Employer costs included (${pct}%)`,
+    chargesNonIncluses: "Wages only — employer costs not included",
+    employesSansTaux: (n) => `${n} scheduled ${n > 1 ? "people have" : "person has"} no hourly rate`,
     tirerPourActualiser: "Pull to refresh",
     relacherPourActualiser: "Release to refresh",
     actualisationEnCours: "Refreshing…",
@@ -542,6 +585,14 @@ async function load() {
       const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}`);
       if (!res.ok) throw new Error("Lien invalide");
       const data = await res.json();
+      // Les droits viennent du serveur, jamais du code lu dans l'URL : c'est lui qui sait
+      // quelle porte ce lien ouvre, et cacher un bouton ne protégerait rien tout seul.
+      porte = {
+        secteur: data.secteur === "cuisine" ? "cuisine" : "salle",
+        peutModifier: data.peutModifier !== false,
+        voitMontants: !!data.voitMontants,
+        chargesPct: data.charges_pct || 0,
+      };
       roster = { restaurants: [{ id: data.restaurant.id, name: data.restaurant.name, employees: data.employees }] };
       try {
         const shiftsRes = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
@@ -654,8 +705,8 @@ function render() {
   roster.restaurants.forEach((r) => {
     html += `
       <div class="card">
-        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${r.name}</div>
-        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, r.employees)}
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${r.name}${porte.secteur === "cuisine" ? ` — ${t("cuisine")}` : ""}</div>
+        ${r.employees.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, r.employees, porte)}
       </div>
     `;
   });
