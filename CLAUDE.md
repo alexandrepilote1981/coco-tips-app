@@ -110,9 +110,14 @@ grille ne tient plus sur un écran.
 À l'écran, la tâche a sa propre ligne sous le poste, et les corps de texte de la pastille
 sont serrés exprès pour que les trois lignes tiennent dans la hauteur que la case avait
 déjà : écrire une tâche ne doit pas allonger la grille. Ni le poste ni la tâche ne reviennent
-à la ligne (`white-space: nowrap` + ellipsis), et les colonnes de jour sont en
-`minmax(0, 1fr)` pour qu'un texte long ne les élargisse pas — sans ça, la semaine débordait
-latéralement. Le texte complet reste visible en ouvrant le quart.
+à la ligne (`white-space: nowrap` + ellipsis).
+
+Les colonnes de jour ont une largeur minimale (`COLONNE_MIN` dans `schedule-ui.js` : 62 px en
+salle, 100 px en cuisine) et la grille glisse latéralement en dessous. Les laisser rétrécir
+librement coupait tout sur un téléphone — « 08:00 » devenait « 08:0 », « Serveur » devenait
+« Ser… ». Les 100 px de la cuisine ne sont pas un chiffre rond : c'est ce qu'il faut pour
+qu'une plage horaire tienne sur une ligne et qu'une tâche de longueur maximale s'écrive en
+entier.
 
 Sur la feuille imprimée il n'y a de place que pour deux lignes (une case fait 26 points de
 haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép ». Quand les deux
