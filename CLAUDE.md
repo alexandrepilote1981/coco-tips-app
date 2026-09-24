@@ -48,6 +48,11 @@ public/horaire.html       horaire seul, atteint par /horaire/<code>
 public/landing.html       page de présentation publique
 public/shared/tip-math.js calcul des pourboires — chargé par le serveur ET le navigateur
 public/shared/schedule-ui.js  grille d'horaire — partagée par /admin et /horaire
+public/shared/noms.js     découpage prénom / nom de famille
+public/shared/horaire-mise-en-page.js  mise en page de la feuille — dessinée en PDF et en image
+public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
+public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
+public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
 test/                     tests node:test
 ```
 
@@ -83,16 +88,36 @@ affichait un montant, la base en gardait un autre. Même principe pour
 
 Si une logique doit vivre des deux côtés, elle va dans `public/shared/`, avec des tests.
 
+## Salle et cuisine
+
+Chaque employé porte un `secteur` : `salle` ou `cuisine`. Tout en découle.
+
+La **salle** déclare des pourboires ; son horaire n'affiche que l'heure de début, parce qu'une
+serveuse part quand la salle est vide et que l'heure écrite serait une promesse fausse.
+
+La **cuisine** ne déclare rien. Son horaire affiche `début → fin`, parce qu'un cuisinier finit
+à l'heure — et c'est cette heure de fin qui rend possible le calcul de la masse salariale
+(`public/shared/cout-main-oeuvre.js`). C'est le coût du PLAN, pas du réel : personne ne
+poinçonne. Les postes diffèrent aussi (Cuisinier / Plongeur contre Serveur / Hôtesse).
+
+Les taux horaires ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
+seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
+`test/portes-horaire.test.mjs`.
+
 ## Accès et authentification
 
-Trois portes d'entrée, sans compte utilisateur :
+Cinq portes d'entrée, sans compte utilisateur :
 
 - **Employé** : `/e/<access_code>` — code de 6 caractères, aucun mot de passe. Le code sert
   de jeton pour tous les appels `/api/employee/<code>/…`.
 - **Gérant** : `/admin`, protégé par `ADMIN_PASSWORD`. Le jeton est le mot de passe lui-même,
   gardé dans `sessionStorage` sous `adminToken` et envoyé en en-tête `X-Admin-Token`.
-- **Horaire** : `/horaire/<schedule_code>` ou `/horaire` avec `SCHEDULE_PASSWORD` — donne
-  l'horaire sans jamais exposer les montants.
+- **Horaire salle** : `/horaire/<schedule_code>` ou `/horaire` avec `SCHEDULE_PASSWORD` —
+  donne l'horaire sans jamais exposer les montants.
+- **Horaire cuisine, gérant** : `/horaire/<schedule_code_cuisine>` — modifie l'horaire de la
+  cuisine ET montre les salaires. Ce lien ne se partage pas à l'équipe.
+- **Horaire cuisine, cuisiniers** : `/horaire/<schedule_code_cuisine_lecture>` — le même
+  horaire en lecture seule, sans un montant. C'est ce lien qu'on envoie dans le groupe.
 
 `rate-limit.js` ne compte que les échecs : rafraîchir une page avec un code valide n'est
 jamais pénalisé, enchaîner des codes faux l'est. C'est ce qui rend un code de 6 caractères

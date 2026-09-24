@@ -38,13 +38,14 @@
   };
 
   const LIBELLES_ROLE = {
-    fr: { server: "Serveur", hostess: "Hôtesse" },
-    en: { server: "Server", hostess: "Host" },
+    fr: { server: "Serveur", hostess: "Hôtesse", cuisinier: "Cuisinier", plongeur: "Plongeur" },
+    en: { server: "Server", hostess: "Host", cuisinier: "Cook", plongeur: "Dishwasher" },
   };
 
   const T = {
     fr: {
       titre: "Horaire",
+      cuisine: "Cuisine",
       employe: "EMPLOYÉ",
       aucunEmploye: "Aucun employé pour ce restaurant.",
       genereLe: (d) => `Généré le ${d}`,
@@ -52,6 +53,7 @@
     },
     en: {
       titre: "Schedule",
+      cuisine: "Kitchen",
       employe: "EMPLOYEE",
       aucunEmploye: "No employees for this restaurant.",
       genereLe: (d) => `Generated on ${d}`,
@@ -138,9 +140,13 @@
    * @param {string} donnees.weekStartISO  n'importe quelle date de la semaine voulue
    * @param {"fr"|"en"} donnees.lang
    * @param {boolean} [donnees.compact]  colle le pied sous le tableau au lieu du bas de page
+   * @param {boolean} [donnees.avecHeureFin]  affiche « début–fin » au lieu du début seul
    * @returns {number} hauteur réellement occupée, pour rogner une image
    */
-  function dessinerHoraire(surface, { restaurantName, employees, shifts, weekStartISO, lang = "fr", compact = false }) {
+  function dessinerHoraire(
+    surface,
+    { restaurantName, employees, shifts, weekStartISO, lang = "fr", compact = false, avecHeureFin = false }
+  ) {
     const L = lang === "en" ? "en" : "fr";
     const tr = T[L];
     const lundi = getMonday(parseISO(weekStartISO));
@@ -277,17 +283,23 @@
 
         tranches.forEach((quarts, k) => {
           // Une pastille qui rassemble deux rôles différents n'en annonce aucun : neutre.
-          const roles = new Set(quarts.map((q) => (q.role === "hostess" ? "hostess" : "server")));
+          // Deux teintes seulement, pour que la feuille reste lisible d'un coup d'œil :
+          // le poste « principal » (serveur, cuisinier) en vert, le second (hôtesse,
+          // plongeur) en or. Une pastille qui mélange deux postes reste neutre.
+          const roles = new Set(quarts.map((q) => (LIBELLES_ROLE[L][q.role] ? q.role : "server")));
           const role = roles.size === 1 ? [...roles][0] : null;
-          const fond =
-            role === null ? COULEURS.fondEntete : role === "hostess" ? COULEURS.hotesseFond : COULEURS.serveurFond;
-          const encre =
-            role === null ? COULEURS.encre : role === "hostess" ? COULEURS.hotesseEncre : COULEURS.serveurEncre;
+          const secondaire = role === "hostess" || role === "plongeur";
+          const fond = role === null ? COULEURS.fondEntete : secondaire ? COULEURS.hotesseFond : COULEURS.serveurFond;
+          const encre = role === null ? COULEURS.encre : secondaire ? COULEURS.hotesseEncre : COULEURS.serveurEncre;
           const pastilleY = y + marge + k * (pastilleH + ecart);
 
           surface.rectArrondi(x + 3, pastilleY, JOUR_L - 6, pastilleH, Math.min(4, pastilleH / 3), fond);
 
-          const heures = quarts.map((q) => q.start_time).join(" / ");
+          // L'heure de fin n'est montrée qu'en cuisine, et seulement sur une pastille seule :
+          // deux plages complètes côte à côte dans une colonne de jour deviennent illisibles.
+          const heures = quarts
+            .map((q) => (avecHeureFin && quarts.length === 1 && q.end_time ? `${q.start_time}–${q.end_time}` : q.start_time))
+            .join(" / ");
           // Le texte rétrécit aussi quand plusieurs heures partagent la largeur d'une colonne.
           const tailleHeure = Math.min(HEURE_T, pastilleH * 0.62, (JOUR_L - 10) / (heures.length * 0.58));
           // Le rôle n'apparaît que si la pastille porte deux lignes sans les écraser.
@@ -350,6 +362,13 @@
     return compact ? yPied + 10 + M : hauteurPage;
   }
 
+  // Titre de la feuille. La cuisine le dit : deux feuilles du même restaurant se retrouvent
+  // côte à côte sur le babillard, et rien d'autre ne les distingue au premier coup d'œil.
+  function nomFeuille(restaurantName, secteur, lang) {
+    const L = lang === "en" ? "en" : "fr";
+    return secteur === "cuisine" ? `${restaurantName} — ${T[L].cuisine}` : restaurantName;
+  }
+
   // Nom de fichier proposé, partagé par le PDF et l'image pour qu'on retrouve les deux
   // côte à côte dans le dossier de téléchargements.
   function nomDeFichier(restaurantName, weekStartISO, lang, extension) {
@@ -379,6 +398,7 @@
     fmtWeekLabel,
     fmtTimestamp,
     dessinerHoraire,
+    nomFeuille,
     nomDeFichier,
   };
 });
