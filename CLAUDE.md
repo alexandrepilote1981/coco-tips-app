@@ -126,7 +126,14 @@ couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Sa longueur 
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
 réfèrent tous les deux.
 
-Les taux horaires ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
+Chaque employé de cuisine peut aussi porter un **plafond d'heures par semaine**
+(`employees.heures_max`, 0 = aucun plafond). Quand la semaine cédulée le dépasse, toute la
+rangée de la personne rougit dans la grille, et ses heures s'écrivent sous son nom sous la
+forme `24 h / 20 h`. Les heures s'affichent pour toute la grille et pas seulement pour ceux
+qui ont un plafond : sinon les rangées n'auraient pas la même hauteur. Être pile au plafond
+n'est pas un dépassement.
+
+Les taux horaires et les plafonds ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
 `test/portes-horaire.test.mjs`.
 

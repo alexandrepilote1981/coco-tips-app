@@ -359,7 +359,8 @@
     display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between;
     padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.06);
   }
-  .cuisine-taux { min-width: 170px; }
+  .cuisine-taux { min-width: 260px; }
+  .taux-paire { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
   .taux-champ { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
   .taux-champ input { max-width: 82px; }
   .taux-champ span { font-size: 11px; color: #8993A4; font-weight: 700; }
@@ -379,7 +380,7 @@
   .day-head.today .dnum { color: #D4A857; }
   .emp-name-cell {
     display: flex; flex-direction: column; justify-content: center; align-items: flex-start; color: #F1EFEA;
-    padding: 6px 6px 6px 0; border-top: 1px solid rgba(255,255,255,0.06); overflow: hidden;
+    padding: 4px 6px 4px 0; border-top: 1px solid rgba(255,255,255,0.06); overflow: hidden;
   }
   .emp-name-cell span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
   .emp-name-cell .emp-first { font-size: 11.5px; font-weight: 700; }
@@ -405,6 +406,13 @@
      case avait déjà, sinon écrire une tâche allonge toute la grille. */
   .shift-chip .rl { font-size: 8px; line-height: 1.15; color: #8993A4; }
   .shift-chip .tk { font-size: 8.5px; line-height: 1.15; font-weight: 700; color: #D8DEE8; }
+  /* Heures cédulées de la semaine, sous le nom. Affichées pour toute la grille de cuisine :
+     n'en montrer que pour ceux qui ont un plafond rendrait les rangées inégales. */
+  .emp-name-cell .emp-heures { font-size: 9px; font-weight: 700; color: #8993A4; }
+  /* Plafond dépassé : toute la rangée rougit, pas seulement le nom — c'est en parcourant
+     la semaine du regard qu'on doit le voir. */
+  .emp-name-cell.depasse, .shift-cell.depasse { background: rgba(226,104,90,0.09); }
+  .emp-name-cell.depasse .emp-first, .emp-name-cell.depasse .emp-heures { color: #E2685A; }
   .empty-cell {
     width: 100%; height: 100%; min-height: 40px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.12);
     background: none; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.2); font-size: 15px; cursor: pointer;
@@ -659,6 +667,8 @@ const I18N = {
     lienGerantCuisineAvis: "Ce lien montre les salaires — ne le partage pas à l'équipe.",
     lienCuisiniers: "Lien cuisiniers (lecture seule, aucun montant)",
     tauxHoraire: "Taux horaire",
+    heuresMax: "Heures max / semaine",
+    heuresMaxAide: "Laisse vide s'il n'y a pas de plafond. Au-delà, la rangée de la personne devient rouge dans l'horaire.",
     enregistrerTaux: "Enregistrer",
     chargesEmployeur: "Charges de l'employeur",
     chargesAide: "Ce que tu paies en plus du salaire (vacances, CNESST, RRQ…). Laisse à 0 tant que ton comptable ne t'a pas donné le vrai chiffre.",
@@ -822,6 +832,8 @@ const I18N = {
     lienGerantCuisineAvis: "This link shows wages — do not share it with the team.",
     lienCuisiniers: "Kitchen staff link (read-only, no amounts)",
     tauxHoraire: "Hourly rate",
+    heuresMax: "Max hours / week",
+    heuresMaxAide: "Leave empty if there is no cap. Above it, the person's row turns red in the schedule.",
     enregistrerTaux: "Save",
     chargesEmployeur: "Employer costs",
     chargesAide: "What you pay on top of the wage (vacation, workers' comp, pension…). Leave at 0 until your accountant gives you the real figure.",
@@ -1410,7 +1422,9 @@ function render() {
             </div>
           </div>
 
-          ${equipeCuisine.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployeCuisine")}</p>` : ""}
+          ${equipeCuisine.length === 0
+            ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployeCuisine")}</p>`
+            : `<div class="lien-avis" style="color:#8993A4; margin-bottom:4px;">${t("heuresMaxAide")}</div>`}
           ${equipeCuisine.map((e) => `
             <div class="cuisine-row">
               <div>
@@ -1418,10 +1432,21 @@ function render() {
                 <div class="employee-sub">${t("sousCuisine")}</div>
               </div>
               <div class="cuisine-taux">
-                <label class="employee-stat-label" for="taux-${e.id}">${t("tauxHoraire")}</label>
-                <div class="taux-champ">
-                  <input type="number" step="0.05" min="0" id="taux-${e.id}" class="tauxInput" data-emp="${e.id}" value="${e.taux_horaire || ""}" placeholder="0,00" />
-                  <span>$/h</span>
+                <div class="taux-paire">
+                  <div>
+                    <label class="employee-stat-label" for="taux-${e.id}">${t("tauxHoraire")}</label>
+                    <div class="taux-champ">
+                      <input type="number" step="0.05" min="0" id="taux-${e.id}" class="tauxInput" data-emp="${e.id}" value="${e.taux_horaire || ""}" placeholder="0,00" />
+                      <span>$/h</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="employee-stat-label" for="hmax-${e.id}">${t("heuresMax")}</label>
+                    <div class="taux-champ">
+                      <input type="number" step="0.5" min="0" max="168" id="hmax-${e.id}" class="hmaxInput" data-emp="${e.id}" value="${e.heures_max || ""}" placeholder="—" />
+                      <span>h</span>
+                    </div>
+                  </div>
                   <button class="copy-btn" data-action="saveTaux" data-emp="${e.id}">${t("enregistrerTaux")}</button>
                 </div>
               </div>
@@ -1567,10 +1592,14 @@ function render() {
     btn.addEventListener("click", async () => {
       const id = btn.dataset.emp;
       const champ = document.getElementById(`taux-${id}`);
+      const champHeures = document.getElementById(`hmax-${id}`);
       if (!champ) return;
       btn.disabled = true;
       try {
-        await api(`/api/admin/employees/${id}`, { method: "POST", body: JSON.stringify({ taux_horaire: champ.value }) });
+        await api(`/api/admin/employees/${id}`, {
+          method: "POST",
+          body: JSON.stringify({ taux_horaire: champ.value, heures_max: champHeures ? champHeures.value : undefined }),
+        });
         await load();
       } catch (err) {
         alert(t("erreurEnregistrement"));

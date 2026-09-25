@@ -226,6 +226,37 @@ test("les trois portes de l'horaire", async (t) => {
     assert.equal(enorme.taux_horaire, 1000, "plafonné plutôt qu'accepté tel quel");
   });
 
+  await t.test("le plafond d'heures se règle, se borne, et reste côté gestion", async () => {
+    const emp = await creer("Plafonné", "cuisine", 20);
+    assert.equal(emp.heures_max, 0, "aucun plafond par défaut : inventer un chiffre ferait rougir sans raison");
+
+    const pose = await (await admin(`/api/admin/employees/${emp.id}`, {
+      method: "POST",
+      body: JSON.stringify({ heures_max: 37.5 }),
+    })).json();
+    assert.equal(pose.heures_max, 37.5);
+    assert.equal(pose.taux_horaire, 20, "le taux n'est pas effacé quand on ne l'envoie pas");
+
+    for (const [envoye, attendu] of [[-5, 0], [9999, 168], ["abc", 0]]) {
+      const r = await (await admin(`/api/admin/employees/${emp.id}`, {
+        method: "POST",
+        body: JSON.stringify({ heures_max: envoye }),
+      })).json();
+      assert.equal(r.heures_max, attendu, `${envoye} doit être ramené à ${attendu}`);
+    }
+
+    await admin(`/api/admin/employees/${emp.id}`, { method: "POST", body: JSON.stringify({ heures_max: 30 }) });
+
+    // Le plafond est un réglage de gestion : il suit les salaires, pas l'horaire de l'équipe.
+    const gerant = await (await parCode(CODE_CUISINE)).json();
+    assert.equal(gerant.employees.find((x) => x.name === "Plafonné").heures_max, 30);
+
+    const lecture = await (await parCode(CODE_LECTURE)).json();
+    for (const x of lecture.employees) {
+      assert.ok(!("heures_max" in x), `le plafond de ${x.name} ne doit pas être envoyé aux cuisiniers`);
+    }
+  });
+
   await t.test("le pourcentage de charges se règle et se borne", async () => {
     const ok = await (await admin(`/api/admin/restaurants/${resto.id}/charges`, { method: "POST", body: JSON.stringify({ charges_pct: 14.5 }) })).json();
     assert.equal(ok.charges_pct, 14.5);

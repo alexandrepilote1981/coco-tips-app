@@ -399,7 +399,7 @@ function getRestaurantByCode(code) {
 function employesDuSecteur(restaurantId, secteur) {
   return db
     .prepare(`
-      SELECT id, name, employee_number, secteur, taux_horaire
+      SELECT id, name, employee_number, secteur, taux_horaire, heures_max
       FROM employees WHERE restaurant_id = ? AND secteur = ? ORDER BY created_at ASC
     `)
     .all(restaurantId, secteur);
@@ -408,7 +408,7 @@ function employesDuSecteur(restaurantId, secteur) {
 // Les montants ne sont pas simplement cachés à l'écran : ils ne sortent pas du serveur.
 // Une porte sans droit aux salaires ne reçoit jamais le champ, même vide.
 function sansMontants(employes) {
-  return employes.map(({ taux_horaire, ...reste }) => reste);
+  return employes.map(({ taux_horaire, heures_max, ...reste }) => reste);
 }
 
 // Même protection que pour les codes employés, sur les liens horaire par code.
@@ -764,6 +764,14 @@ function tauxValide(valeur) {
   return Math.min(n, 1000); // un taux à quatre chiffres est une faute de frappe, pas un salaire
 }
 
+// Plafond d'heures par semaine. 0 signifie « aucun plafond » ; au-delà de 168 on a dépassé
+// le nombre d'heures qu'une semaine contient.
+function heuresMaxValide(valeur) {
+  const n = typeof valeur === "number" ? valeur : parseFloat(valeur);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, 168);
+}
+
 app.post("/api/admin/employees", requireAdmin, (req, res) => {
   const { restaurant_id, name, employee_number } = req.body;
   if (!restaurant_id || !name) return res.status(400).json({ error: "restaurant_id et name requis" });
@@ -776,12 +784,13 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
   const id = nanoid(10);
   const secteur = secteurValide(req.body.secteur);
   const taux = tauxValide(req.body.taux_horaire);
+  const heuresMax = heuresMaxValide(req.body.heures_max);
   db.prepare(`
-    INSERT INTO employees (id, restaurant_id, name, employee_number, access_code, secteur, taux_horaire)
-    VALUES (?,?,?,?,?,?,?)
-  `).run(id, restaurant_id, name, employee_number || "", code, secteur, taux);
+    INSERT INTO employees (id, restaurant_id, name, employee_number, access_code, secteur, taux_horaire, heures_max)
+    VALUES (?,?,?,?,?,?,?,?)
+  `).run(id, restaurant_id, name, employee_number || "", code, secteur, taux, heuresMax);
 
-  res.json({ id, name, employee_number, access_code: code, secteur, taux_horaire: taux });
+  res.json({ id, name, employee_number, access_code: code, secteur, taux_horaire: taux, heures_max: heuresMax });
 });
 
 // Modifier un employé : c'est par ici qu'on entre un taux horaire, qu'on corrige un nom, ou
@@ -794,10 +803,11 @@ app.post("/api/admin/employees/:id", requireAdmin, (req, res) => {
   const numero = req.body.employee_number === undefined ? emp.employee_number : String(req.body.employee_number || "");
   const secteur = req.body.secteur === undefined ? emp.secteur : secteurValide(req.body.secteur);
   const taux = req.body.taux_horaire === undefined ? emp.taux_horaire : tauxValide(req.body.taux_horaire);
+  const heuresMax = req.body.heures_max === undefined ? emp.heures_max : heuresMaxValide(req.body.heures_max);
 
-  db.prepare("UPDATE employees SET name=?, employee_number=?, secteur=?, taux_horaire=? WHERE id=?")
-    .run(name, numero, secteur, taux, emp.id);
-  res.json({ id: emp.id, name, employee_number: numero, secteur, taux_horaire: taux });
+  db.prepare("UPDATE employees SET name=?, employee_number=?, secteur=?, taux_horaire=?, heures_max=? WHERE id=?")
+    .run(name, numero, secteur, taux, heuresMax, emp.id);
+  res.json({ id: emp.id, name, employee_number: numero, secteur, taux_horaire: taux, heures_max: heuresMax });
 });
 
 // Le supplément que l'employeur paie par-dessus le salaire (vacances, CNESST, RRQ…).

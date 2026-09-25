@@ -71,3 +71,32 @@ test("une tâche est échappée avant d'être posée dans la grille", () => {
   assert.equal(UI.echapper(null), "");
   assert.equal(UI.echapper("Prép"), "Prép");
 });
+
+test("le plafond d'heures ne rougit qu'une fois vraiment dépassé", () => {
+  const bilan = { parEmploye: { a: { heures: 40 }, b: { heures: 40 }, c: { heures: 40.25 }, d: { heures: 12 } } };
+
+  // Pile au plafond : ce n'est pas un dépassement. Quelqu'un cédulé exactement 40 h sur un
+  // plafond de 40 h ne doit pas voir sa rangée rougir chaque semaine.
+  assert.equal(ScheduleUI_bilan({ id: "a", heures_max: 40 }, bilan).depasse, false);
+  // Un quart de plus, oui.
+  assert.equal(ScheduleUI_bilan({ id: "c", heures_max: 40 }, bilan).depasse, true);
+  // Sans plafond, jamais.
+  assert.equal(ScheduleUI_bilan({ id: "b", heures_max: 0 }, bilan).depasse, false);
+  assert.equal(ScheduleUI_bilan({ id: "b" }, bilan).depasse, false);
+  // Sous le plafond, jamais.
+  assert.equal(ScheduleUI_bilan({ id: "d", heures_max: 40 }, bilan).depasse, false);
+});
+
+test("un employé jamais cédulé compte zéro heure plutôt que de faire planter la rangée", () => {
+  const r = ScheduleUI_bilan({ id: "inconnu", heures_max: 40 }, { parEmploye: {} });
+  assert.equal(r.heures, 0);
+  assert.equal(r.depasse, false);
+});
+
+test("sans bilan — une grille qui ne montre pas les montants — aucune rangée n'est jugée", () => {
+  assert.equal(ScheduleUI_bilan({ id: "a", heures_max: 1 }, null), null);
+});
+
+function ScheduleUI_bilan(emp, bilan) {
+  return UI.bilanEmploye(emp, bilan);
+}
