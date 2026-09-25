@@ -321,7 +321,7 @@
   .day-head.today .dnum { color: #D4A857; }
   .emp-name-cell {
     display: flex; flex-direction: column; justify-content: center; align-items: flex-start; color: #F1EFEA;
-    padding: 6px 6px 6px 0; border-top: 1px solid rgba(255,255,255,0.06); overflow: hidden;
+    padding: 4px 6px 4px 0; border-top: 1px solid rgba(255,255,255,0.06); overflow: hidden;
   }
   .emp-name-cell span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
   .emp-name-cell .emp-first { font-size: 11.5px; font-weight: 700; }
@@ -347,6 +347,13 @@
      case avait déjà, sinon écrire une tâche allonge toute la grille. */
   .shift-chip .rl { font-size: 8px; line-height: 1.15; color: #8993A4; }
   .shift-chip .tk { font-size: 8.5px; line-height: 1.15; font-weight: 700; color: #D8DEE8; }
+  /* Heures cédulées de la semaine, sous le nom. Affichées pour toute la grille de cuisine :
+     n'en montrer que pour ceux qui ont un plafond rendrait les rangées inégales. */
+  .emp-name-cell .emp-heures { font-size: 9px; font-weight: 700; color: #8993A4; }
+  /* Plafond dépassé : toute la rangée rougit, pas seulement le nom — c'est en parcourant
+     la semaine du regard qu'on doit le voir. */
+  .emp-name-cell.depasse, .shift-cell.depasse { background: rgba(226,104,90,0.09); }
+  .emp-name-cell.depasse .emp-first, .emp-name-cell.depasse .emp-heures { color: #E2685A; }
   .empty-cell {
     width: 100%; height: 100%; min-height: 40px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.12);
     background: none; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.2); font-size: 15px; cursor: pointer;

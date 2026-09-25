@@ -103,13 +103,12 @@ window.ScheduleUI = (function () {
   // Ce que la semaine affichée va coûter — et surtout combien elle coûte DE MOINS que la
   // précédente. C'est le troisième chiffre qui compte : un total tout seul ne dit rien, un
   // total qui baisse se regarde. Et c'est le coût du PLAN : personne ne poinçonne.
-  function barreCoutHTML(restaurantId, secteur, employees, chargesPct) {
+  function barreCoutHTML(restaurantId, secteur, employees, chargesPct, actuelle) {
     const t = host.t;
     const lang = host.lang();
     const C = window.CoutMainOeuvre;
     const quarts = host.shifts();
 
-    const actuelle = C.coutSurPeriode(employees, quarts, weekDates(weekStart).map(isoDate), chargesPct);
     const precedente = C.coutSurPeriode(employees, quarts, weekDates(addDays(weekStart, -7)).map(isoDate), chargesPct);
     const diff = C.ecart(actuelle, precedente);
     const sens = diff.cout < -0.005 ? "baisse" : diff.cout > 0.005 ? "hausse" : "egal";
@@ -171,8 +170,14 @@ window.ScheduleUI = (function () {
     const shifts = host.shifts();
     const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
 
+    // Le bilan de la semaine sert deux fois : à la barre du haut, et à chaque rangée pour
+    // savoir si la personne dépasse son plafond d'heures. On ne le calcule qu'une fois.
+    const bilan = voitMontants
+      ? window.CoutMainOeuvre.coutSurPeriode(employees, shifts, dates.map(isoDate), chargesPct)
+      : null;
+
     return `
-    ${voitMontants ? barreCoutHTML(restaurantId, secteur, employees, chargesPct) : ""}
+    ${voitMontants ? barreCoutHTML(restaurantId, secteur, employees, chargesPct, bilan) : ""}
     <div class="week-header">
       <div class="week-title">${fmtWeekLabel(weekStart)}</div>
       <div class="week-nav">
@@ -200,9 +205,12 @@ window.ScheduleUI = (function () {
         )
         .join("")}
       ${employees
-        .map(
-          (emp) => `
-        ${empNameCellHTML(emp)}
+        .map((emp) => {
+          // Une personne qui dépasse son plafond d'heures fait rougir TOUTE sa rangée, pas
+          // seulement son nom : c'est en parcourant la semaine du regard qu'on doit le voir.
+          const depasse = (bilanEmploye(emp, bilan) || {}).depasse ? "depasse" : "";
+          return `
+        ${empNameCellHTML(emp, bilan)}
         ${dates
           .map((d) => {
             const dateStr = isoDate(d);
@@ -211,7 +219,7 @@ window.ScheduleUI = (function () {
             // et n'est jamais celle qui avait été inscrite. L'afficher donnait une promesse
             // fausse. Elle reste enregistrée — c'est elle qui sert à calculer les heures.
             return `
-            <div class="shift-cell">
+            <div class="shift-cell ${depasse}">
               ${
                 shift
                   ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"}"
@@ -228,20 +236,40 @@ window.ScheduleUI = (function () {
           `;
           })
           .join("")}
-      `
-        )
+      `;
+        })
         .join("")}
     </div>
   `;
   }
 
+  // Heures cédulées de la semaine, et plafond quand il y en a un. Le plafond n'est pas
+  // affiché pour tout le monde : la plupart des employés n'en ont pas, et écrire « / 0 h »
+  // partout ne dirait rien. La ligne, elle, s'affiche pour toute la grille — sinon les
+  // rangées n'auraient pas toutes la même hauteur.
+  function bilanEmploye(emp, bilan) {
+    if (!bilan) return null;
+    const heures = (bilan.parEmploye[emp.id] || { heures: 0 }).heures;
+    const plafond = Number(emp.heures_max) || 0;
+    return { heures, plafond, depasse: plafond > 0 && heures > plafond + 1e-9 };
+  }
+
   // Prénom sur une ligne, nom de famille en dessous. Deux employées prénommées Marie
   // donnaient auparavant deux lignes rigoureusement identiques dans la grille.
-  function empNameCellHTML(emp) {
+  function empNameCellHTML(emp, bilan) {
     const { first, last } = window.Noms.splitName(emp.name);
-    return `<div class="emp-name-cell">
+    const b = bilanEmploye(emp, bilan);
+    const lang = host.lang();
+    const C = window.CoutMainOeuvre;
+    const heuresTexte = b
+      ? b.plafond > 0
+        ? `${C.fmtHeures(b.heures, lang)} / ${C.fmtHeures(b.plafond, lang)}`
+        : C.fmtHeures(b.heures, lang)
+      : "";
+    return `<div class="emp-name-cell ${b && b.depasse ? "depasse" : ""}">
         <span class="emp-first">${first}</span>
         ${last ? `<span class="emp-last">${last}</span>` : ""}
+        ${b ? `<span class="emp-heures">${heuresTexte}</span>` : ""}
       </div>`;
   }
 
@@ -708,6 +736,7 @@ window.ScheduleUI = (function () {
     deleteShiftFromModal,
     duplicateWeekToNext,
     clearWeekShifts,
+    bilanEmploye,
     rolesDe,
     echapper,
     tachesRecentes,
