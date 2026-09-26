@@ -20,9 +20,9 @@
 // options du texte : { taille, gras, italique, couleur, largeur, centre, tronquer }
 
 (function (root, factory) {
-  if (typeof module === "object" && module.exports) module.exports = factory(require("./noms.js"));
-  else root.HoraireMiseEnPage = factory(root.Noms);
-})(typeof self !== "undefined" ? self : this, function (Noms) {
+  if (typeof module === "object" && module.exports) module.exports = factory(require("./noms.js"), require("./feries.js"));
+  else root.HoraireMiseEnPage = factory(root.Noms, root.Feries);
+})(typeof self !== "undefined" ? self : this, function (Noms, Feries) {
   // A4 paysage, en points — la feuille est faite pour être imprimée. L'image reprend les
   // mêmes proportions, simplement agrandie.
   const PAGE = { largeur: 841.89, hauteur: 595.28 };
@@ -82,6 +82,13 @@
     serveurEncre: "#2E7A56",
     hotesseFond: "#FBF2DC",
     hotesseEncre: "#8A6516",
+    // Jours fériés et grosses journées. Volontairement très pâles : la feuille finit
+    // souvent dans une imprimante noir et blanc, où une teinte soutenue devient une
+    // colonne grise qui cache les heures au lieu de les signaler.
+    ferieFond: "#FBF3E0",
+    ferieEncre: "#8A6516",
+    occasionFond: "#FCEAE7",
+    occasionEncre: "#A8473A",
   };
 
   // ---------- dates ----------
@@ -169,6 +176,10 @@
     const dates = Array.from({ length: 7 }, (_, i) => addDays(lundi, i));
     const datesISO = dates.map(isoDate);
 
+    // Une fois pour la feuille : l'en-tête et chaque rangée d'employé s'en servent, et il
+    // n'y a aucune raison de recalculer Pâques quatorze fois.
+    const fetes = datesISO.map((d) => Feries.ferieDuJour(d));
+
     const idsEmployes = new Set(employees.map((e) => e.id));
     const quartsSemaine = shifts.filter((s) => idsEmployes.has(s.employee_id) && datesISO.includes(s.date));
 
@@ -181,7 +192,10 @@
     const NOM_L = 108;
     const JOUR_L = (tableL - NOM_L) / 7;
 
-    const ENTETE_H = 34;
+    // 42 et non 34 : l'en-tête porte maintenant une troisième ligne, le nom du férié.
+    // Ces 8 points se prennent UNE fois sur la page, pas une fois par rangée — c'est ce
+    // qui permet de nommer les fériés sans rapprocher les employés les uns des autres.
+    const ENTETE_H = 42;
     const LIGNE_H_MAX = 34;
 
     const blocTitreH = 76;
@@ -235,20 +249,46 @@
 
       dates.forEach((d, i) => {
         const x = colX(i);
-        if (i >= 5) surface.rect(x, y, JOUR_L, ENTETE_H, COULEURS.fondEnteteFinSemaine);
-        surface.texte(NOMS_JOURS[L][i].toUpperCase(), x, y + 7, {
+        const fete = fetes[i];
+        // La teinte du férié passe par-dessus celle de la fin de semaine : une fête nationale
+        // qui tombe un samedi est d'abord une fête nationale.
+        if (fete) surface.rect(x, y, JOUR_L, ENTETE_H, fete.type === "occasion" ? COULEURS.occasionFond : COULEURS.ferieFond);
+        else if (i >= 5) surface.rect(x, y, JOUR_L, ENTETE_H, COULEURS.fondEnteteFinSemaine);
+
+        surface.texte(NOMS_JOURS[L][i].toUpperCase(), x, y + 6, {
           taille: 8.5, gras: true, couleur: COULEURS.gris, largeur: JOUR_L, centre: true,
         });
-        surface.texte(String(d.getDate()), x, y + 18, {
+        surface.texte(String(d.getDate()), x, y + 16, {
           taille: 12, gras: true, couleur: COULEURS.encre, largeur: JOUR_L, centre: true,
         });
+        if (fete) {
+          // Le nom complet si la colonne le porte, le nom court sinon. On ne coupe qu'en
+          // dernier recours : « Journée des patri… » ne dit plus rien à personne.
+          const encre = fete.type === "occasion" ? COULEURS.occasionEncre : COULEURS.ferieEncre;
+          const complet = Feries.libelle(fete.cle, L);
+          const nom = surface.mesurer(complet, { taille: 6.5, gras: true }) <= JOUR_L - 6 ? complet : Feries.libelleCourt(fete.cle, L);
+          surface.texte(nom, x + 3, y + 31, {
+            taille: 6.5, gras: true, couleur: encre, largeur: JOUR_L - 6, centre: true, tronquer: true,
+          });
+        }
       });
     }
 
     function dessinerLigneEmploye(emp, y) {
       // Bandes des colonnes de fin de semaine, pour repérer samedi/dimanche d'un coup d'œil.
-      for (let i = 5; i < 7; i++) {
-        surface.rect(colX(i), y, JOUR_L, LIGNE_H, COULEURS.fondFinSemaine);
+      // Un jour férié porte sa propre teinte, et elle l'emporte sur celle de la fin de
+      // semaine : sans ça, la fête des Mères — un dimanche, toujours — disparaîtrait dans le
+      // gris du week-end, alors que c'est LA journée à ne pas manquer.
+      for (let i = 0; i < 7; i++) {
+        const fete = fetes[i];
+        const fond = fete
+          ? fete.type === "occasion"
+            ? COULEURS.occasionFond
+            : COULEURS.ferieFond
+          : i >= 5
+            ? COULEURS.fondFinSemaine
+            : null;
+        if (fond) surface.rect(colX(i), y, JOUR_L, LIGNE_H, fond);
       }
 
       // Prénom en gras, nom de famille juste en dessous. Sans le nom de famille, deux
