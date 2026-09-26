@@ -422,9 +422,12 @@
     padding: 9px 12px; border-radius: 10px; border-left: 3px solid #D4A857;
     background: rgba(255,255,255,0.03);
   }
-  /* Les vacances se distinguent d'un congé d'une journée : ce n'est pas la même chose à
-     oublier. */
+  /* Chaque type a sa teinte : ce n'est pas la même chose à oublier. Un accident de travail
+     prend le rouge, une maladie reste neutre — elle n'était pas prévue, mais elle n'engage
+     personne. */
   .conge-ligne.conge-vacances { border-left-color: #6FBF93; }
+  .conge-ligne.conge-maladie { border-left-color: #8993A4; }
+  .conge-ligne.conge-cnesst { border-left-color: #E2685A; }
   .conge-nom { font-size: 12.5px; font-weight: 700; color: #F1EFEA; }
   .conge-dates { font-size: 11px; color: #8993A4; margin-top: 1px; }
   .conge-note { font-size: 11px; color: #D4A857; margin-top: 2px; }
@@ -436,6 +439,12 @@
   }
   .empty-cell.absent.absent-vacances {
     border-color: rgba(111,191,147,0.35); background: rgba(111,191,147,0.08); color: #6FBF93;
+  }
+  .empty-cell.absent.absent-maladie {
+    border-color: rgba(137,147,164,0.35); background: rgba(137,147,164,0.08); color: #8993A4;
+  }
+  .empty-cell.absent.absent-cnesst {
+    border-color: rgba(226,104,90,0.35); background: rgba(226,104,90,0.08); color: #E2685A;
   }
   /* Cédulé pendant une absence notée : c'est l'oubli qu'on cherche à empêcher. */
   .shift-chip.conflit { border-color: #E2685A; box-shadow: 0 0 0 1px #E2685A inset; }
@@ -714,7 +723,7 @@ const I18N = {
     enregistrerTaux: "Enregistrer",
     chargesEmployeur: "Charges de l'employeur",
     chargesAide: "Ce que tu paies en plus du salaire (vacances, CNESST, RRQ…). Laisse à 0 tant que ton comptable ne t'a pas donné le vrai chiffre.",
-    congesTitre: (n) => `Congés et vacances (${n})`,
+    congesTitre: (n) => `Congés et absences (${n})`,
     congeEmploye: "Employé",
     congeChoisir: "Choisir…",
     congeDu: "Du",
@@ -722,7 +731,7 @@ const I18N = {
     congeType: "Type",
     congeAjouter: "Ajouter",
     congeRetirer: "Retirer",
-    congeAucun: "Aucun congé ni vacances à venir.",
+    congeAucun: "Aucune absence à venir.",
     congeJours: (n) => `${n} jour${n > 1 ? "s" : ""}`,
     congeIncomplet: "Choisis un employé et une date de début.",
     congeErreur: "Impossible d'enregistrer. Vérifie les dates.",
@@ -893,7 +902,7 @@ const I18N = {
     enregistrerTaux: "Save",
     chargesEmployeur: "Employer costs",
     chargesAide: "What you pay on top of the wage (vacation, workers' comp, pension…). Leave at 0 until your accountant gives you the real figure.",
-    congesTitre: (n) => `Time off and vacation (${n})`,
+    congesTitre: (n) => `Time off and absences (${n})`,
     congeEmploye: "Employee",
     congeChoisir: "Choose…",
     congeDu: "From",
@@ -901,7 +910,7 @@ const I18N = {
     congeType: "Type",
     congeAjouter: "Add",
     congeRetirer: "Remove",
-    congeAucun: "No upcoming time off or vacation.",
+    congeAucun: "No upcoming absences.",
     congeJours: (n) => `${n} day${n > 1 ? "s" : ""}`,
     congeIncomplet: "Pick an employee and a start date.",
     congeErreur: "Could not save. Check the dates.",

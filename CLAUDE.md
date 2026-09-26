@@ -138,7 +138,12 @@ Les taux horaires et les plafonds ne sont jamais envoyés aux portes qui n'y ont
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
 `test/portes-horaire.test.mjs`.
 
-## Congés et vacances
+## Congés et absences
+
+Quatre types : `conge`, `vacances`, `maladie`, `cnesst`. Quand deux absences se chevauchent,
+c'est la plus lourde de conséquences qui s'affiche (`PRIORITE` dans `absences.js`) — un
+accident de travail passe avant une maladie, qui passe avant des vacances. Chacune a sa
+teinte dans la grille et dans la liste.
 
 Une absence est une PLAGE (`absences.date_debut` → `date_fin`), pas une date : une semaine de
 vacances est une seule entrée, pas sept. Une fin laissée vide veut dire « une seule journée »,

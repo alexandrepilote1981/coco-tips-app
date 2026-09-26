@@ -12,12 +12,18 @@
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.Absences = factory();
 })(typeof self !== "undefined" ? self : this, function () {
-  const TYPES = ["conge", "vacances"];
+  // L'ordre est celui du menu déroulant : du plus courant au plus rare.
+  const TYPES = ["conge", "vacances", "maladie", "cnesst"];
 
   const LIBELLES = {
-    fr: { conge: "Congé", vacances: "Vacances" },
-    en: { conge: "Time off", vacances: "Vacation" },
+    fr: { conge: "Congé", vacances: "Vacances", maladie: "Maladie", cnesst: "CNESST" },
+    en: { conge: "Time off", vacances: "Vacation", maladie: "Sick leave", cnesst: "CNESST" },
   };
+
+  // Quand deux absences se chevauchent, on affiche la plus lourde de conséquences : un
+  // accident de travail passe avant une maladie, qui passe avant des vacances. C'est celle
+  // qu'on veut voir en montant l'horaire, pas celle qui a été saisie en premier.
+  const PRIORITE = ["cnesst", "maladie", "vacances", "conge"];
 
   const MOIS = {
     fr: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
@@ -67,7 +73,11 @@
   function absenceDuJour(absences, employeeId, jourISO) {
     const candidates = (absences || []).filter((a) => a.employee_id === employeeId && couvre(a, jourISO));
     if (candidates.length === 0) return null;
-    return candidates.find((a) => a.type === "vacances") || candidates[0];
+    for (const type of PRIORITE) {
+      const trouvee = candidates.find((a) => typeValide(a.type) === type);
+      if (trouvee) return trouvee;
+    }
+    return candidates[0];
   }
 
   // Les quarts cédulés pendant une absence. C'est LE cas qu'on veut voir : le congé était
@@ -138,6 +148,7 @@
 
   return {
     TYPES,
+    PRIORITE,
     estISO,
     typeValide,
     normaliser,

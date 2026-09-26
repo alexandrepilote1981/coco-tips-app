@@ -61,10 +61,32 @@ test("on retrouve l'absence de la bonne personne, la bonne journée", () => {
   assert.equal(A.absenceDuJour(toutes, "inconnu", "2026-07-22"), null);
 });
 
-test("quand deux absences se chevauchent, les vacances l'emportent", () => {
-  const chevauche = { id: "c2", employee_id: "marie", date_debut: "2026-07-22", date_fin: "2026-07-22", type: "conge" };
-  assert.equal(A.absenceDuJour([chevauche, VACANCES], "marie", "2026-07-22").type, "vacances");
-  assert.equal(A.absenceDuJour([VACANCES, chevauche], "marie", "2026-07-22").type, "vacances");
+test("quand deux absences se chevauchent, la plus lourde l'emporte", () => {
+  // C'est celle qu'on veut voir en montant l'horaire, pas celle qui a été saisie en premier.
+  const jour = (type) => ({ id: type, employee_id: "marie", date_debut: "2026-07-22", date_fin: "2026-07-22", type });
+
+  assert.equal(A.absenceDuJour([jour("conge"), VACANCES], "marie", "2026-07-22").type, "vacances");
+  assert.equal(A.absenceDuJour([VACANCES, jour("conge")], "marie", "2026-07-22").type, "vacances", "l'ordre de saisie ne compte pas");
+  assert.equal(A.absenceDuJour([VACANCES, jour("maladie")], "marie", "2026-07-22").type, "maladie");
+  assert.equal(A.absenceDuJour([jour("maladie"), jour("cnesst")], "marie", "2026-07-22").type, "cnesst");
+  assert.equal(
+    A.absenceDuJour([jour("conge"), VACANCES, jour("maladie"), jour("cnesst")], "marie", "2026-07-22").type,
+    "cnesst",
+    "un accident de travail passe avant tout le reste"
+  );
+});
+
+test("les quatre types sont connus, traduits, et proposés dans un ordre utile", () => {
+  assert.deepEqual(A.TYPES, ["conge", "vacances", "maladie", "cnesst"], "du plus courant au plus rare");
+  for (const type of A.TYPES) {
+    assert.ok(A.libelleType(type, "fr"), `${type} doit être écrit en français`);
+    assert.ok(A.libelleType(type, "en"), `${type} doit être écrit en anglais`);
+    assert.equal(A.typeValide(type), type);
+    assert.ok(A.PRIORITE.includes(type), `${type} doit avoir un rang de priorité`);
+  }
+  assert.equal(A.PRIORITE.length, A.TYPES.length, "aucun type sans rang, aucun rang sans type");
+  assert.equal(A.libelleType("cnesst", "fr"), "CNESST");
+  assert.equal(A.normaliser({ date_debut: "2026-07-04", type: "cnesst" }).type, "cnesst");
 });
 
 test("un quart cédulé pendant une absence est signalé — c'est tout l'intérêt", () => {
