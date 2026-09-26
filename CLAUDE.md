@@ -52,6 +52,7 @@ public/shared/noms.js     découpage prénom / nom de famille
 public/shared/horaire-mise-en-page.js  mise en page de la feuille — dessinée en PDF et en image
 public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
 public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
+public/shared/absences.js  congés et vacances : plages, conflits, mise en forme des dates
 public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
 test/                     tests node:test
 ```
@@ -136,6 +137,25 @@ n'est pas un dépassement.
 Les taux horaires et les plafonds ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
 `test/portes-horaire.test.mjs`.
+
+## Congés et vacances
+
+Une absence est une PLAGE (`absences.date_debut` → `date_fin`), pas une date : une semaine de
+vacances est une seule entrée, pas sept. Une fin laissée vide veut dire « une seule journée »,
+le cas le plus courant.
+
+Une liste qu'on consulte ne suffit pas — personne ne la relit à chaque quart. Ce qui compte
+est le marquage dans la grille : une journée d'absence s'y affiche à la place du « + », et un
+quart cédulé pendant une absence notée reçoit un contour rouge. C'est précisément l'oubli
+qu'on cherche à empêcher.
+
+La section est dépliante, au-dessus de chaque grille : menu déroulant des employés, deux
+calendriers, type, et la liste des absences à venir. Elle vit dans `schedule-ui.js`, donc elle
+apparaît d'elle-même dans le tableau de bord ET sur les liens horaire. Les portes en lecture
+seule voient les absences mais n'ont ni formulaire ni bouton pour les retirer : savoir qui est
+en vacances n'est un secret pour personne dans un restaurant.
+
+Une période déjà commencée mais pas terminée reste « à venir » — on est en plein dedans.
 
 ## Accès et authentification
 

@@ -282,6 +282,86 @@ test("les trois portes de l'horaire", async (t) => {
     assert.ok(quart.note.length <= TACHE_MAX);
   });
 
+  await t.test("les congés se posent, se voient et se suppriment par le lien du gérant", async () => {
+    const pose = await (await parCode(CODE_CUISINE, "/absences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employee_id: cuisinier.id, date_debut: "2026-07-20", date_fin: "2026-07-26", type: "vacances" }),
+    })).json();
+    assert.equal(pose.type, "vacances");
+
+    // Une fin laissée vide : un congé d'une seule journée.
+    await parCode(CODE_CUISINE, "/absences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employee_id: plongeur.id, date_debut: "2026-08-02" }),
+    });
+
+    const liste = (await (await parCode(CODE_CUISINE, "/absences")).json()).absences;
+    assert.equal(liste.length, 2);
+    assert.equal(liste.find((a) => a.employee_id === plongeur.id).date_fin, "2026-08-02");
+
+    assert.equal((await parCode(CODE_CUISINE, `/absences/${pose.id}`, { method: "DELETE" })).status, 200);
+    assert.equal((await (await parCode(CODE_CUISINE, "/absences")).json()).absences.length, 1);
+  });
+
+  await t.test("le lien cuisine ne pose pas de congé à une serveuse", async () => {
+    const res = await parCode(CODE_CUISINE, "/absences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employee_id: serveuse.id, date_debut: "2026-07-20" }),
+    });
+    assert.equal(res.status, 403);
+  });
+
+  await t.test("le lien des cuisiniers voit les congés mais n'y touche pas", async () => {
+    const liste = (await (await parCode(CODE_LECTURE, "/absences")).json()).absences;
+    assert.ok(liste.length >= 1, "savoir qui est en vacances n'est pas un secret");
+
+    const ajout = await parCode(CODE_LECTURE, "/absences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employee_id: cuisinier.id, date_debut: "2026-09-01" }),
+    });
+    assert.equal(ajout.status, 403);
+    assert.equal((await parCode(CODE_LECTURE, `/absences/${liste[0].id}`, { method: "DELETE" })).status, 403);
+  });
+
+  await t.test("une date illisible est refusée plutôt qu'enregistrée à moitié", async () => {
+    const avant = (await (await parCode(CODE_CUISINE, "/absences")).json()).absences.length;
+    const res = await parCode(CODE_CUISINE, "/absences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employee_id: cuisinier.id, date_debut: "la semaine prochaine" }),
+    });
+    assert.equal(res.status, 400);
+    assert.equal((await (await parCode(CODE_CUISINE, "/absences")).json()).absences.length, avant);
+  });
+
+  await t.test("retirer un employé emporte ses congés", async () => {
+    const jetable = await creer("Parti", "cuisine", 15);
+    await admin("/api/admin/absences", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, employee_id: jetable.id, date_debut: "2026-10-01" }),
+    });
+    const avant = (await (await admin(`/api/admin/absences?restaurant_id=${resto.id}`)).json()).absences;
+    assert.ok(avant.some((a) => a.employee_id === jetable.id));
+
+    await admin(`/api/admin/employees/${jetable.id}`, { method: "DELETE" });
+    const apres = (await (await admin(`/api/admin/absences?restaurant_id=${resto.id}`)).json()).absences;
+    assert.ok(!apres.some((a) => a.employee_id === jetable.id), "aucun congé orphelin");
+  });
+
+  await t.test("le tableau de bord voit les congés des deux équipes", async () => {
+    await admin("/api/admin/absences", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, employee_id: serveuse.id, date_debut: "2026-07-20", date_fin: "2026-07-26" }),
+    });
+    const toutes = (await (await admin(`/api/admin/absences?restaurant_id=${resto.id}`)).json()).absences;
+    assert.ok(toutes.some((a) => a.employee_id === serveuse.id), "la salle aussi");
+    assert.ok(toutes.some((a) => a.employee_id === plongeur.id), "et la cuisine");
+  });
+
   await t.test("un code inconnu n'ouvre rien", async () => {
     assert.equal((await parCode("ZZZZZZ")).status, 404);
     assert.equal((await parCode("ZZZZZZ", "/shifts")).status, 404);

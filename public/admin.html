@@ -399,6 +399,46 @@
   /* Le poste et la tâche ont chacun leur ligne, mais AUCUNE des deux ne revient à la ligne :
      c'est ce qui garantit que la case ne s'allonge pas quand on écrit une tâche. Ce qui
      dépasse est coupé — le texte complet reste visible en ouvrant le quart. */
+  /* ---- Congés et vacances ---- */
+  .conges-toggle {
+    width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: #F1EFEA; font-size: 12px; font-weight: 700; padding: 9px 14px; border-radius: 12px;
+  }
+  .conges-toggle.ouvert { background: rgba(212,168,87,0.1); border-color: rgba(212,168,87,0.25); }
+  .conges-fleche { color: #D4A857; font-size: 11px; }
+  .conges-body { padding: 2px 2px 14px; }
+  .conges-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
+  .conges-form label { display: flex; flex-direction: column; gap: 3px; }
+  .conges-form select, .conges-form input {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    padding: 8px 9px; font-size: 12px; color: #F1EFEA;
+  }
+  .conge-ajouter { background: #6FBF93; color: #10151D; font-size: 12px; font-weight: 700; padding: 9px 16px; border-radius: 8px; }
+  .conges-vide { font-size: 12px; color: #8993A4; }
+  .conges-liste { display: flex; flex-direction: column; gap: 6px; }
+  .conge-ligne {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 10px; border-left: 3px solid #D4A857;
+    background: rgba(255,255,255,0.03);
+  }
+  /* Les vacances se distinguent d'un congé d'une journée : ce n'est pas la même chose à
+     oublier. */
+  .conge-ligne.conge-vacances { border-left-color: #6FBF93; }
+  .conge-nom { font-size: 12.5px; font-weight: 700; color: #F1EFEA; }
+  .conge-dates { font-size: 11px; color: #8993A4; margin-top: 1px; }
+  .conge-note { font-size: 11px; color: #D4A857; margin-top: 2px; }
+  .conge-retirer { font-size: 10px; padding: 4px 9px; height: fit-content; }
+  /* Une journée d'absence, dans la grille : on la voit sans avoir à ouvrir la liste. */
+  .empty-cell.absent {
+    border-style: solid; border-color: rgba(212,168,87,0.35); background: rgba(212,168,87,0.08);
+    color: #D4A857; font-size: 8.5px; font-weight: 700;
+  }
+  .empty-cell.absent.absent-vacances {
+    border-color: rgba(111,191,147,0.35); background: rgba(111,191,147,0.08); color: #6FBF93;
+  }
+  /* Cédulé pendant une absence notée : c'est l'oubli qu'on cherche à empêcher. */
+  .shift-chip.conflit { border-color: #E2685A; box-shadow: 0 0 0 1px #E2685A inset; }
   .shift-chip .rl, .shift-chip .tk {
     max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -510,6 +550,7 @@
 <!-- Grille d'horaire commune à cette page et à /horaire : une seule définition. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
+<script src="/shared/absences.js"></script>
 <script src="/shared/cout-main-oeuvre.js"></script>
 <script src="/shared/horaire-mise-en-page.js"></script>
 <script src="/shared/horaire-image.js"></script>
@@ -562,6 +603,7 @@ function ecrireStockage(zone, cle, valeur) {
 let TOKEN = lireStockage("sessionStorage", "adminToken") || "";
 let overview = null;
 let messages = [];
+let absences = [];
 // Quelles sections « cuisine » sont déployées. Vit ici et pas dans le HTML : render()
 // reconstruit toute la page, et une section refermée à chaque rafraîchissement serait
 // insupportable.
@@ -672,6 +714,20 @@ const I18N = {
     enregistrerTaux: "Enregistrer",
     chargesEmployeur: "Charges de l'employeur",
     chargesAide: "Ce que tu paies en plus du salaire (vacances, CNESST, RRQ…). Laisse à 0 tant que ton comptable ne t'a pas donné le vrai chiffre.",
+    congesTitre: (n) => `Congés et vacances (${n})`,
+    congeEmploye: "Employé",
+    congeChoisir: "Choisir…",
+    congeDu: "Du",
+    congeAu: "Au (optionnel)",
+    congeType: "Type",
+    congeAjouter: "Ajouter",
+    congeRetirer: "Retirer",
+    congeAucun: "Aucun congé ni vacances à venir.",
+    congeJours: (n) => `${n} jour${n > 1 ? "s" : ""}`,
+    congeIncomplet: "Choisis un employé et une date de début.",
+    congeErreur: "Impossible d'enregistrer. Vérifie les dates.",
+    congeConfirmRetirer: "Retirer cette demande ?",
+    congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
     salle: "Salle",
     cuisine: "Cuisine",
     heuresSemaine: "Heures cédulées",
@@ -837,6 +893,20 @@ const I18N = {
     enregistrerTaux: "Save",
     chargesEmployeur: "Employer costs",
     chargesAide: "What you pay on top of the wage (vacation, workers' comp, pension…). Leave at 0 until your accountant gives you the real figure.",
+    congesTitre: (n) => `Time off and vacation (${n})`,
+    congeEmploye: "Employee",
+    congeChoisir: "Choose…",
+    congeDu: "From",
+    congeAu: "To (optional)",
+    congeType: "Type",
+    congeAjouter: "Add",
+    congeRetirer: "Remove",
+    congeAucun: "No upcoming time off or vacation.",
+    congeJours: (n) => `${n} day${n > 1 ? "s" : ""}`,
+    congeIncomplet: "Pick an employee and a start date.",
+    congeErreur: "Could not save. Check the dates.",
+    congeConfirmRetirer: "Remove this request?",
+    congeConflit: (type) => `Warning: scheduled during "${type}"`,
     salle: "Dining room",
     cuisine: "Kitchen",
     heuresSemaine: "Scheduled hours",
@@ -1081,6 +1151,11 @@ async function load() {
       shifts = resShifts.shifts;
     } catch (e) {
       shifts = [];
+    }
+    try {
+      absences = (await api("/api/admin/absences")).absences;
+    } catch (e) {
+      absences = [];
     }
     render();
   } catch (e) {
@@ -2124,6 +2199,9 @@ ScheduleUI.init({
   shifts: () => shifts,
   setShifts: (s) => { shifts = s; },
   reloadShifts: async () => (await api("/api/admin/shifts")).shifts,
+  absences: () => absences,
+  setAbsences: (a) => { absences = a; },
+  reloadAbsences: async () => (await api("/api/admin/absences")).absences,
   shiftApi: (path, opts) => api(`/api/admin${path}`, opts),
   pdfRequest: (restaurantId, weekISO, langue, secteur) => ({
     url: `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${langue}${secteur ? `&secteur=${secteur}` : ""}`,
