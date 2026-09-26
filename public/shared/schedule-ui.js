@@ -288,11 +288,19 @@ window.ScheduleUI = (function () {
       ${dates
         .map(
           (d) => `
-        <div class="day-head ${isoDate(d) === todayStr ? "today" : ""}">
+        ${(() => {
+          // Un férié se planifie à l'envers d'une semaine ordinaire : plus de monde, pas
+          // moins. Il est donc écrit dans l'en-tête du jour, là où le regard passe déjà en
+          // cherchant la date — pas dans une liste à côté que personne ne relit.
+          const fete = window.Feries.ferieDuJour(isoDate(d));
+          return `
+        <div class="day-head ${isoDate(d) === todayStr ? "today" : ""} ${fete ? `jour-${fete.type}` : ""}">
           <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
           <div class="dnum">${d.getDate()}</div>
+          ${fete ? `<div class="fete" title="${echapper(window.Feries.libelle(fete.cle, lang))}">${echapper(window.Feries.libelleCourt(fete.cle, lang))}</div>` : ""}
         </div>
-      `
+      `;
+        })()}`
         )
         .join("")}
       ${employees
@@ -309,11 +317,14 @@ window.ScheduleUI = (function () {
             // Le congé était noté et quelqu'un a quand même été placé ce jour-là : c'est
             // exactement l'oubli qu'on cherche à empêcher, donc ça se voit de loin.
             const absence = window.Absences.absenceDuJour(absences, emp.id, dateStr);
+            // La teinte descend sur toute la colonne : un en-tête coloré seul se perd dès
+            // qu'on regarde le bas d'une grille de quatorze personnes.
+            const fete = window.Feries.ferieDuJour(dateStr);
             // Seule l'heure de début est affichée : la fin d'un quart dépend de l'achalandage
             // et n'est jamais celle qui avait été inscrite. L'afficher donnait une promesse
             // fausse. Elle reste enregistrée — c'est elle qui sert à calculer les heures.
             return `
-            <div class="shift-cell ${depasse}">
+            <div class="shift-cell ${depasse} ${fete ? `col-${fete.type}` : ""}">
               ${
                 shift
                   ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"} ${absence ? "conflit" : ""}"

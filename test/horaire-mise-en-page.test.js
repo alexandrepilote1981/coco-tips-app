@@ -212,3 +212,94 @@ test("la limite de longueur d'une tâche est dictée par la mise en page", () =>
     assert.ok(tache.length <= mise.TACHE_MAX, `« ${tache} » (${tache.length}) doit tenir dans ${mise.TACHE_MAX}`);
   }
 });
+
+// ---------------------------------------------------------------- jours fériés
+
+// La semaine du 4 mai 2026 porte la fête des Mères (dimanche 10) ; celle du 18 mai porte la
+// Journée des patriotes (lundi 18). Deux semaines réelles, choisies pour couvrir les deux
+// familles : une occasion et un férié.
+function dessinerSemaine(weekStartISO, n = 4, options = {}) {
+  const employees = equipe(n);
+  const surface = surfaceTemoin();
+  const hauteur = mise.dessinerHoraire(surface, {
+    restaurantName: "Chez Coco",
+    employees,
+    shifts: [],
+    weekStartISO,
+    lang: "fr",
+    ...options,
+  });
+  return { surface, hauteur, textes: surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu) };
+}
+
+test("la feuille nomme le jour férié de la semaine", () => {
+  const { textes } = dessinerSemaine("2026-05-18");
+  assert.ok(textes.includes("Journée des patriotes"), `patriotes manquant : ${textes.join(" | ")}`);
+});
+
+test("la fête des Mères est écrite et teintée à part des fériés", () => {
+  const { surface, textes } = dessinerSemaine("2026-05-04");
+  assert.ok(textes.includes("Fête des Mères"));
+
+  const occasion = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.occasionFond);
+  // L'en-tête plus une bande par employé : la couleur descend sur toute la colonne.
+  assert.equal(occasion.length, 5, "en-tête + 4 rangées");
+  const ferie = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.ferieFond);
+  assert.equal(ferie.length, 0, "cette semaine-là ne contient aucun férié de la loi");
+});
+
+test("la teinte du férié couvre la même colonne que son nom", () => {
+  const { surface } = dessinerSemaine("2026-05-04");
+  const nom = surface.ordres.find((o) => o.type === "texte" && o.contenu === "Fête des Mères");
+  const bandes = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.occasionFond);
+  for (const b of bandes) {
+    assert.ok(Math.abs(b.args[0] - (nom.x - 3)) < 0.01, "la bande est sous le nom, pas à côté");
+  }
+});
+
+test("un dimanche férié garde sa couleur de férié, pas celle du week-end", () => {
+  // La fête des Mères tombe TOUJOURS un dimanche : si la teinte de fin de semaine
+  // l'emportait, la journée la plus occupée de l'année serait grise comme les autres.
+  const { surface } = dessinerSemaine("2026-05-04");
+  const dimanche = surface.ordres.filter(
+    (o) => o.type === "rect" && o.args[4] === mise.COULEURS.fondFinSemaine
+  );
+  assert.equal(dimanche.length, 4, "seul le samedi reste gris, pour chacun des 4 employés");
+});
+
+test("une semaine ordinaire n'affiche aucune couleur de férié", () => {
+  const { surface } = dessinerSemaine("2026-09-21");
+  const teintes = surface.ordres.filter(
+    (o) => o.type === "rect" && (o.args[4] === mise.COULEURS.ferieFond || o.args[4] === mise.COULEURS.occasionFond)
+  );
+  assert.equal(teintes.length, 0);
+});
+
+test("un nom de férié trop long pour la colonne passe à sa version courte", () => {
+  // « Journée des patriotes » ne tient pas dans une colonne de jour ; « Patriotes », oui.
+  // Ce qu'on refuse, c'est « Journée des patr… », qui ne dit plus rien.
+  const surface = surfaceTemoin();
+  // Une mesure volontairement pessimiste : tout paraît deux fois trop large.
+  const mesurerLarge = (contenu, o = {}) => String(contenu).length * (o.taille || 10) * 1.6;
+  mise.dessinerHoraire({ ...surface, mesurer: mesurerLarge }, {
+    restaurantName: "Chez Coco", employees: equipe(3), shifts: [], weekStartISO: "2026-05-18", lang: "fr",
+  });
+  const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
+  assert.ok(textes.includes("Patriotes"), `version courte attendue : ${textes.join(" | ")}`);
+  assert.ok(!textes.includes("Journée des patriotes"));
+});
+
+test("les fériés sont écrits en anglais sur une feuille en anglais", () => {
+  const { textes } = dessinerSemaine("2026-05-04", 3, { lang: "en" });
+  assert.ok(textes.includes("Mother's Day"), textes.join(" | "));
+});
+
+for (const n of [1, 14, 40]) {
+  test(`${n} employé(s) : une semaine avec férié tient encore sur la feuille`, () => {
+    const { surface } = dessinerSemaine("2026-05-04", n);
+    assert.ok(
+      basAtteint(surface.ordres) <= mise.PAGE.hauteur,
+      `le dessin descend à ${basAtteint(surface.ordres).toFixed(1)}`
+    );
+  });
+}
