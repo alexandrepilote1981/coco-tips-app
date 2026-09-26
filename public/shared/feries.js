@@ -10,16 +10,22 @@
 // la fête des Mères est le deuxième dimanche de mai, et ce sera encore vrai dans dix ans.
 // Une table à remplir chaque année serait une table qu'on oublie de remplir.
 //
-// Une journée marquée répond à DEUX questions, et il ne faut pas les confondre :
+// Toutes les journées marquées portent LA MÊME couleur, le rouge. Il y a eu une version à
+// deux teintes — or pour les fériés, corail pour les grosses journées — et elle demandait au
+// gérant de décoder une couleur avant de comprendre sa semaine. Une grille se lit d'un coup
+// d'œil : une seule couleur dit « cette journée-là n'est pas ordinaire », et le NOM écrit en
+// dessous dit laquelle. C'est le nom qui porte le détail, pas la teinte.
+//
+// Chaque journée garde quand même deux champs, parce que ce sont deux faits différents et
+// qu'ils ne se déduisent pas l'un de l'autre :
 //
 //   type        « ferie » = la paie n'est pas la même (Loi sur les normes du travail, plus
 //               la Fête nationale). « occasion » = la loi n'a rien à dire sur cette journée.
 //   affluence   la salle va se remplir, donc il faut plus de monde au plancher.
 //
-// Les deux sont indépendantes, et c'est tout l'intérêt. La fête des Mères remplit la salle
-// sans être un férié. Le Vendredi saint est un férié sans être une grosse journée. Et
-// l'Action de grâce est les DEUX : la paie change ET la salle est pleine. Un seul champ
-// aurait forcé à choisir laquelle des deux vérités afficher — donc à en cacher une.
+// La fête des Mères remplit la salle sans être un férié. Le Vendredi saint est un férié sans
+// être une grosse journée. L'Action de grâce est les DEUX. Seul `type` se voit encore, et
+// seulement en mots : l'infobulle d'un férié ajoute « · férié ».
 
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -93,9 +99,9 @@
     },
   };
 
-  // Ce qu'on écrit à côté du nom d'une journée qui est à la fois un férié et une grosse
-  // journée. Sans ça, l'Action de grâce teintée « salle pleine » n'aurait plus rien qui
-  // rappelle que la paie change ce jour-là.
+  // Ce qu'on ajoute à l'infobulle d'un férié. La couleur ne le dit plus — elle est la même
+  // pour toutes les journées marquées — alors le mot le dit, là où il ne coûte pas un pixel
+  // dans une colonne déjà étroite.
   const MENTION_FERIE = { fr: "férié", en: "holiday" };
 
   function deuxChiffres(n) {
@@ -186,7 +192,7 @@
       { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie", affluence: false },
       { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie", affluence: false },
       // La seule journée du lot qui est les deux à la fois : la paie change ET la salle se
-      // remplit. C'est exactement le cas qui a fait naître le champ « affluence ».
+      // remplit.
       { date: isoDe(nieme(an, 10, 1, 2)), cle: "actionDeGrace", type: "ferie", affluence: true },
       { date: iso(an, 12, 25), cle: "noel", type: "ferie", affluence: false },
     ];
@@ -215,18 +221,8 @@
     return indexDeLAnnee(parseInt(dateISO.slice(0, 4), 10))[dateISO] || null;
   }
 
-  // La teinte suit l'AFFLUENCE, pas le statut légal : la couleur est là pour dire « monte
-  // plus de monde ce jour-là », et c'est l'action qu'on veut déclencher en bâtissant
-  // l'horaire. Un férié tranquille garde l'or, une grosse journée prend le corail.
-  function teinte(fete) {
-    if (!fete) return null;
-    return fete.affluence ? "occasion" : "ferie";
-  }
-
-  // Vrai seulement pour une journée qui est les deux : sa teinte dit « salle pleine », donc
-  // il faut autre chose pour rappeler que la paie change aussi.
-  function rappelerFerie(fete) {
-    return !!fete && fete.type === "ferie" && !!fete.affluence;
+  function estFerie(fete) {
+    return !!fete && fete.type === "ferie";
   }
 
   function mentionFerie(lang) {
@@ -246,8 +242,7 @@
     paques,
     feriesDeLAnnee,
     ferieDuJour,
-    teinte,
-    rappelerFerie,
+    estFerie,
     mentionFerie,
     libelle,
     libelleCourt,

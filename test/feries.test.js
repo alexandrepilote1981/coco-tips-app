@@ -185,27 +185,22 @@ test("un férié tranquille n'est pas une grosse journée", () => {
   }
 });
 
-test("l'Action de grâce est les deux à la fois, et le dit", () => {
-  // C'est le cas qui a fait naître le champ « affluence » : un seul champ aurait forcé à
-  // cacher l'une des deux vérités.
+test("l'Action de grâce est les deux à la fois", () => {
   const f = F.ferieDuJour("2027-10-11");
   assert.equal(f.type, "ferie", "la paie change");
   assert.equal(f.affluence, true, "et la salle se remplit");
-  assert.equal(F.teinte(f), "occasion", "la couleur parle de la salle");
-  assert.equal(F.rappelerFerie(f), true, "donc il faut rappeler le férié autrement");
 });
 
-test("la teinte suit l'affluence, pas le statut légal", () => {
-  assert.equal(F.teinte(F.ferieDuJour("2027-05-09")), "occasion", "fête des Mères");
-  assert.equal(F.teinte(F.ferieDuJour("2027-12-25")), "ferie", "Noël");
-  assert.equal(F.teinte(null), null, "une journée ordinaire n'a pas de teinte");
-});
-
-test("le rappel « férié » ne s'écrit que là où il manquerait", () => {
-  assert.equal(F.rappelerFerie(F.ferieDuJour("2027-05-09")), false, "la fête des Mères n'est pas un férié");
-  assert.equal(F.rappelerFerie(F.ferieDuJour("2027-12-25")), false, "Noël est déjà teinté en férié");
-  assert.equal(F.rappelerFerie(null), false);
+test("« férié » se dit en mots, jamais par la couleur", () => {
+  // Toutes les journées marquées portent la même teinte : c'est le NOM qui dit laquelle, et
+  // l'infobulle qui ajoute « férié » là où ça compte. Rien dans le module ne rend une
+  // couleur — l'affichage n'a donc aucune teinte à choisir.
+  assert.equal(F.estFerie(F.ferieDuJour("2027-12-25")), true, "Noël");
+  assert.equal(F.estFerie(F.ferieDuJour("2027-10-11")), true, "Action de grâce");
+  assert.equal(F.estFerie(F.ferieDuJour("2027-05-09")), false, "la fête des Mères n'est pas un férié");
+  assert.equal(F.estFerie(null), false);
   for (const lang of ["fr", "en"]) assert.ok(F.mentionFerie(lang).length > 0);
+  assert.equal(typeof F.teinte, "undefined", "plus aucune notion de teinte dans le module");
 });
 
 test("toutes les journées portent les deux champs", () => {

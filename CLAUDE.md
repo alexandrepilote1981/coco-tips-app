@@ -171,7 +171,15 @@ Meeus/Jones/Butcher ; le reste s'en déduit ou se décrit en une phrase (« 2e d
 mai »). Tout le calcul de dates passe par UTC à midi, sinon un fuseau horaire décale un férié
 d'un jour.
 
-Chaque journée répond à **deux questions indépendantes**, et c'est tout l'intérêt :
+**Toutes les journées marquées portent LA MÊME couleur, le rouge.** Il y a eu une version à
+deux teintes — or pour les fériés, corail pour les grosses journées — et elle demandait au
+gérant de décoder une couleur avant de comprendre sa semaine. Une grille se lit d'un coup
+d'œil : une seule couleur dit « cette journée-là n'est pas ordinaire », et le **nom** écrit en
+dessous dit laquelle. C'est le nom qui porte le détail, pas la teinte. Ne pas réintroduire de
+deuxième couleur ici.
+
+Chaque journée garde quand même deux champs, parce que ce sont deux faits différents qui ne
+se déduisent pas l'un de l'autre :
 
 | champ       | ce qu'il dit                                               |
 | ----------- | ---------------------------------------------------------- |
@@ -179,35 +187,24 @@ Chaque journée répond à **deux questions indépendantes**, et c'est tout l'in
 | `affluence` | la salle va se remplir, donc il faut plus de monde au plancher |
 
 La fête des Mères remplit la salle sans être un férié. Le Vendredi saint est un férié sans
-être une grosse journée. L'**Action de grâce est les deux** : la paie change ET la salle est
-pleine. Un seul champ aurait forcé à choisir laquelle des deux vérités afficher — donc à en
-cacher une.
-
-**La teinte suit `affluence`, pas `type`** (`Feries.teinte()`) : la couleur est là pour dire
-« monte plus de monde ce jour-là », et c'est l'action qu'on veut déclencher en bâtissant
-l'horaire. Un férié tranquille garde l'**or**, une grosse journée prend le **corail**.
-
-Pour une journée qui est les deux, la teinte parle de la salle, donc il faut autre chose pour
-rappeler la paie (`Feries.rappelerFerie()`) : une pastille dorée avant le nom à l'écran, avec
-l'infobulle « Action de grâce · férié » ; et le mot écrit en toutes lettres sur la feuille,
-puisqu'il n'y a pas d'infobulle sur une feuille punaisée au mur.
+être une grosse journée. L'**Action de grâce est les deux**. Seul `type` se voit encore, et
+seulement en mots : l'infobulle d'un férié ajoute « · férié » (`Feries.estFerie()`), là où ça
+ne coûte pas un pixel dans une colonne déjà étroite.
 
 Vendredi saint ET lundi de Pâques sont affichés : la loi laisse l'employeur choisir, en
 cacher un ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
-c'est lui qui remplit la salle — d'où trois journées d'affilée qui ne disent pas la même
-chose.
+c'est lui qui remplit la salle.
 
 À l'écran, le nom s'écrit dans l'en-tête du jour et la teinte descend sur toute la colonne —
 un en-tête coloré seul se perd au bas d'une grille de quatorze personnes. Le nom peut passer
 sur deux lignes mais jamais élargir la colonne (`overflow-wrap: anywhere`).
 
 Sur la feuille imprimée, la teinte l'emporte sur celle de la fin de semaine : la fête des
-Mères tombe toujours un dimanche, et elle disparaîtrait dans le gris du week-end. Le texte
-cède par étapes, du plus complet au plus court — `nom · férié`, `nom`, `nom court · férié`,
-`nom court` — la première version qui rentre dans la colonne, mesurée par `surface.mesurer`.
-On ne tronque jamais : « Journée des patri… » ne dit plus rien à personne. L'en-tête de la
-feuille fait 42 points au lieu de 34 pour porter cette ligne ; ces 8 points se prennent une
-fois sur la page, pas une fois par rangée.
+Mères tombe toujours un dimanche, et elle disparaîtrait dans le gris du week-end. Le nom
+complet s'écrit s'il rentre dans la colonne, mesuré par `surface.mesurer` ; sinon c'est le
+nom court (`libelleCourt`). On ne tronque jamais : « Journée des patri… » ne dit plus rien à
+personne. L'en-tête de la feuille fait 42 points au lieu de 34 pour porter cette ligne ; ces
+8 points se prennent une fois sur la page, pas une fois par rangée.
 
 Ajouter une journée, c'est une ligne dans `feriesDeLAnnee` plus son libellé (long et court)
 dans les deux dictionnaires.
@@ -272,8 +269,7 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/pdf-horaire.test.js` — le PDF réellement produit, relu dans son flux.
 - `test/schedule-ui.test.js` — ce que la grille calcule sans toucher au DOM (liste d'heures,
   postes, échappement) ; le fichier est chargé avec un faux `window`.
-- `test/feries.test.js` — les dates des fériés (dont Pâques sur plusieurs années) et la
-  séparation entre « la paie change » et « la salle se remplit ».
+- `test/feries.test.js` — les dates des fériés, dont Pâques sur plusieurs années.
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
