@@ -378,24 +378,19 @@
   .day-head .dow { font-size: 8.5px; text-transform: uppercase; color: #8993A4; font-weight: 700; letter-spacing: 0.03em; }
   .day-head .dnum { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; margin-top: 2px; color: #F1EFEA; }
   .day-head.today .dnum { color: #D4A857; }
-  /* Jours fériés et grosses journées. Deux teintes, deux messages : l'or dit « férié », donc
-     la paie change ; le corail dit « la salle va être pleine », et c'est la fête des Mères
-     qu'on cherche à ne pas manquer. La couleur descend sur toute la colonne parce qu'un
-     en-tête coloré seul se perd au bas d'une grille de quatorze personnes. */
-  .day-head.jour-ferie { background: rgba(212,168,87,0.10); border-radius: 8px 8px 0 0; }
-  .day-head.jour-occasion { background: rgba(226,104,90,0.13); border-radius: 8px 8px 0 0; }
+  /* Jours fériés et grosses journées : UNE seule couleur. Il y a eu une version à deux
+     teintes, or et corail, et elle demandait de décoder une couleur avant de comprendre sa
+     semaine. Le rouge dit « cette journée-là n'est pas ordinaire », le nom écrit en dessous
+     dit laquelle, et l'infobulle porte le reste. La teinte descend sur toute la colonne
+     parce qu'un en-tête coloré seul se perd au bas d'une grille de quatorze personnes. */
+  .day-head.jour-marque { background: rgba(226,104,90,0.13); border-radius: 8px 8px 0 0; }
   .day-head .fete {
-    font-size: 8px; font-weight: 700; line-height: 1.15; margin-top: 2px; color: #D4A857;
+    font-size: 8px; font-weight: 700; line-height: 1.15; margin-top: 2px; color: #E2685A;
     /* Le nom peut passer sur deux lignes, mais jamais élargir la colonne : une grille qui
        s'étire pour un mot repousse le dimanche hors de l'écran. */
     overflow-wrap: anywhere;
   }
-  .day-head.jour-occasion .fete { color: #E2685A; }
-  /* Une journée qui est à la fois un férié et une grosse journée — l'Action de grâce.
-     La teinte parle de la salle, la pastille dorée rappelle la paie. */
-  .day-head .fete .fete-ferie { color: #D4A857; font-size: 7px; vertical-align: 1px; }
-  .shift-cell.col-ferie { background: rgba(212,168,87,0.045); }
-  .shift-cell.col-occasion { background: rgba(226,104,90,0.06); }
+  .shift-cell.col-marque { background: rgba(226,104,90,0.06); }
   .emp-name-cell {
     display: flex; flex-direction: column; justify-content: center; align-items: flex-start; color: #F1EFEA;
     padding: 4px 6px 4px 0; border-top: 1px solid rgba(255,255,255,0.06); overflow: hidden;

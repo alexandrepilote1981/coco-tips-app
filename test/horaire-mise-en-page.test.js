@@ -237,21 +237,19 @@ test("la feuille nomme le jour férié de la semaine", () => {
   assert.ok(textes.includes("Journée des patriotes"), `patriotes manquant : ${textes.join(" | ")}`);
 });
 
-test("la fête des Mères est écrite et teintée à part des fériés", () => {
+test("la fête des Mères est écrite et sa colonne est teintée", () => {
   const { surface, textes } = dessinerSemaine("2026-05-04");
   assert.ok(textes.includes("Fête des Mères"));
 
-  const occasion = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.occasionFond);
+  const marque = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.marqueFond);
   // L'en-tête plus une bande par employé : la couleur descend sur toute la colonne.
-  assert.equal(occasion.length, 5, "en-tête + 4 rangées");
-  const ferie = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.ferieFond);
-  assert.equal(ferie.length, 0, "cette semaine-là ne contient aucun férié de la loi");
+  assert.equal(marque.length, 5, "en-tête + 4 rangées");
 });
 
 test("la teinte du férié couvre la même colonne que son nom", () => {
   const { surface } = dessinerSemaine("2026-05-04");
   const nom = surface.ordres.find((o) => o.type === "texte" && o.contenu === "Fête des Mères");
-  const bandes = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.occasionFond);
+  const bandes = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.marqueFond);
   for (const b of bandes) {
     assert.ok(Math.abs(b.args[0] - (nom.x - 3)) < 0.01, "la bande est sous le nom, pas à côté");
   }
@@ -269,9 +267,7 @@ test("un dimanche férié garde sa couleur de férié, pas celle du week-end", (
 
 test("une semaine ordinaire n'affiche aucune couleur de férié", () => {
   const { surface } = dessinerSemaine("2026-09-21");
-  const teintes = surface.ordres.filter(
-    (o) => o.type === "rect" && (o.args[4] === mise.COULEURS.ferieFond || o.args[4] === mise.COULEURS.occasionFond)
-  );
+  const teintes = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.marqueFond);
   assert.equal(teintes.length, 0);
 });
 
@@ -304,30 +300,18 @@ for (const n of [1, 14, 40]) {
   });
 }
 
-test("l'Action de grâce porte la teinte « salle pleine » et le rappel du férié", () => {
-  // Lundi 12 octobre 2026. La paie change ET la salle se remplit : la feuille doit dire les
-  // deux, parce qu'il n'y a pas d'infobulle sur une feuille punaisée au mur.
-  const { surface, textes } = dessinerSemaine("2026-10-12");
-  assert.ok(
-    textes.some((t) => t.startsWith("Action de grâce") && t.includes("férié")),
-    `rappel manquant : ${textes.join(" | ")}`
-  );
-  const corail = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.occasionFond);
-  assert.equal(corail.length, 5, "en-tête + 4 rangées, en corail et non en or");
-  const or = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.ferieFond);
-  assert.equal(or.length, 0);
-});
+test("toutes les journées marquées portent la même teinte", () => {
+  // Lundi 12 octobre 2026 : l'Action de grâce est un férié ET une grosse journée. Elle n'a
+  // pas pour autant une couleur à elle — c'est son nom qui la distingue, pas sa teinte.
+  const action = dessinerSemaine("2026-10-12");
+  assert.ok(action.textes.includes("Action de grâce"), action.textes.join(" | "));
 
-test("quand la colonne est étroite, c'est le rappel qui cède avant le nom", () => {
-  const surface = surfaceTemoin();
-  // Assez large pour « Action de grâce », trop étroit pour « Action de grâce · férié ».
-  const mesurerJuste = (contenu, o = {}) => String(contenu).length * (o.taille || 10) * 1.05;
-  mise.dessinerHoraire({ ...surface, mesurer: mesurerJuste }, {
-    restaurantName: "Chez Coco", employees: equipe(3), shifts: [], weekStartISO: "2026-10-12", lang: "fr",
-  });
-  const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
-  assert.ok(textes.includes("Action de grâce"), textes.join(" | "));
-  assert.ok(!textes.some((t) => t.includes("férié")), "le rappel cède, le nom reste");
+  const bandes = (r) => r.surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.marqueFond).length;
+  assert.equal(bandes(action), 5, "en-tête + 4 rangées");
+  // Un férié tranquille, une grosse journée : exactement le même nombre de bandes de la
+  // même couleur. C'est ce qui rend la grille lisible sans décoder quoi que ce soit.
+  assert.equal(bandes(dessinerSemaine("2026-05-18")), 5, "Journée des patriotes");
+  assert.equal(bandes(dessinerSemaine("2026-05-04")), 5, "fête des Mères");
 });
 
 test("les grosses journées de restaurant sont toutes sur la feuille", () => {
