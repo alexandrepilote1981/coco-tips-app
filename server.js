@@ -324,14 +324,18 @@ app.post("/api/schedule/login", guard("schedule-login"), (req, res) => {
 
 // Liste allégée des restaurants + employés (noms seulement, AUCUNE donnée financière) —
 // c'est tout ce dont la page horaire indépendante a besoin pour construire la grille.
+//
+// Uniquement la SALLE : entrer par mot de passe ouvre la même porte que le lien horaire de la
+// salle, et rien d'autre. Sans ce filtre, la cuisine apparaissait dans la grille de la salle,
+// donc sans heure de fin, sans tâche, et avec les mauvais postes — le jour où les secteurs
+// sont apparus, cette route est restée en arrière.
 app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
   const restaurants = db.prepare("SELECT * FROM restaurants ORDER BY created_at ASC").all();
-  const data = restaurants.map((r) => {
-    const employees = db
-      .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
-      .all(r.id);
-    return { id: r.id, name: r.name, employees };
-  });
+  const data = restaurants.map((r) => ({
+    id: r.id,
+    name: r.name,
+    employees: sansMontants(employesDuSecteur(r.id, "salle")),
+  }));
   res.json({ restaurants: data });
 });
 
