@@ -362,6 +362,21 @@ test("les trois portes de l'horaire", async (t) => {
     assert.ok(toutes.some((a) => a.employee_id === plongeur.id), "et la cuisine");
   });
 
+  await t.test("entrer par mot de passe ouvre la salle, pas la cuisine", async () => {
+    // Le jour où les secteurs sont apparus, cette route est restée en arrière : la cuisine
+    // se retrouvait dans la grille de la salle, donc sans heure de fin, sans tâche et avec
+    // les mauvais postes.
+    const res = await fetch(`${base}/api/schedule/roster`, { headers: { "X-Admin-Token": MOT_DE_PASSE } });
+    assert.equal(res.status, 200);
+    const equipe = (await res.json()).restaurants.find((r) => r.id === resto.id).employees;
+
+    assert.ok(equipe.some((e) => e.name === "Marie Tremblay"), "la salle est là");
+    assert.ok(!equipe.some((e) => e.name === "Lokassa Mbala"), "la cuisine n'y est pas");
+    for (const e of equipe) {
+      assert.ok(!("taux_horaire" in e), "aucun montant par cette porte non plus");
+    }
+  });
+
   await t.test("un code inconnu n'ouvre rien", async () => {
     assert.equal((await parCode("ZZZZZZ")).status, 404);
     assert.equal((await parCode("ZZZZZZ", "/shifts")).status, 404);
