@@ -18,6 +18,9 @@
 //   shifts()               tableau des quarts actuellement chargés
 //   setShifts(tableau)     remplace ce tableau
 //   reloadShifts()         recharge les quarts depuis le serveur (async)
+//   absences()             congés et vacances chargés
+//   setAbsences(tableau)   remplace ce tableau
+//   reloadAbsences()       recharge les absences depuis le serveur (async)
 //   shiftApi(chemin, opts) appelle l'API des quarts ; chemin = "/shifts" ou "/shifts/ID"
 //   pdfRequest(idResto, semaineISO, langue)  -> { url, options } pour le téléchargement
 //   rerender()             redessine la page
@@ -91,6 +94,10 @@ window.ScheduleUI = (function () {
   // clic — les nœuds sont refaits à chaque rendu, mais pas cet objet.
   const contextes = {};
   const secteurParEmploye = {};
+  // Quelles sections « Congés » sont dépliées. Comme pour le reste, ça vit ici et pas dans le
+  // HTML : render() refait toute la page, et une section qui se referme à chaque
+  // rafraîchissement serait insupportable.
+  const congesOuverts = new Set();
 
   function cle(restaurantId, secteur) {
     return `${restaurantId}:${secteur}`;
@@ -145,6 +152,87 @@ window.ScheduleUI = (function () {
   // (TACHE_MAX, soit « Commande à défaire ») s'écrive en entier plutôt que de finir en « … ».
   const COLONNE_MIN = { salle: 62, cuisine: 100 };
 
+  // ---------- congés et vacances ----------
+
+  function absencesDuSecteur(employees) {
+    const ids = new Set(employees.map((e) => e.id));
+    return (host.absences ? host.absences() : []).filter((a) => ids.has(a.employee_id));
+  }
+
+  function nomDeEmploye(employees, id) {
+    const e = employees.find((x) => x.id === id);
+    return e ? e.name : "";
+  }
+
+  // Posés d'avance pour ne pas les oublier. La liste ne suffit pas — personne ne va la relire
+  // à chaque quart — d'où le marquage dans la grille elle-même, plus bas.
+  function blocCongesHTML(restaurantId, secteur, employees, peutModifier) {
+    const t = host.t;
+    const icon = host.icon;
+    const lang = host.lang();
+    const A = window.Absences;
+    const cleSection = cle(restaurantId, secteur);
+    const ouvert = congesOuverts.has(cleSection);
+    const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
+    const aVenir = A.prochaines(absencesDuSecteur(employees), todayISO());
+
+    return `
+    <button class="conges-toggle ${ouvert ? "ouvert" : ""}" data-action="toggleConges" ${marque}>
+      <span class="conges-fleche">${ouvert ? "▾" : "▸"}</span>
+      ${icon("calendar", 13)} ${t("congesTitre", aVenir.length)}
+    </button>
+    <div class="conges-body" style="display:${ouvert ? "block" : "none"};">
+      ${
+        peutModifier
+          ? `<div class="conges-form">
+        <label>
+          <span class="employee-stat-label">${t("congeEmploye")}</span>
+          <select class="congeEmploye" ${marque}>
+            <option value="">${t("congeChoisir")}</option>
+            ${employees.map((e) => `<option value="${e.id}">${echapper(e.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label>
+          <span class="employee-stat-label">${t("congeDu")}</span>
+          <input type="date" class="congeDebut" ${marque} />
+        </label>
+        <label>
+          <span class="employee-stat-label">${t("congeAu")}</span>
+          <input type="date" class="congeFin" ${marque} />
+        </label>
+        <label>
+          <span class="employee-stat-label">${t("congeType")}</span>
+          <select class="congeType" ${marque}>
+            ${A.TYPES.map((v) => `<option value="${v}">${A.libelleType(v, lang)}</option>`).join("")}
+          </select>
+        </label>
+        <button class="conge-ajouter" data-action="ajouterConge" ${marque}>${t("congeAjouter")}</button>
+      </div>`
+          : ""
+      }
+      ${
+        aVenir.length === 0
+          ? `<p class="conges-vide">${t("congeAucun")}</p>`
+          : `<div class="conges-liste">${aVenir
+              .map(
+                (a) => `
+        <div class="conge-ligne conge-${a.type}">
+          <div>
+            <div class="conge-nom">${echapper(nomDeEmploye(employees, a.employee_id))}</div>
+            <div class="conge-dates">${A.libelleType(a.type, lang)} · ${A.fmtPeriode(a, lang)} · ${t(
+                  "congeJours",
+                  A.nombreDeJours(a)
+                )}</div>
+            ${a.note ? `<div class="conge-note">${echapper(a.note)}</div>` : ""}
+          </div>
+          ${peutModifier ? `<button class="danger conge-retirer" data-action="retirerConge" data-id="${a.id}" ${marque}>${t("congeRetirer")}</button>` : ""}
+        </div>`
+              )
+              .join("")}</div>`
+      }
+    </div>`;
+  }
+
   // ---------- grille ----------
 
   /**
@@ -176,7 +264,10 @@ window.ScheduleUI = (function () {
       ? window.CoutMainOeuvre.coutSurPeriode(employees, shifts, dates.map(isoDate), chargesPct)
       : null;
 
+    const absences = absencesDuSecteur(employees);
+
     return `
+    ${blocCongesHTML(restaurantId, secteur, employees, peutModifier)}
     ${voitMontants ? barreCoutHTML(restaurantId, secteur, employees, chargesPct, bilan) : ""}
     <div class="week-header">
       <div class="week-title">${fmtWeekLabel(weekStart)}</div>
@@ -215,6 +306,9 @@ window.ScheduleUI = (function () {
           .map((d) => {
             const dateStr = isoDate(d);
             const shift = shifts.find((s) => s.employee_id === emp.id && s.date === dateStr);
+            // Le congé était noté et quelqu'un a quand même été placé ce jour-là : c'est
+            // exactement l'oubli qu'on cherche à empêcher, donc ça se voit de loin.
+            const absence = window.Absences.absenceDuJour(absences, emp.id, dateStr);
             // Seule l'heure de début est affichée : la fin d'un quart dépend de l'achalandage
             // et n'est jamais celle qui avait été inscrite. L'afficher donnait une promesse
             // fausse. Elle reste enregistrée — c'est elle qui sert à calculer les heures.
@@ -222,12 +316,19 @@ window.ScheduleUI = (function () {
             <div class="shift-cell ${depasse}">
               ${
                 shift
-                  ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"}"
+                  ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"} ${absence ? "conflit" : ""}"
+                          ${absence ? `title="${host.t("congeConflit", window.Absences.libelleType(absence.type, lang))}"` : ""}
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
                        <div class="rl">${echapper(libelleRole(shift.role, lang))}</div>
                        ${tacheDuQuart(shift, secteur) ? `<div class="tk">${echapper(tacheDuQuart(shift, secteur))}</div>` : ""}
                      </div>`
+                  : absence
+                  ? // Une journée d'absence reste cliquable : il arrive qu'on doive quand même
+                    // céduler quelqu'un. Mais on ne peut plus le faire sans le savoir.
+                    peutModifier
+                    ? `<button class="empty-cell absent absent-${absence.type}" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">${window.Absences.libelleType(absence.type, lang)}</button>`
+                    : `<div class="empty-cell lecture absent absent-${absence.type}">${window.Absences.libelleType(absence.type, lang)}</div>`
                   : peutModifier
                   ? `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">+</button>`
                   : `<div class="empty-cell lecture">—</div>`
@@ -664,6 +765,50 @@ window.ScheduleUI = (function () {
     });
   }
 
+  // ---------- actions des congés ----------
+
+  function champ(classe, restaurantId, secteur) {
+    return document.querySelector(`.${classe}[data-resto="${restaurantId}"][data-secteur="${secteur}"]`);
+  }
+
+  async function ajouterConge(restaurantId, secteur, btn) {
+    const employeeId = champ("congeEmploye", restaurantId, secteur).value;
+    const debut = champ("congeDebut", restaurantId, secteur).value;
+    const fin = champ("congeFin", restaurantId, secteur).value;
+    const type = champ("congeType", restaurantId, secteur).value;
+
+    if (!employeeId || !debut) {
+      alert(host.t("congeIncomplet"));
+      return;
+    }
+
+    congesOuverts.add(cle(restaurantId, secteur)); // la section reste ouverte après le rendu
+    btn.disabled = true;
+    try {
+      await host.shiftApi("/absences", {
+        method: "POST",
+        body: JSON.stringify({ restaurant_id: restaurantId, employee_id: employeeId, date_debut: debut, date_fin: fin, type }),
+      });
+      host.setAbsences(await host.reloadAbsences());
+      host.rerender();
+    } catch (err) {
+      alert(host.t("congeErreur"));
+      btn.disabled = false;
+    }
+  }
+
+  async function retirerConge(restaurantId, secteur, id) {
+    if (!confirm(host.t("congeConfirmRetirer"))) return;
+    congesOuverts.add(cle(restaurantId, secteur));
+    try {
+      await host.shiftApi(`/absences/${id}?restaurant_id=${encodeURIComponent(restaurantId)}`, { method: "DELETE" });
+      host.setAbsences(await host.reloadAbsences());
+      host.rerender();
+    } catch (err) {
+      alert(host.t("congeErreur"));
+    }
+  }
+
   // ---------- branchement des boutons ----------
 
   // À rappeler après chaque rendu : les boutons sont recréés à chaque fois.
@@ -699,6 +844,20 @@ window.ScheduleUI = (function () {
     });
     document.querySelectorAll('[data-action="pdfWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => downloadWeekPdf(btn.dataset.resto, btn, btn.dataset.secteur));
+    });
+    document.querySelectorAll('[data-action="toggleConges"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const k = cle(btn.dataset.resto, btn.dataset.secteur);
+        if (congesOuverts.has(k)) congesOuverts.delete(k);
+        else congesOuverts.add(k);
+        host.rerender();
+      });
+    });
+    document.querySelectorAll('[data-action="ajouterConge"]').forEach((btn) => {
+      btn.addEventListener("click", () => ajouterConge(btn.dataset.resto, btn.dataset.secteur, btn));
+    });
+    document.querySelectorAll('[data-action="retirerConge"]').forEach((btn) => {
+      btn.addEventListener("click", () => retirerConge(btn.dataset.resto, btn.dataset.secteur, btn.dataset.id));
     });
     document.querySelectorAll('[data-action="photoWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => downloadWeekImage(btn.dataset.resto, btn, btn.dataset.secteur));
@@ -737,6 +896,8 @@ window.ScheduleUI = (function () {
     duplicateWeekToNext,
     clearWeekShifts,
     bilanEmploye,
+    ajouterConge,
+    retirerConge,
     rolesDe,
     echapper,
     tachesRecentes,

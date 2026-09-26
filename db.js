@@ -81,6 +81,18 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Congés demandés et semaines de vacances, posés d'avance. Une plage plutôt qu'une date :
+-- une semaine de vacances est une seule entrée, pas sept.
+CREATE TABLE IF NOT EXISTS absences (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  date_debut TEXT NOT NULL,
+  date_fin TEXT NOT NULL,
+  type TEXT DEFAULT 'conge',
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS shifts (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL REFERENCES employees(id),
@@ -132,6 +144,10 @@ for (const col of [
 // jamais après, donc les vraies nouvelles journées auront toujours la bonne date figée).
 db.exec(`UPDATE entries SET created_at = updated_at WHERE created_at IS NULL;`);
 db.exec(`UPDATE entries SET data_updated_at = updated_at WHERE data_updated_at IS NULL;`);
+
+// Retrouver les absences d'une personne est la question qu'on pose le plus souvent : une
+// fois par employé et par rendu de grille.
+db.exec(`CREATE INDEX IF NOT EXISTS idx_absences_employe ON absences(employee_id);`);
 
 // Migration défensive : ajoute la colonne role si la table shifts existait déjà sans elle.
 try {
