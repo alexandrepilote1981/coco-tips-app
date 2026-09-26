@@ -10,13 +10,16 @@
 // la fête des Mères est le deuxième dimanche de mai, et ce sera encore vrai dans dix ans.
 // Une table à remplir chaque année serait une table qu'on oublie de remplir.
 //
-// Deux familles, et elles ne servent pas à la même chose :
+// Une journée marquée répond à DEUX questions, et il ne faut pas les confondre :
 //
-//   « ferie »    les huit jours fériés du Québec (Loi sur les normes du travail, plus la
-//                Fête nationale). Ils touchent la paie.
-//   « occasion » une journée où la salle se remplit sans que la loi ait son mot à dire. La
-//                fête des Mères est la plus grosse de l'année en restauration : c'est
-//                précisément celle qu'on ne veut pas découvrir le vendredi d'avant.
+//   type        « ferie » = la paie n'est pas la même (Loi sur les normes du travail, plus
+//               la Fête nationale). « occasion » = la loi n'a rien à dire sur cette journée.
+//   affluence   la salle va se remplir, donc il faut plus de monde au plancher.
+//
+// Les deux sont indépendantes, et c'est tout l'intérêt. La fête des Mères remplit la salle
+// sans être un férié. Le Vendredi saint est un férié sans être une grosse journée. Et
+// l'Action de grâce est les DEUX : la paie change ET la salle est pleine. Un seul champ
+// aurait forcé à choisir laquelle des deux vérités afficher — donc à en cacher une.
 
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -29,6 +32,9 @@
       lundiPaques: "Lundi de Pâques",
       patriotes: "Journée des patriotes",
       feteDesMeres: "Fête des Mères",
+      feteDesPeres: "Fête des Pères",
+      saintValentin: "Saint-Valentin",
+      dimanchePaques: "Dimanche de Pâques",
       feteNationale: "Fête nationale",
       feteDuCanada: "Fête du Canada",
       feteDuTravail: "Fête du Travail",
@@ -41,6 +47,9 @@
       lundiPaques: "Easter Monday",
       patriotes: "National Patriots' Day",
       feteDesMeres: "Mother's Day",
+      feteDesPeres: "Father's Day",
+      saintValentin: "Valentine's Day",
+      dimanchePaques: "Easter Sunday",
       feteNationale: "Québec National Holiday",
       feteDuCanada: "Canada Day",
       feteDuTravail: "Labour Day",
@@ -58,6 +67,9 @@
       lundiPaques: "Lundi de Pâques",
       patriotes: "Patriotes",
       feteDesMeres: "Fête des Mères",
+      feteDesPeres: "Fête des Pères",
+      saintValentin: "St-Valentin",
+      dimanchePaques: "Pâques",
       feteNationale: "St-Jean",
       feteDuCanada: "Canada",
       feteDuTravail: "Fête du Travail",
@@ -70,6 +82,9 @@
       lundiPaques: "Easter Monday",
       patriotes: "Patriots' Day",
       feteDesMeres: "Mother's Day",
+      feteDesPeres: "Father's Day",
+      saintValentin: "Valentine's",
+      dimanchePaques: "Easter",
       feteNationale: "St-Jean",
       feteDuCanada: "Canada Day",
       feteDuTravail: "Labour Day",
@@ -77,6 +92,11 @@
       noel: "Christmas",
     },
   };
+
+  // Ce qu'on écrit à côté du nom d'une journée qui est à la fois un férié et une grosse
+  // journée. Sans ça, l'Action de grâce teintée « salle pleine » n'aurait plus rien qui
+  // rappelle que la paie change ce jour-là.
+  const MENTION_FERIE = { fr: "férié", en: "holiday" };
 
   function deuxChiffres(n) {
     return n < 10 ? `0${n}` : String(n);
@@ -150,18 +170,25 @@
     const p = paques(an);
 
     const liste = [
-      { date: iso(an, 1, 1), cle: "jourDeLAn", type: "ferie" },
-      // La loi laisse l'employeur choisir entre les deux ; la grille montre les deux et le
-      // gérant sait lequel son restaurant observe. En cacher un ferait manquer le bon.
-      { date: isoDe(decaler(p, -2)), cle: "vendrediSaint", type: "ferie" },
-      { date: isoDe(decaler(p, 1)), cle: "lundiPaques", type: "ferie" },
-      { date: isoDe(lundiPrecedant(an, 5, 25)), cle: "patriotes", type: "ferie" },
-      { date: isoDe(nieme(an, 5, 0, 2)), cle: "feteDesMeres", type: "occasion" },
-      { date: iso(an, 6, 24), cle: "feteNationale", type: "ferie" },
-      { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie" },
-      { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie" },
-      { date: isoDe(nieme(an, 10, 1, 2)), cle: "actionDeGrace", type: "ferie" },
-      { date: iso(an, 12, 25), cle: "noel", type: "ferie" },
+      { date: iso(an, 1, 1), cle: "jourDeLAn", type: "ferie", affluence: false },
+      { date: iso(an, 2, 14), cle: "saintValentin", type: "occasion", affluence: true },
+      // La loi laisse l'employeur choisir entre Vendredi saint et lundi de Pâques ; la
+      // grille montre les deux et le gérant sait lequel son restaurant observe. En cacher un
+      // ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
+      // c'est lui qui remplit la salle — d'où les trois journées d'affilée.
+      { date: isoDe(decaler(p, -2)), cle: "vendrediSaint", type: "ferie", affluence: false },
+      { date: isoDe(p), cle: "dimanchePaques", type: "occasion", affluence: true },
+      { date: isoDe(decaler(p, 1)), cle: "lundiPaques", type: "ferie", affluence: false },
+      { date: isoDe(lundiPrecedant(an, 5, 25)), cle: "patriotes", type: "ferie", affluence: false },
+      { date: isoDe(nieme(an, 5, 0, 2)), cle: "feteDesMeres", type: "occasion", affluence: true },
+      { date: isoDe(nieme(an, 6, 0, 3)), cle: "feteDesPeres", type: "occasion", affluence: true },
+      { date: iso(an, 6, 24), cle: "feteNationale", type: "ferie", affluence: false },
+      { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie", affluence: false },
+      { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie", affluence: false },
+      // La seule journée du lot qui est les deux à la fois : la paie change ET la salle se
+      // remplit. C'est exactement le cas qui a fait naître le champ « affluence ».
+      { date: isoDe(nieme(an, 10, 1, 2)), cle: "actionDeGrace", type: "ferie", affluence: true },
+      { date: iso(an, 12, 25), cle: "noel", type: "ferie", affluence: false },
     ];
 
     return liste.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -188,6 +215,24 @@
     return indexDeLAnnee(parseInt(dateISO.slice(0, 4), 10))[dateISO] || null;
   }
 
+  // La teinte suit l'AFFLUENCE, pas le statut légal : la couleur est là pour dire « monte
+  // plus de monde ce jour-là », et c'est l'action qu'on veut déclencher en bâtissant
+  // l'horaire. Un férié tranquille garde l'or, une grosse journée prend le corail.
+  function teinte(fete) {
+    if (!fete) return null;
+    return fete.affluence ? "occasion" : "ferie";
+  }
+
+  // Vrai seulement pour une journée qui est les deux : sa teinte dit « salle pleine », donc
+  // il faut autre chose pour rappeler que la paie change aussi.
+  function rappelerFerie(fete) {
+    return !!fete && fete.type === "ferie" && !!fete.affluence;
+  }
+
+  function mentionFerie(lang) {
+    return MENTION_FERIE[lang === "en" ? "en" : "fr"];
+  }
+
   function libelle(cle, lang) {
     return LIBELLES[lang === "en" ? "en" : "fr"][cle] || "";
   }
@@ -201,6 +246,9 @@
     paques,
     feriesDeLAnnee,
     ferieDuJour,
+    teinte,
+    rappelerFerie,
+    mentionFerie,
     libelle,
     libelleCourt,
   };
