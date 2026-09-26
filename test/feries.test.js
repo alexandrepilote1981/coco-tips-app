@@ -137,3 +137,89 @@ test("demander deux fois la même date donne la même réponse", () => {
   assert.deepEqual(a, b);
   assert.equal(b.cle, "feteDesMeres");
 });
+
+// ---------------------------------------------------------------- affluence
+
+test("les grosses journées de restaurant sont marquées comme telles", () => {
+  const attendu = {
+    "2027-02-14": "saintValentin",
+    "2027-03-28": "dimanchePaques",
+    "2027-05-09": "feteDesMeres",
+    "2027-06-20": "feteDesPeres",
+    "2027-10-11": "actionDeGrace",
+  };
+  for (const [date, cle] of Object.entries(attendu)) {
+    const f = F.ferieDuJour(date);
+    assert.ok(f, `rien le ${date}`);
+    assert.equal(f.cle, cle);
+    assert.equal(f.affluence, true, `${cle} devrait remplir la salle`);
+  }
+});
+
+test("la fête des Pères est le troisième dimanche de juin", () => {
+  const attendu = { 2026: "2026-06-21", 2027: "2027-06-20", 2028: "2028-06-18" };
+  for (const [annee, date] of Object.entries(attendu)) {
+    const f = F.feriesDeLAnnee(Number(annee)).find((x) => x.cle === "feteDesPeres");
+    assert.equal(f.date, date, `fête des Pères ${annee}`);
+    assert.equal(new Date(`${date}T12:00:00Z`).getUTCDay(), 0, "un dimanche");
+  }
+});
+
+test("le dimanche de Pâques tombe entre Vendredi saint et lundi de Pâques", () => {
+  for (const annee of [2026, 2027, 2028]) {
+    const liste = F.feriesDeLAnnee(annee);
+    const parCle = Object.fromEntries(liste.map((f) => [f.cle, f]));
+    assert.equal(parCle.dimanchePaques.date, F.paques(annee).toISOString().slice(0, 10));
+    assert.ok(parCle.vendrediSaint.date < parCle.dimanchePaques.date);
+    assert.ok(parCle.dimanchePaques.date < parCle.lundiPaques.date);
+    // Le dimanche n'est PAS un férié de la loi, contrairement aux deux qui l'encadrent.
+    assert.equal(parCle.dimanchePaques.type, "occasion");
+    assert.equal(parCle.vendrediSaint.type, "ferie");
+  }
+});
+
+test("un férié tranquille n'est pas une grosse journée", () => {
+  for (const cle of ["jourDeLAn", "vendrediSaint", "lundiPaques", "patriotes", "feteNationale", "feteDuCanada", "feteDuTravail", "noel"]) {
+    const f = F.feriesDeLAnnee(2027).find((x) => x.cle === cle);
+    assert.equal(f.affluence, false, `${cle} ne devrait pas être marqué « salle pleine »`);
+  }
+});
+
+test("l'Action de grâce est les deux à la fois, et le dit", () => {
+  // C'est le cas qui a fait naître le champ « affluence » : un seul champ aurait forcé à
+  // cacher l'une des deux vérités.
+  const f = F.ferieDuJour("2027-10-11");
+  assert.equal(f.type, "ferie", "la paie change");
+  assert.equal(f.affluence, true, "et la salle se remplit");
+  assert.equal(F.teinte(f), "occasion", "la couleur parle de la salle");
+  assert.equal(F.rappelerFerie(f), true, "donc il faut rappeler le férié autrement");
+});
+
+test("la teinte suit l'affluence, pas le statut légal", () => {
+  assert.equal(F.teinte(F.ferieDuJour("2027-05-09")), "occasion", "fête des Mères");
+  assert.equal(F.teinte(F.ferieDuJour("2027-12-25")), "ferie", "Noël");
+  assert.equal(F.teinte(null), null, "une journée ordinaire n'a pas de teinte");
+});
+
+test("le rappel « férié » ne s'écrit que là où il manquerait", () => {
+  assert.equal(F.rappelerFerie(F.ferieDuJour("2027-05-09")), false, "la fête des Mères n'est pas un férié");
+  assert.equal(F.rappelerFerie(F.ferieDuJour("2027-12-25")), false, "Noël est déjà teinté en férié");
+  assert.equal(F.rappelerFerie(null), false);
+  for (const lang of ["fr", "en"]) assert.ok(F.mentionFerie(lang).length > 0);
+});
+
+test("toutes les journées portent les deux champs", () => {
+  for (const f of F.feriesDeLAnnee(2026)) {
+    assert.ok(["ferie", "occasion"].includes(f.type), `${f.cle} : type inattendu`);
+    assert.equal(typeof f.affluence, "boolean", `${f.cle} : affluence manquante`);
+  }
+});
+
+test("aucune journée n'en écrase une autre le même jour", () => {
+  // Deux entrées à la même date rendraient l'une des deux invisible : seule la dernière
+  // survivrait à l'index. Pâques encadrée de ses deux fériés est le cas serré.
+  for (const annee of [2024, 2025, 2026, 2027, 2028, 2029, 2030]) {
+    const dates = F.feriesDeLAnnee(annee).map((f) => f.date);
+    assert.equal(new Set(dates).size, dates.length, `doublon de date en ${annee}`);
+  }
+});

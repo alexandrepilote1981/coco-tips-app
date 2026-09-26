@@ -303,3 +303,58 @@ for (const n of [1, 14, 40]) {
     );
   });
 }
+
+test("l'Action de grâce porte la teinte « salle pleine » et le rappel du férié", () => {
+  // Lundi 12 octobre 2026. La paie change ET la salle se remplit : la feuille doit dire les
+  // deux, parce qu'il n'y a pas d'infobulle sur une feuille punaisée au mur.
+  const { surface, textes } = dessinerSemaine("2026-10-12");
+  assert.ok(
+    textes.some((t) => t.startsWith("Action de grâce") && t.includes("férié")),
+    `rappel manquant : ${textes.join(" | ")}`
+  );
+  const corail = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.occasionFond);
+  assert.equal(corail.length, 5, "en-tête + 4 rangées, en corail et non en or");
+  const or = surface.ordres.filter((o) => o.type === "rect" && o.args[4] === mise.COULEURS.ferieFond);
+  assert.equal(or.length, 0);
+});
+
+test("quand la colonne est étroite, c'est le rappel qui cède avant le nom", () => {
+  const surface = surfaceTemoin();
+  // Assez large pour « Action de grâce », trop étroit pour « Action de grâce · férié ».
+  const mesurerJuste = (contenu, o = {}) => String(contenu).length * (o.taille || 10) * 1.05;
+  mise.dessinerHoraire({ ...surface, mesurer: mesurerJuste }, {
+    restaurantName: "Chez Coco", employees: equipe(3), shifts: [], weekStartISO: "2026-10-12", lang: "fr",
+  });
+  const textes = surface.ordres.filter((o) => o.type === "texte").map((o) => o.contenu);
+  assert.ok(textes.includes("Action de grâce"), textes.join(" | "));
+  assert.ok(!textes.some((t) => t.includes("férié")), "le rappel cède, le nom reste");
+});
+
+test("les grosses journées de restaurant sont toutes sur la feuille", () => {
+  const semaines = {
+    "2027-02-08": "Saint-Valentin",
+    "2027-03-22": "Dimanche de Pâques",
+    "2027-06-14": "Fête des Pères",
+  };
+  for (const [semaine, nom] of Object.entries(semaines)) {
+    const { textes } = dessinerSemaine(semaine);
+    assert.ok(textes.some((t) => t.startsWith(nom)), `${nom} manquant : ${textes.join(" | ")}`);
+  }
+});
+
+test("la semaine de Pâques porte ses trois journées d'affilée", () => {
+  // Vendredi saint (or), dimanche de Pâques (corail), lundi de Pâques (or) : trois journées
+  // consécutives qui ne disent pas la même chose, sur deux semaines d'horaire.
+  const avant = dessinerSemaine("2027-03-22").textes;
+  assert.ok(avant.some((t) => t.startsWith("Vendredi saint")), avant.join(" | "));
+  assert.ok(avant.some((t) => t.startsWith("Dimanche de Pâques")), avant.join(" | "));
+  const apres = dessinerSemaine("2027-03-29").textes;
+  assert.ok(apres.some((t) => t.startsWith("Lundi de Pâques")), apres.join(" | "));
+});
+
+test("une semaine de Pâques tient encore sur une seule page", () => {
+  for (const n of [1, 14, 40]) {
+    const { surface } = dessinerSemaine("2027-03-22", n);
+    assert.ok(basAtteint(surface.ordres) <= mise.PAGE.hauteur, `${n} employés : ${basAtteint(surface.ordres).toFixed(1)}`);
+  }
+});

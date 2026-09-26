@@ -53,7 +53,7 @@ public/shared/horaire-mise-en-page.js  mise en page de la feuille — dessinée 
 public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
 public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
 public/shared/absences.js  congés et vacances : plages, conflits, mise en forme des dates
-public/shared/feries.js    jours fériés du Québec et fête des Mères — calculés, pas saisis
+public/shared/feries.js    fériés du Québec et grosses journées de restaurant — calculés, pas saisis
 public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
 test/                     tests node:test
 ```
@@ -171,31 +171,46 @@ Meeus/Jones/Butcher ; le reste s'en déduit ou se décrit en une phrase (« 2e d
 mai »). Tout le calcul de dates passe par UTC à midi, sinon un fuseau horaire décale un férié
 d'un jour.
 
-Deux familles, et elles ne disent pas la même chose :
+Chaque journée répond à **deux questions indépendantes**, et c'est tout l'intérêt :
 
-- **`ferie`** — les fériés du Québec, qui touchent la paie. Teinte **or**. Vendredi saint ET
-  lundi de Pâques sont affichés : la loi laisse l'employeur choisir, en cacher un ferait
-  manquer le bon.
-- **`occasion`** — une journée où la salle se remplit sans que la loi ait son mot à dire. La
-  **fête des Mères** est la seule pour l'instant, et c'est la plus grosse de l'année en
-  restauration. Teinte **corail**, distincte exprès : ce n'est pas la paie qui change, c'est
-  le nombre de couverts.
+| champ       | ce qu'il dit                                               |
+| ----------- | ---------------------------------------------------------- |
+| `type`      | `ferie` = la paie n'est pas la même ; `occasion` = la loi n'a rien à dire |
+| `affluence` | la salle va se remplir, donc il faut plus de monde au plancher |
+
+La fête des Mères remplit la salle sans être un férié. Le Vendredi saint est un férié sans
+être une grosse journée. L'**Action de grâce est les deux** : la paie change ET la salle est
+pleine. Un seul champ aurait forcé à choisir laquelle des deux vérités afficher — donc à en
+cacher une.
+
+**La teinte suit `affluence`, pas `type`** (`Feries.teinte()`) : la couleur est là pour dire
+« monte plus de monde ce jour-là », et c'est l'action qu'on veut déclencher en bâtissant
+l'horaire. Un férié tranquille garde l'**or**, une grosse journée prend le **corail**.
+
+Pour une journée qui est les deux, la teinte parle de la salle, donc il faut autre chose pour
+rappeler la paie (`Feries.rappelerFerie()`) : une pastille dorée avant le nom à l'écran, avec
+l'infobulle « Action de grâce · férié » ; et le mot écrit en toutes lettres sur la feuille,
+puisqu'il n'y a pas d'infobulle sur une feuille punaisée au mur.
+
+Vendredi saint ET lundi de Pâques sont affichés : la loi laisse l'employeur choisir, en
+cacher un ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
+c'est lui qui remplit la salle — d'où trois journées d'affilée qui ne disent pas la même
+chose.
 
 À l'écran, le nom s'écrit dans l'en-tête du jour et la teinte descend sur toute la colonne —
 un en-tête coloré seul se perd au bas d'une grille de quatorze personnes. Le nom peut passer
 sur deux lignes mais jamais élargir la colonne (`overflow-wrap: anywhere`).
 
-Sur la feuille imprimée, la teinte du férié l'emporte sur celle de la fin de semaine : la
-fête des Mères tombe toujours un dimanche, et elle disparaîtrait dans le gris du week-end.
-Le nom complet s'écrit s'il rentre dans la colonne, mesuré par `surface.mesurer` ; sinon
-c'est le nom court (`libelleCourt`) qui est écrit, jamais un nom tronqué — « Journée des
-patri… » ne dit plus rien à personne. L'en-tête de la feuille fait 42 points au lieu de 34
-pour porter cette ligne ; ces 8 points se prennent une fois sur la page, pas une fois par
-rangée.
+Sur la feuille imprimée, la teinte l'emporte sur celle de la fin de semaine : la fête des
+Mères tombe toujours un dimanche, et elle disparaîtrait dans le gris du week-end. Le texte
+cède par étapes, du plus complet au plus court — `nom · férié`, `nom`, `nom court · férié`,
+`nom court` — la première version qui rentre dans la colonne, mesurée par `surface.mesurer`.
+On ne tronque jamais : « Journée des patri… » ne dit plus rien à personne. L'en-tête de la
+feuille fait 42 points au lieu de 34 pour porter cette ligne ; ces 8 points se prennent une
+fois sur la page, pas une fois par rangée.
 
-Ajouter une journée, c'est une ligne dans `feriesDeLAnnee` plus son libellé dans les deux
-dictionnaires. Fête des Pères, Saint-Valentin ou dimanche de Pâques se posent de la même
-façon.
+Ajouter une journée, c'est une ligne dans `feriesDeLAnnee` plus son libellé (long et court)
+dans les deux dictionnaires.
 
 ## Accès et authentification
 
@@ -257,7 +272,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/pdf-horaire.test.js` — le PDF réellement produit, relu dans son flux.
 - `test/schedule-ui.test.js` — ce que la grille calcule sans toucher au DOM (liste d'heures,
   postes, échappement) ; le fichier est chargé avec un faux `window`.
-- `test/feries.test.js` — les dates des fériés, dont Pâques sur plusieurs années.
+- `test/feries.test.js` — les dates des fériés (dont Pâques sur plusieurs années) et la
+  séparation entre « la paie change » et « la salle se remplit ».
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
