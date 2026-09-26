@@ -82,11 +82,12 @@
     serveurEncre: "#2E7A56",
     hotesseFond: "#FBF2DC",
     hotesseEncre: "#8A6516",
-    // Jours fériés et grosses journées — une seule teinte pour toutes. Volontairement très
-    // pâle : la feuille finit souvent dans une imprimante noir et blanc, où une teinte
-    // soutenue devient une colonne grise qui cache les heures au lieu de les signaler.
-    marqueFond: "#FCEAE7",
-    marqueEncre: "#A8473A",
+    // Jours fériés et grosses journées — une seule teinte pour toutes. Assez soutenue pour
+    // se voir de loin sur une feuille punaisée au mur, mais pas plus : au-delà, une
+    // imprimante noir et blanc en fait une colonne grise qui cache les heures au lieu de
+    // les signaler.
+    marqueFond: "#F8D3CC",
+    marqueEncre: "#8F3A2E",
   };
 
   // ---------- dates ----------
