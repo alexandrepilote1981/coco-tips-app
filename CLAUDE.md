@@ -216,6 +216,25 @@ de Noël. La pâleur est un canal encore libre.
 Et **rien sur la feuille imprimée**. « Placé malgré sa disponibilité » est une affaire entre
 le gérant et la personne, pas une affaire de babillard.
 
+### Le gérant distribue les liens
+
+Les disponibilités ne servent à rien si personne ne reçoit son lien. Le lien du **gérant de
+cuisine** porte donc une section dépliante « Liens de l'équipe » : chaque cuisinier, son lien
+personnel, un bouton Copier, et une pastille « pas rempli » pour ceux qu'il reste à relancer.
+
+C'est la SEULE porte qui reçoit les `access_code`, et c'est délibéré :
+
+- **pas le lien de lecture des cuisiniers** — n'importe quel cuisinier pourrait sinon ouvrir
+  la page d'un collègue et changer ses disponibilités à sa place ;
+- **pas le côté salle** — le gérant n'y a pas accès (décision du propriétaire), et la page
+  d'une serveuse montre ses pourboires déclarés. Un code d'accès EST la clé de la page de
+  quelqu'un : le donner, c'est donner ce qu'il y a derrière.
+
+Le serveur n'envoie les codes qu'à cette porte (`avecCodes()` dans `server.js`) ; la page ne
+décide de rien, elle affiche la section seulement si les codes sont arrivés. Couvert par
+`test/portes-horaire.test.mjs`, qui vérifie aussi qu'aucun code ne traîne dans le texte brut
+des autres portes.
+
 ### La page d'un cuisinier
 
 `employee.html` connaît maintenant le secteur : un cuisinier n'y voit ni ventes, ni
@@ -336,7 +355,8 @@ Cinq portes d'entrée, sans compte utilisateur :
 - **Horaire salle** : `/horaire/<schedule_code>` ou `/horaire` avec `SCHEDULE_PASSWORD` —
   donne l'horaire sans jamais exposer les montants.
 - **Horaire cuisine, gérant** : `/horaire/<schedule_code_cuisine>` — modifie l'horaire de la
-  cuisine ET montre les salaires. Ce lien ne se partage pas à l'équipe.
+  cuisine, montre les salaires, et reçoit les **codes d'accès personnels de la cuisine** pour
+  que le gérant distribue les liens à son équipe. Ce lien ne se partage pas à l'équipe.
 - **Horaire cuisine, cuisiniers** : `/horaire/<schedule_code_cuisine_lecture>` — le même
   horaire en lecture seule, sans un montant. C'est ce lien qu'on envoie dans le groupe.
 

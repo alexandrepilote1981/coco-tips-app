@@ -97,6 +97,9 @@ window.ScheduleUI = (function () {
   // Quelles sections « Congés » sont dépliées. Comme pour le reste, ça vit ici et pas dans le
   // HTML : render() refait toute la page, et une section qui se referme à chaque
   // rafraîchissement serait insupportable.
+  // Quelles sections « liens » sont dépliées, même logique que les congés : ça vit ici parce
+  // que les nœuds sont refaits à chaque rendu.
+  const liensOuverts = new Set();
   const congesOuverts = new Set();
 
   function cle(restaurantId, secteur) {
@@ -170,6 +173,45 @@ window.ScheduleUI = (function () {
   // disponibilité effective, mais pas du tout le même besoin de relance.
   function jamaisRepondu(employees) {
     return employees.filter((e) => !window.Disponibilites.aRepondu(disposDeEmploye(e.id)));
+  }
+
+  // Les liens personnels à distribuer à l'équipe. N'apparaît que là où l'hôte les fournit :
+  // le tableau de bord a déjà sa propre liste, et les portes sans droit ne les reçoivent
+  // même pas du serveur.
+  function blocLiensHTML(restaurantId, secteur, employees) {
+    if (!host.liensEmployes) return "";
+    const liens = host.liensEmployes();
+    if (!liens) return "";
+    const avecLien = employees.filter((e) => liens[e.id]);
+    if (avecLien.length === 0) return "";
+
+    const cleSection = cle(restaurantId, secteur);
+    const ouvert = liensOuverts.has(cleSection);
+    const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
+    const manquants = avecLien.filter((e) => !window.Disponibilites.aRepondu(disposDeEmploye(e.id))).length;
+
+    return `
+    <button class="liens-toggle ${ouvert ? "ouvert" : ""}" data-action="toggleLiens" ${marque}>
+      <span class="conges-fleche">${ouvert ? "▾" : "▸"}</span>
+      ${host.icon("copy", 13)} ${host.t("liensTitre", avecLien.length, manquants)}
+    </button>
+    <div class="liens-body" style="display:${ouvert ? "block" : "none"};">
+      <p class="liens-aide">${host.t("liensAide")}</p>
+      ${avecLien
+        .map((e) => {
+          const aRepondu = window.Disponibilites.aRepondu(disposDeEmploye(e.id));
+          return `
+        <div class="lien-ligne">
+          <div class="lien-nom">
+            ${echapper(e.name)}
+            ${aRepondu ? "" : `<span class="lien-relance">${host.t("liensPasRempli")}</span>`}
+          </div>
+          <div class="lien-boite">${echapper(liens[e.id])}</div>
+          <button class="copy-btn" data-action="copyLien" data-lien="${echapper(liens[e.id])}">${host.t("liensCopier")}</button>
+        </div>`;
+        })
+        .join("")}
+    </div>`;
   }
 
   function nomDeEmploye(employees, id) {
@@ -281,6 +323,7 @@ window.ScheduleUI = (function () {
 
     return `
     ${blocCongesHTML(restaurantId, secteur, employees, peutModifier)}
+    ${blocLiensHTML(restaurantId, secteur, employees)}
     ${voitMontants ? barreCoutHTML(restaurantId, secteur, employees, chargesPct, bilan) : ""}
     <div class="week-header">
       <div class="week-title">${fmtWeekLabel(weekStart)}</div>
@@ -953,6 +996,44 @@ window.ScheduleUI = (function () {
         if (congesOuverts.has(k)) congesOuverts.delete(k);
         else congesOuverts.add(k);
         host.rerender();
+      });
+    });
+    document.querySelectorAll('[data-action="toggleLiens"]').forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const k = cle(btn.dataset.resto, btn.dataset.secteur);
+        if (liensOuverts.has(k)) liensOuverts.delete(k);
+        else liensOuverts.add(k);
+        host.rerender();
+      });
+    });
+    document.querySelectorAll('[data-action="copyLien"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const lien = btn.dataset.lien;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(lien);
+          } else {
+            // Sans l'API presse-papier — un vieux Safari, ou une page servie en http — on
+            // passe par une zone de texte invisible. Sinon le bouton ne ferait rien du tout.
+            const zone = document.createElement("textarea");
+            zone.value = lien;
+            zone.style.position = "fixed";
+            zone.style.opacity = "0";
+            document.body.appendChild(zone);
+            zone.select();
+            document.execCommand("copy");
+            document.body.removeChild(zone);
+          }
+          const avant = btn.textContent;
+          btn.textContent = host.t("liensCopie");
+          btn.classList.add("copied");
+          setTimeout(() => {
+            btn.textContent = avant;
+            btn.classList.remove("copied");
+          }, 1500);
+        } catch (e) {
+          prompt(host.t("liensCopieImpossible"), lien);
+        }
       });
     });
     document.querySelectorAll('[data-action="ajouterConge"]').forEach((btn) => {
