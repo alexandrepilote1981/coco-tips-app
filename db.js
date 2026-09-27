@@ -98,6 +98,27 @@ CREATE TABLE IF NOT EXISTS absences (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- Disponibilités : l'HABITUDE d'une personne, pas sa semaine. « Le mardi, pas avant 9h. »
+-- Une ligne par jour de semaine et par employé ; la colonne jour va de 0 (lundi) à 6
+-- (dimanche), comme les grilles d'horaire partout dans l'app.
+--
+-- L'ABSENCE de lignes veut dire « cette personne n'a jamais rempli ses disponibilités », et
+-- c'est une information qu'on veut : elle est alors disponible partout par défaut, mais le
+-- gérant voit qu'il reste à la relancer. Si on écrivait sept lignes « disponible » à la
+-- création d'un employé, on perdrait la différence entre « j'ai dit oui à tout » et « j'ai
+-- jamais ouvert la page ».
+--
+-- heure_debut / heure_fin vides = toute la journée. disponible = 0 = pas ce jour-là.
+CREATE TABLE IF NOT EXISTS disponibilites (
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  jour INTEGER NOT NULL,
+  disponible INTEGER DEFAULT 1,
+  heure_debut TEXT DEFAULT '',
+  heure_fin TEXT DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (employee_id, jour)
+);
+
 CREATE TABLE IF NOT EXISTS shifts (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL REFERENCES employees(id),

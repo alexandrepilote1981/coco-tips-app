@@ -159,6 +159,19 @@ window.ScheduleUI = (function () {
     return (host.absences ? host.absences() : []).filter((a) => ids.has(a.employee_id));
   }
 
+  // Les disponibilités de ces employés-là. Même patron que les absences : l'hôte les fournit,
+  // la grille ne sait pas d'où elles viennent.
+  function disposDeEmploye(employeeId) {
+    return (host.disponibilites ? host.disponibilites() : []).filter((d) => d.employee_id === employeeId);
+  }
+
+  // Qui n'a jamais rempli. On regarde l'absence de lignes, pas leur contenu : quelqu'un qui
+  // a répondu « disponible partout » et quelqu'un qui n'a jamais ouvert sa page ont la même
+  // disponibilité effective, mais pas du tout le même besoin de relance.
+  function jamaisRepondu(employees) {
+    return employees.filter((e) => !window.Disponibilites.aRepondu(disposDeEmploye(e.id)));
+  }
+
   function nomDeEmploye(employees, id) {
     const e = employees.find((x) => x.id === id);
     return e ? e.name : "";
@@ -277,6 +290,15 @@ window.ScheduleUI = (function () {
         <button data-action="nextWeek" ${marque}>›</button>
       </div>
     </div>
+    ${
+      peutModifier && jamaisRepondu(employees).length > 0
+        ? `<div class="dispo-manquantes">${host.t(
+            "disposManquantes",
+            jamaisRepondu(employees).length,
+            jamaisRepondu(employees).map((e) => echapper(e.name)).join(", ")
+          )}</div>`
+        : ""
+    }
     <div class="week-actions">
       ${peutModifier ? `<button class="duplicate-week-btn" data-action="duplicateWeek" ${marque}>${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>` : ""}
       <button class="pdf-week-btn" data-action="pdfWeek" ${marque}>${icon("download", 13)} ${t("telechargerPdf")}</button>
@@ -324,6 +346,12 @@ window.ScheduleUI = (function () {
             // Le congé était noté et quelqu'un a quand même été placé ce jour-là : c'est
             // exactement l'oubli qu'on cherche à empêcher, donc ça se voit de loin.
             const absence = window.Absences.absenceDuJour(absences, emp.id, dateStr);
+            // La disponibilité déclarée de cette personne ce jour-là. Elle n'INTERDIT rien —
+            // elle pâlit la case et, si on place quand même quelqu'un, elle se signale.
+            const dispoJour = window.Disponibilites.duJour(disposDeEmploye(emp.id), dateStr);
+            const pasDispo = dispoJour && !dispoJour.disponible;
+            const dispoTexte = dispoJour ? window.Disponibilites.libelle(dispoJour, lang) : "";
+            const horsDispo = shift && window.Disponibilites.conflit(disposDeEmploye(emp.id), shift);
             // La teinte descend sur toute la colonne : un en-tête coloré seul se perd dès
             // qu'on regarde le bas d'une grille de quatorze personnes.
             const jourMarque = !!window.Feries.ferieDuJour(dateStr);
@@ -334,8 +362,14 @@ window.ScheduleUI = (function () {
             <div class="shift-cell ${depasse} ${jourMarque ? "col-marque" : ""}">
               ${
                 shift
-                  ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"} ${absence ? "conflit" : ""}"
-                          ${absence ? `title="${host.t("congeConflit", window.Absences.libelleType(absence.type, lang))}"` : ""}
+                  ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"} ${absence ? "conflit" : ""} ${horsDispo ? "hors-dispo" : ""}"
+                          ${
+                            absence
+                              ? `title="${host.t("congeConflit", window.Absences.libelleType(absence.type, lang))}"`
+                              : horsDispo
+                                ? `title="${echapper(host.t("dispoConflit", dispoTexte))}"`
+                                : ""
+                          }
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
                        <div class="rl">${echapper(libelleRole(shift.role, lang))}</div>
@@ -347,8 +381,12 @@ window.ScheduleUI = (function () {
                     peutModifier
                     ? `<button class="empty-cell absent absent-${absence.type}" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">${window.Absences.libelleType(absence.type, lang)}</button>`
                     : `<div class="empty-cell lecture absent absent-${absence.type}">${window.Absences.libelleType(absence.type, lang)}</div>`
+                  : pasDispo
+                  ? peutModifier
+                    ? `<button class="empty-cell pas-dispo" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}" title="${echapper(dispoTexte)}">${host.t("dispoCourt")}</button>`
+                    : `<div class="empty-cell lecture pas-dispo" title="${echapper(dispoTexte)}">${host.t("dispoCourt")}</div>`
                   : peutModifier
-                  ? `<button class="empty-cell" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}">+</button>`
+                  ? `<button class="empty-cell ${dispoJour && (dispoJour.heure_debut || dispoJour.heure_fin) ? "dispo-partielle" : ""}" data-action="newShift" data-emp="${emp.id}" data-date="${dateStr}" data-secteur="${secteur}" ${dispoJour && (dispoJour.heure_debut || dispoJour.heure_fin) ? `title="${echapper(dispoTexte)}"` : ""}>+</button>`
                   : `<div class="empty-cell lecture">—</div>`
               }
             </div>
@@ -554,6 +592,42 @@ window.ScheduleUI = (function () {
     });
   }
 
+  // Retourne false seulement si la personne répond « non » à la question.
+  async function confirmerAccroc(payload) {
+    const nom = nomDeEmploye(
+      (host.restaurants() || []).flatMap((r) => r.employees || []),
+      payload.employee_id
+    );
+    const lang = host.lang();
+    const quart = { date: payload.date, start_time: payload.start_time, end_time: payload.end_time };
+
+    // Le congé d'abord : il est plus fort qu'une disponibilité générale. Un congé a été
+    // accordé, alors qu'une disponibilité n'est qu'une habitude.
+    const absence = window.Absences.absenceDuJour(
+      (host.absences ? host.absences() : []).filter((a) => a.employee_id === payload.employee_id),
+      payload.employee_id,
+      payload.date
+    );
+    if (absence) {
+      const message = host.t(
+        "confirmMalgreConge",
+        nom,
+        window.Absences.libelleType(absence.type, lang),
+        window.Absences.fmtPeriode(absence, lang)
+      );
+      return confirm(message);
+    }
+
+    const accroc = window.Disponibilites.conflit(disposDeEmploye(payload.employee_id), quart);
+    if (!accroc) return true;
+    const jour = window.Disponibilites.nomDuJour(window.Disponibilites.jourDeSemaine(payload.date), lang);
+    const message =
+      accroc.raison === "absent"
+        ? host.t("confirmMalgreDispoAbsent", nom, jour.toLowerCase())
+        : host.t("confirmMalgreDispoHeures", nom, jour.toLowerCase(), window.Disponibilites.libelle(accroc.dispo, lang), payload.start_time);
+    return confirm(message);
+  }
+
   async function saveShiftFromModal() {
     const overlay = document.getElementById("shiftModalOverlay");
     const shiftId = overlay.dataset.shiftId;
@@ -566,6 +640,16 @@ window.ScheduleUI = (function () {
       note: document.getElementById("shiftNoteInput").value,
     };
     if (!payload.date || !payload.start_time || !payload.end_time) return;
+
+    // La question se pose À L'ENREGISTREMENT et pas au clic sur la case : tant que l'heure
+    // n'est pas choisie, on ne peut pas savoir s'il y a un accroc. Une seule règle, un seul
+    // moment.
+    //
+    // Et c'est une QUESTION, pas un refus. Un samedi matin où quelqu'un lâche, le gérant
+    // doit pouvoir inscrire la personne qui vient dépanner, même si elle avait écrit « pas
+    // le samedi ». Si l'app bloquait, il faudrait aller falsifier la disponibilité déclarée
+    // pour la contourner.
+    if (!(await confirmerAccroc(payload))) return;
 
     const btn = document.getElementById("shiftSaveBtn");
     btn.disabled = true;

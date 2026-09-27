@@ -459,6 +459,23 @@
   .empty-cell.absent.absent-cnesst {
     border-color: rgba(226,104,90,0.35); background: rgba(226,104,90,0.08); color: #E2685A;
   }
+  /* Disponibilités dans la grille. La PÂLEUR plutôt qu'une couleur : la grille porte déjà
+     les congés, les fériés, les rangées rouges du plafond d'heures et les conflits. Une
+     cinquième couleur en ferait un arbre de Noël. La pâleur est un canal encore libre — ça
+     se voit sans crier, et ça ne barre rien : le gérant peut toujours cliquer. */
+  .empty-cell.pas-dispo {
+    border-style: solid; border-color: rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.015); color: rgba(137,147,164,0.65);
+    font-size: 8.5px; font-weight: 700;
+  }
+  .empty-cell.dispo-partielle { opacity: 0.55; }
+  /* Un quart placé hors des disponibilités déclarées : un liseré, pas un contour plein —
+     le contour plein rouge est réservé aux congés, qui sont plus forts. */
+  .shift-chip.hors-dispo { border-style: dashed; border-color: rgba(137,147,164,0.7); }
+  .dispo-manquantes {
+    font-size: 11px; color: #D4A857; margin: 0 0 8px;
+    background: rgba(212,168,87,0.08); border-radius: 8px; padding: 7px 10px;
+  }
   /* Cédulé pendant une absence notée : c'est l'oubli qu'on cherche à empêcher. */
   .shift-chip.conflit { border-color: #E2685A; box-shadow: 0 0 0 1px #E2685A inset; }
   .shift-chip .rl, .shift-chip .tk {
@@ -573,6 +590,7 @@
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/absences.js"></script>
+<script src="/shared/disponibilites.js"></script>
 <script src="/shared/feries.js"></script>
 <script src="/shared/alerte-ferie.js"></script>
 <script src="/shared/cout-main-oeuvre.js"></script>
@@ -628,6 +646,9 @@ let TOKEN = lireStockage("sessionStorage", "adminToken") || "";
 let overview = null;
 let messages = [];
 let absences = [];
+// Les disponibilités déclarées par les employés. Lecture seule ici : c'est chacun qui
+// remplit les siennes, par son lien personnel.
+let disponibilites = [];
 // Quelles sections « cuisine » sont déployées. Vit ici et pas dans le HTML : render()
 // reconstruit toute la page, et une section refermée à chaque rafraîchissement serait
 // insupportable.
@@ -722,7 +743,7 @@ const I18N = {
     quartsIgnores: (n) => `${n} quart${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""} la semaine suivante — ignoré${n > 1 ? "s" : ""} pour ne rien écraser.`,
     erreurSuppression: "Erreur lors de la suppression. Réessaie.",
     confirmSupprimerQuart: "Supprimer ce quart de travail?",
-    sousCuisine: "Voit son horaire par le lien cuisine — pas de page personnelle",
+    sousCuisine: "Sa page : horaire et disponibilités, aucun pourboire à déclarer",
     versCuisine: "→ Cuisine",
     versSalle: "→ Salle",
     confirmVersCuisine: "Déplacer cette personne en cuisine ?\n\nElle ne déclarera plus de pourboires. Ses quarts déjà cédulés la suivent.",
@@ -752,6 +773,18 @@ const I18N = {
     congeErreur: "Impossible d'enregistrer. Vérifie les dates.",
     congeConfirmRetirer: "Retirer cette demande ?",
     congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
+    dispoConflit: (texte) => `Attention : hors de ses disponibilités (${texte})`,
+    dispoCourt: "Pas dispo",
+    disposManquantes: (n, noms) =>
+      `${n} personne${n > 1 ? "s n'ont" : " n'a"} pas rempli ses disponibilités : ${noms}`,
+    confirmMalgreConge: (nom, type, periode) =>
+      `${nom} est en « ${type} » (${periode}).\n\nL'ajouter quand même ?`,
+    // Tournure sans pronom : « il » serait faux pour la moitié de l'équipe, et deviner le
+    // genre à partir d'un prénom se trompe forcément un jour.
+    confirmMalgreDispoAbsent: (nom, jour) =>
+      `${nom} a indiqué ne pas être disponible le ${jour}.\n\nL'ajouter quand même ?`,
+    confirmMalgreDispoHeures: (nom, jour, dispo, heure) =>
+      `${nom} est disponible le ${jour} : ${dispo.toLowerCase()}.\nTu l'ajoutes à ${heure}.\n\nL'ajouter quand même ?`,
     salle: "Salle",
     cuisine: "Cuisine",
     heuresSemaine: "Heures cédulées",
@@ -901,7 +934,7 @@ const I18N = {
     quartsIgnores: (n) => `${n} shift${n > 1 ? "s" : ""} already existed next week — skipped to avoid overwriting.`,
     erreurSuppression: "Error deleting. Try again.",
     confirmSupprimerQuart: "Delete this shift?",
-    sousCuisine: "Sees their schedule through the kitchen link — no personal page",
+    sousCuisine: "Their page: schedule and availability, no tips to declare",
     versCuisine: "→ Kitchen",
     versSalle: "→ Dining room",
     confirmVersCuisine: "Move this person to the kitchen?\n\nThey will no longer declare tips. Shifts already scheduled follow them.",
@@ -931,6 +964,15 @@ const I18N = {
     congeErreur: "Could not save. Check the dates.",
     congeConfirmRetirer: "Remove this request?",
     congeConflit: (type) => `Warning: scheduled during "${type}"`,
+    dispoConflit: (texte) => `Warning: outside their availability (${texte})`,
+    dispoCourt: "Unavailable",
+    disposManquantes: (n, noms) =>
+      `${n} ${n > 1 ? "people have" : "person has"} not filled in their availability: ${noms}`,
+    confirmMalgreConge: (nom, type, periode) =>
+      `${nom} is on "${type}" (${periode}).\n\nAdd them anyway?`,
+    confirmMalgreDispoAbsent: (nom, jour) => `${nom} said they are not available on ${jour}.\n\nAdd them anyway?`,
+    confirmMalgreDispoHeures: (nom, jour, dispo, heure) =>
+      `${nom} is available on ${jour}: ${dispo.toLowerCase()}.\nYou are adding them at ${heure}.\n\nAdd them anyway?`,
     salle: "Dining room",
     cuisine: "Kitchen",
     heuresSemaine: "Scheduled hours",
@@ -1180,6 +1222,11 @@ async function load() {
       absences = (await api("/api/admin/absences")).absences;
     } catch (e) {
       absences = [];
+    }
+    try {
+      disponibilites = (await api("/api/admin/disponibilites")).disponibilites;
+    } catch (e) {
+      disponibilites = [];
     }
     render();
   } catch (e) {
@@ -1528,7 +1575,12 @@ function render() {
             <div class="cuisine-row">
               <div>
                 <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
-                <div class="employee-sub">${t("sousCuisine")}</div>
+                <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
+                <div class="link-row">
+                  <div class="link-box">${origin}/e/${e.access_code}</div>
+                  <button class="copy-btn" data-action="copyLink" data-link="${origin}/e/${e.access_code}">${icon("copy", 13)} ${t("copier")}</button>
+                </div>
+                <div class="lien-avis">${t("sousCuisine")}</div>
               </div>
               <div class="cuisine-taux">
                 <div class="taux-paire">
@@ -2226,6 +2278,7 @@ ScheduleUI.init({
   absences: () => absences,
   setAbsences: (a) => { absences = a; },
   reloadAbsences: async () => (await api("/api/admin/absences")).absences,
+  disponibilites: () => disponibilites,
   shiftApi: (path, opts) => api(`/api/admin${path}`, opts),
   pdfRequest: (restaurantId, weekISO, langue, secteur) => ({
     url: `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${langue}${secteur ? `&secteur=${secteur}` : ""}`,
