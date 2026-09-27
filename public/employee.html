@@ -154,11 +154,19 @@
     font-size: 14px; font-family: inherit; background: rgba(255,255,255,0.06); color: #F1EFEA; outline: none; resize: vertical;
   }
   .message-confirm { color: #6FBF93; font-weight: 700; font-size: 12px; margin: 8px 0 0; }
-  .period-card { margin-bottom: 12px; padding: 12px 14px; }
   /* Message et le bouton de langue partagent le coin droit de l'en-tête. Message est
      monté ici parce que c'est ce que l'équipe cherche en premier : écrire au gérant. */
   .header-actions { display: flex; align-items: center; gap: 8px; flex: none; }
-  .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; margin-bottom: 8px; }
+  /* Les journées déjà envoyées, repliées. Volontairement discret : c'est de l'historique,
+     pas du travail à faire. */
+  .sent-toggle {
+    width: 100%; text-align: left; background: rgba(255,255,255,0.04); color: #8993A4;
+    border: none; border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 12px;
+    font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; margin-top: 4px;
+  }
+  .sent-toggle.ouvert { color: #F1EFEA; }
+  .conges-fleche { font-size: 10px; }
+  .rien-a-envoyer { font-size: 12px; color: #8993A4; font-style: italic; margin: 0 0 12px; }
   .message-tab-btn {
     background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 11px; font-weight: 700;
     padding: 6px 12px; border-radius: 999px; white-space: nowrap; display: flex; align-items: center; gap: 6px;
@@ -192,14 +200,6 @@
   .modal-actions button { flex: 1; }
   .modal-actions button.secondary { background: rgba(255,255,255,0.08); color: #F1EFEA; }
   .modal-actions button.danger-text { background: rgba(226,104,90,0.15); color: #E2685A; }
-  .period-bar { display: flex; gap: 8px; flex-wrap: wrap; }
-  .period-btn {
-    background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 12px; font-weight: 700;
-    padding: 7px 16px; border-radius: 999px; transition: background .15s;
-  }
-  .period-btn.active {
-    background: #6FBF93; color: #10151D;
-  }
   .save-pulse { transition: opacity .2s; }
 </style>
 </head>
@@ -241,11 +241,17 @@ let currentEntries = []; // liste actuellement affichée (filtrée par période)
 let disponibilites = [];
 let dispoOuvert = false;
 let dispoConfirme = false;
+// Les journées déjà envoyées sont repliées par défaut. Replié = non construit : c'est ce qui
+// garde la page légère même après un an de déclarations.
+let envoyeesOuvert = false;
 
 // ---------- Traductions ----------
 const I18N = {
   fr: {
     savedNote: "Sauvegardé automatiquement",
+    aEnvoyer: (n) => `À envoyer (${n})`,
+    dejaEnvoyees: (n) => `Déjà envoyées (${n})`,
+    aucuneAEnvoyer: "Tout est envoyé. Ajoute une journée quand tu en as une à déclarer.",
     mesDispos: "Mes disponibilités",
     disposSousTitre: "Tes journées habituelles. À remplir une fois — pour une semaine différente, écris au gérant.",
     disposJamaisRemplies: "Pas encore remplies",
@@ -266,7 +272,6 @@ const I18N = {
     pourboiresNets: "Pourboires nets",
     pctMoyen: "% Pourboire moyen",
     moyClient: "$ moyen / client",
-    journees: (n) => `Journées (${n})`,
     ajouter: "+ Ajouter",
     multiEntryHint: "Tu peux ajouter plusieurs entrées pour la même journée (ex: midi et soir séparément).",
     monHoraireAvenir: "Mon horaire à venir",
@@ -312,16 +317,15 @@ const I18N = {
     gerant: "Gérant",
     moi: "Toi",
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
-    periodeAffichee: "Période affichée",
-    p2Semaines: "2 semaines",
-    p30Jours: "30 jours",
-    pTout: "Tout",
     codeInvalideTitle: "Code invalide",
     codeInvalideMsg: "Vérifie le lien reçu, ou contacte ton gérant.",
     locale: "fr-CA",
   },
   en: {
     savedNote: "Auto-saved",
+    aEnvoyer: (n) => `To send (${n})`,
+    dejaEnvoyees: (n) => `Already sent (${n})`,
+    aucuneAEnvoyer: "Everything is sent. Add a day when you have one to declare.",
     mesDispos: "My availability",
     disposSousTitre: "Your usual days. Fill it once — for a different week, message the manager.",
     disposJamaisRemplies: "Not filled in yet",
@@ -342,7 +346,6 @@ const I18N = {
     pourboiresNets: "Net tips",
     pctMoyen: "Avg. tip %",
     moyClient: "$ avg / customer",
-    journees: (n) => `Days (${n})`,
     ajouter: "+ Add",
     multiEntryHint: "You can add several entries for the same day (e.g. lunch and dinner separately).",
     monHoraireAvenir: "My upcoming schedule",
@@ -388,10 +391,6 @@ const I18N = {
     gerant: "Manager",
     moi: "You",
     confirmDelete: "Delete this day? This cannot be undone.",
-    periodeAffichee: "Period shown",
-    p2Semaines: "2 weeks",
-    p30Jours: "30 days",
-    pTout: "All",
     codeInvalideTitle: "Invalid code",
     codeInvalideMsg: "Check the link you received, or contact your manager.",
     locale: "en-CA",
@@ -472,30 +471,14 @@ const ROLES_EMP = {
   hostess: { fr: "Hôtesse", en: "Host" },
 };
 
-const PERIOD_KEY = "coco-period";
-const PERIOD_DEFAUT = { mode: "2w" }; // '2w' | 'month' | 'all'
-
-// Comme pour la langue, la période choisie est gardée d'une visite à l'autre : sinon
-// l'employé qui suit son mois doit recliquer « 30 derniers jours » à chaque ouverture.
-function readPeriod() {
-  try {
-    const saved = JSON.parse(lireStockage("localStorage", PERIOD_KEY));
-    if (!saved || !["2w", "month", "all"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
-    return { mode: saved.mode };
-  } catch (e) {
-    return { ...PERIOD_DEFAUT };
-  }
-}
-function setPeriod(next) {
-  period = next;
-  ecrireStockage("localStorage", PERIOD_KEY, JSON.stringify(period));
-}
-let period = readPeriod();
-function resolvePeriod() {
-  if (period.mode === "2w") return { start: isoDaysAgoLocal(13), end: todayLocalISO() };
-  if (period.mode === "month") return { start: isoDaysAgoLocal(29), end: todayLocalISO() };
-  return { start: null, end: null }; // all
-}
+// Il y avait ici un sélecteur de période — 2 semaines / 30 jours / Tout — qui filtrait la
+// liste des journées. Il servait surtout à cadrer les quatre totaux affichés en haut ; ceux-ci
+// retirés, il ne restait qu'un filtre dont personne n'avait besoin.
+//
+// Ce qui limite la longueur de la page, maintenant, c'est l'ÉTAT de la journée : celles qui
+// restent à envoyer sont ouvertes, celles déjà envoyées se replient dans une section qu'on
+// déplie au besoin. La liste courte est donc celle du travail à faire, et l'historique ne
+// prend pas de place tant qu'on ne le demande pas — ses cartes ne sont même pas construites.
 
 // Redimensionne et compresse la photo avant l'envoi.
 function compressImage(file, maxDim = 1400, quality = 0.72) {
@@ -608,8 +591,10 @@ async function deleteEntry(entryId) {
 // servait pas et ça alourdissait la page pour rien. Le détail reste sur chaque carte de
 // journée, qui porte déjà ses ventes, ses clients, son % et son net.
 function refreshTotals() {
+  // Modifier une journée déjà envoyée la remet « à envoyer » côté serveur : le compteur doit
+  // donc se recalculer, pas seulement se relire.
   const dc = document.getElementById("days-count");
-  if (dc) dc.textContent = t("journees", currentEntries.length);
+  if (dc) dc.textContent = t("aEnvoyer", currentEntries.filter((e) => !e.submitted_at).length);
 }
 
 // Trois états possibles : jamais envoyée, envoyée, ou envoyée puis modifiée. Le troisième
@@ -931,13 +916,15 @@ function dispoCardHTML() {
 
 function render() {
   const { employee, restaurant, entries: allEntries } = state;
+  // Deux listes, séparées par l'état et non par une date : ce qui reste à envoyer est du
+  // travail à faire, le reste est de l'historique. C'est l'historique qui gonflait la page.
+  const aFaire = allEntries.filter((e) => !e.submitted_at);
+  const envoyees = allEntries.filter((e) => e.submitted_at);
   // La cuisine ne déclare pas de pourboires : lui montrer des champs de ventes et un
   // pourcentage moyen n'aurait aucun sens. Elle garde son horaire, ses disponibilités et
   // sa messagerie — c'est tout ce que sa page a à faire.
   const estCuisine = employee.secteur === "cuisine";
-  const { start, end } = resolvePeriod();
-  currentEntries = allEntries.filter((e) => (!start || e.date >= start) && (!end || e.date <= end));
-  const entries = currentEntries;
+  currentEntries = allEntries;
 
   const unreadReplies = conversation.filter((m) => m.sender === "admin" && !m.is_read).length;
 
@@ -960,15 +947,6 @@ function render() {
       <div class="reply-banner" id="replyBanner">
         ${icon("bell", 15)} ${t("nouvelleReponse", unreadReplies)}
       </div>` : ""}
-      ${estCuisine ? "" : `
-      <div class="card period-card">
-        <div class="period-title">${t("periodeAffichee")}</div>
-        <div class="period-bar">
-          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
-          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
-          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
-        </div>
-      </div>`}
 
       ${myShifts.length > 0 ? `
       <div class="card schedule-card">
@@ -1001,11 +979,21 @@ function render() {
 
       ${estCuisine ? "" : `
       <div class="section-title">
-        <span id="days-count">${t("journees", entries.length)}</span>
+        <span id="days-count">${t("aEnvoyer", aFaire.length)}</span>
         <button class="add-btn" id="addBtn">${t("ajouter")}</button>
       </div>
       <p style="font-size:11px; color:#6B7280; margin:-4px 0 12px;">${t("multiEntryHint")}</p>`}
       <div id="daysList"></div>
+      ${estCuisine || aFaire.length > 0 ? "" : `<p class="rien-a-envoyer">${t("aucuneAEnvoyer")}</p>`}
+      ${
+        estCuisine || envoyees.length === 0
+          ? ""
+          : `<button class="sent-toggle ${envoyeesOuvert ? "ouvert" : ""}" id="toggleEnvoyees">
+               <span class="conges-fleche">${envoyeesOuvert ? "▾" : "▸"}</span>
+               ${icon("check", 13)} ${t("dejaEnvoyees", envoyees.length)}
+             </button>
+             <div id="sentList"></div>`
+      }
     </div>
 
     <div id="messageModalOverlay" class="modal-overlay" style="display:none;">
@@ -1034,7 +1022,23 @@ function render() {
 
   const list = document.getElementById("daysList");
   list.innerHTML = "";
-  entries.forEach((e) => list.appendChild(buildCardElement(e)));
+  aFaire.forEach((e) => list.appendChild(buildCardElement(e)));
+
+  // Les journées déjà envoyées ne sont construites QUE si la section est dépliée. Après un
+  // an, ça fait trois cents cartes avec leurs champs : les bâtir pour rien à chaque
+  // ouverture de la page rendrait l'app lente sur un téléphone.
+  const listeEnvoyees = document.getElementById("sentList");
+  if (listeEnvoyees) {
+    listeEnvoyees.innerHTML = "";
+    if (envoyeesOuvert) envoyees.forEach((e) => listeEnvoyees.appendChild(buildCardElement(e)));
+  }
+  const toggleEnvoyees = document.getElementById("toggleEnvoyees");
+  if (toggleEnvoyees) {
+    toggleEnvoyees.addEventListener("click", () => {
+      envoyeesOuvert = !envoyeesOuvert;
+      render();
+    });
+  }
 
   // ---------- disponibilités ----------
   // Comme partout dans cette page, les nœuds sont neufs après chaque render() : tout se
@@ -1191,13 +1195,6 @@ function render() {
 
   document.getElementById("langToggle").addEventListener("click", () => {
     setLang(lang === "fr" ? "en" : "fr");
-  });
-
-  document.querySelectorAll('[data-period]').forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setPeriod({ mode: btn.dataset.period });
-      render();
-    });
   });
 
   const addBtn = document.getElementById("addBtn");
