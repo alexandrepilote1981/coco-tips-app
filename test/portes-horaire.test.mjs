@@ -382,6 +382,52 @@ test("les trois portes de l'horaire", async (t) => {
     assert.equal((await parCode("ZZZZZZ", "/shifts")).status, 404);
   });
 
+  // Les rappels de commande avant un férié : seuls ceux qui commandent y ont droit. Ce
+  // n'est pas un secret, mais une porte qui ne commande rien n'a pas à écrire dedans.
+  await t.test("seul le gérant de cuisine lit et écrit les rappels de commande", async () => {
+    const poster = (code, rappels) =>
+      parCode(code, "/rappels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rappels }),
+      });
+
+    assert.equal((await poster(CODE_CUISINE, "Appeler Dufour & Fils")).status, 200);
+    const lu = await (await parCode(CODE_CUISINE, "/rappels")).json();
+    assert.equal(lu.restaurants[0].rappels, "Appeler Dufour & Fils");
+
+    // La salle et les cuisiniers en lecture seule : rien, ni en lecture ni en écriture.
+    for (const code of [CODE_SALLE, CODE_LECTURE]) {
+      assert.equal((await parCode(code, "/rappels")).status, 403, `lecture par ${code}`);
+      assert.equal((await poster(code, "Effacer tout")).status, 403, `écriture par ${code}`);
+    }
+    // Et rien n'a bougé.
+    assert.equal((await (await parCode(CODE_CUISINE, "/rappels")).json()).restaurants[0].rappels, "Appeler Dufour & Fils");
+  });
+
+  await t.test("un code inventé ne donne pas accès aux rappels", async () => {
+    assert.equal((await parCode("ZZZZZZ", "/rappels")).status, 404);
+  });
+
+  await t.test("le gérant voit les rappels de tous ses restaurants par /admin", async () => {
+    const rep = await (await admin("/api/admin/rappels")).json();
+    assert.equal(rep.restaurants.length, 1);
+    assert.equal(rep.restaurants[0].rappels, "Appeler Dufour & Fils");
+  });
+
+  await t.test("les rappels sont bornés : lignes vides, longueur, nombre", async () => {
+    const trop = Array.from({ length: 30 }, (_, i) => `Rappel ${i}`).join("\n");
+    await admin(`/api/admin/restaurants/${resto.id}/rappels`, {
+      method: "POST",
+      body: JSON.stringify({ rappels: `  Appeler Dufour  \n\n\n${"x".repeat(300)}\n${trop}` }),
+    });
+    const lignes = (await (await admin("/api/admin/rappels")).json()).restaurants[0].rappels.split("\n");
+    assert.equal(lignes.length, 20, "vingt lignes au maximum");
+    assert.equal(lignes[0], "Appeler Dufour", "les espaces autour sont coupés");
+    assert.ok(!lignes.includes(""), "aucune ligne vide");
+    assert.ok(lignes.every((l) => l.length <= 120), "aucune ligne interminable");
+  });
+
   await t.test("le PDF de chaque porte ne contient que son équipe", async () => {
     const pdfCuisine = Buffer.from(await (await parCode(CODE_CUISINE, "/pdf?week=2026-09-21")).arrayBuffer());
     const pdfSalle = Buffer.from(await (await parCode(CODE_SALLE, "/pdf?week=2026-09-21")).arrayBuffer());

@@ -54,6 +54,7 @@ public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
 public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
 public/shared/absences.js  congés et vacances : plages, conflits, mise en forme des dates
 public/shared/feries.js    fériés du Québec et grosses journées de restaurant — calculés, pas saisis
+public/shared/alerte-ferie.js  la fenêtre qui rappelle la commande avant un férié
 public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
 test/                     tests node:test
 ```
@@ -209,6 +210,61 @@ personne. L'en-tête de la feuille fait 42 points au lieu de 34 pour porter cett
 Ajouter une journée, c'est une ligne dans `feriesDeLAnnee` plus son libellé (long et court)
 dans les deux dictionnaires.
 
+## L'alerte de commande avant un férié
+
+Le problème, dans les mots du gérant : « pendant nos fériés, les horaires de livraison de nos
+fournisseurs peuvent changer… si on manque de bananes, nous sommes dans la schnoutte! »
+
+L'app **ne sait pas** si Dufour & Fils est fermé le lundi — personne ne le lui a dit. Elle ne
+répond donc pas à la question. Ce qu'elle fait, c'est s'assurer que la question se POSE à
+temps : l'oubli visé n'est pas « je ne savais pas », c'est « j'ai pas pensé à vérifier ».
+
+### Le moment, et pourquoi il n'est pas négociable
+
+`Feries.alertes(aujourdhui)` rend une alerte **par semaine** qui contient une ou plusieurs
+journées marquées. Elle sort le **samedi, neuf jours avant le lundi de cette semaine-là**.
+
+Ce n'est pas un délai choisi au hasard, c'est le cycle du restaurant : **la commande se passe
+une fois par semaine, la semaine d'avant**. Le samedi, c'est la veille du dimanche où
+l'horaire de la semaine de commande se monte — l'alerte est donc déjà à l'écran quand le
+gérant s'assoit pour bâtir cette semaine, et il lui reste un lundi-au-samedi complet pour
+commander. Une alerte qui sortirait « X jours avant le férié » tomberait tantôt avant, tantôt
+après la commande, selon le jour où tombe la fête.
+
+Elle s'arrête à la dernière journée marquée de la semaine, pas à la fin de la semaine : une
+fois le férié passé, « commande d'avance » ne veut plus rien dire.
+
+Une semaine = une commande = une alerte, même si elle porte trois journées. Le regroupement
+tombe donc juste tout seul : le Vendredi saint et le dimanche de Pâques partagent une alerte,
+le lundi de Pâques a la sienne une semaine plus tard, parce qu'il relève d'une autre commande.
+
+### Ce qu'il ne faut pas défaire
+
+- Elle **réapparaît à chaque ouverture de l'app** tant que le férié n'est pas passé. Pas de
+  « ne plus afficher », pas de cases à cocher qui la font taire. Une alerte qu'on peut
+  éteindre pour de bon, c'est une alerte qu'on éteint le samedi et qu'on oublie le jeudi.
+- **Aucun son.** Jamais. C'est une demande explicite du propriétaire.
+- Un seul gros bouton FERMER, pleine largeur — on le cherche sur un téléphone, d'une main, à
+  cinq heures du matin.
+
+### Ce qu'elle dit
+
+Trois messages, composés à partir des faits de la journée (`type`, `affluence`, `ferme`) :
+fournisseurs peut-être fermés → commande d'avance ; salle pleine → prévois le stock ;
+restaurant fermé (le 25 décembre, seule journée de fermeture) → la commande doit couvrir
+jusqu'à la réouverture. L'Action de grâce en donne deux à la fois.
+
+### Les rappels
+
+`restaurants.rappels_ferie`, du texte libre, une ligne par rappel (« Appeler Dufour & Fils »).
+Écrit une fois, réaffiché à chaque alerte. C'est du texte et pas une table parce que ce sont
+trois ou quatre phrases qu'on ne trie ni ne compte jamais. Ça s'écrit depuis la fenêtre
+elle-même — la liste vit là où elle sert.
+
+Seuls **`/admin` et le lien du gérant de cuisine** voient la fenêtre et écrivent les rappels :
+ce sont les deux qui commandent. C'est le **serveur** qui refuse les autres portes (403), pas
+la page — `porteGerant()` dans `server.js`, couvert par `test/portes-horaire.test.mjs`.
+
 ## Accès et authentification
 
 Cinq portes d'entrée, sans compte utilisateur :
@@ -269,7 +325,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/pdf-horaire.test.js` — le PDF réellement produit, relu dans son flux.
 - `test/schedule-ui.test.js` — ce que la grille calcule sans toucher au DOM (liste d'heures,
   postes, échappement) ; le fichier est chargé avec un faux `window`.
-- `test/feries.test.js` — les dates des fériés, dont Pâques sur plusieurs années.
+- `test/feries.test.js` — les dates des fériés (dont Pâques sur plusieurs années) et le
+  moment où l'alerte de commande sort.
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
