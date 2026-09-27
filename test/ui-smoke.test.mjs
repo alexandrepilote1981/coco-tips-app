@@ -568,4 +568,29 @@ test("interface", optionsDuTest, async (t) => {
   // de période a été retiré de la page employé : il ne servait qu'à cadrer des totaux
   // eux-mêmes retirés. Ce qui limite la longueur de la page, désormais, c'est le repli des
   // journées déjà envoyées — vérifié plus haut.
+
+  // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
+  // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
+  // de page employé placé après échouerait pour une raison sans rapport.
+  await t.test("bloquée par le plafond, l'employée lit la vraie raison", async () => {
+    // Le bogue que ça verrouille : la page affichait « Code invalide » pour TOUTE erreur.
+    // Une employée au code parfaitement valide lisait donc « Vérifie le lien reçu » et
+    // recommençait — ce qui n'arrangeait rien, et nous a fait chercher pendant une heure un
+    // problème de code qui n'existait pas.
+    const { lien: lienJamaisOuvert } = await creerEmploye("Jamais Ouverte");
+
+    // Douze codes DIFFÉRENTS : c'est ce qui ressemble à une tentative de devinette.
+    for (let i = 0; i < 12; i++) {
+      await fetch(`${serveur.base}/api/employee/BLOQUE${String(i).padStart(2, "0")}`);
+    }
+
+    await onglet.aller(lienJamaisOuvert, ".error-box h2");
+    const titre = await onglet.ev(`document.querySelector(".error-box h2").textContent`);
+    assert.match(titre, /Trop de tentatives|Too many attempts/, `lu : « ${titre} »`);
+    assert.doesNotMatch(titre, /Code invalide|Invalid code/, "surtout pas le message du mauvais lien");
+
+    // Et le message dit combien de temps attendre, sinon on ne sait pas quoi faire.
+    const message = await onglet.ev(`document.querySelector(".error-box p").textContent`);
+    assert.match(message, /minute/i, `lu : « ${message} »`);
+  });
 });

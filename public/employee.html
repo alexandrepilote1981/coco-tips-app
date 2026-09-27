@@ -327,6 +327,10 @@ const I18N = {
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
     codeInvalideTitle: "Code invalide",
     codeInvalideMsg: "Vérifie le lien reçu, ou contacte ton gérant.",
+    tropDeTentativesTitre: "Trop de tentatives",
+    tropDeTentativesMsg: "Attends quelques minutes, puis réessaie. Ton lien est bon.",
+    connexionTitre: "Connexion impossible",
+    connexionMsg: "Vérifie ta connexion Internet et réessaie.",
     codeLu: "Code lu dans l'adresse :",
     codeLuRien: "aucun",
     locale: "fr-CA",
@@ -403,6 +407,10 @@ const I18N = {
     confirmDelete: "Delete this day? This cannot be undone.",
     codeInvalideTitle: "Invalid code",
     codeInvalideMsg: "Check the link you received, or contact your manager.",
+    tropDeTentativesTitre: "Too many attempts",
+    tropDeTentativesMsg: "Wait a few minutes, then try again. Your link is fine.",
+    connexionTitre: "Can't connect",
+    connexionMsg: "Check your internet connection and try again.",
     codeLu: "Code read from the address:",
     codeLuRien: "none",
     locale: "en-CA",
@@ -445,7 +453,20 @@ async function api(path, opts) {
     ...opts,
     headers: { "Content-Type": "application/json", ...(opts && opts.headers) },
   });
-  if (!res.ok) throw new Error((await res.json()).error || "Erreur");
+  if (!res.ok) {
+    let message = "";
+    try {
+      message = (await res.json()).error || "";
+    } catch (e) {
+      /* le serveur n'a pas répondu du JSON : on garde le statut, c'est lui qui compte */
+    }
+    const erreur = new Error(message || "Erreur");
+    // Le STATUT voyage avec l'erreur. Sans lui, l'appelant ne peut pas faire la différence
+    // entre « ce code n'existe pas » et « trop de tentatives » — et c'est exactement ce qui
+    // a fait afficher « Code invalide » à une employée dont le code était parfait.
+    erreur.statut = res.status;
+    throw erreur;
+  }
   return res.json();
 }
 
@@ -561,8 +582,38 @@ async function load() {
     }
     render();
   } catch (e) {
-    renderCodeInvalide();
+    renderErreurAcces(e);
   }
+}
+
+/**
+ * Trois raisons de ne pas pouvoir ouvrir sa page, et trois messages différents.
+ *
+ * Il n'y en avait qu'un — « Code invalide » — affiché quoi qu'il arrive. Quand le plafond de
+ * tentatives se déclenchait, une employée au code parfaitement valide lisait « Vérifie le
+ * lien reçu » et recommençait, ce qui n'arrangeait évidemment rien. Un message qui ment sur
+ * la cause coûte plus cher qu'une absence de message.
+ */
+function renderErreurAcces(erreur) {
+  const statut = erreur && erreur.statut;
+  if (statut === 429) {
+    return renderBoiteErreur(t("tropDeTentativesTitre"), (erreur && erreur.message) || t("tropDeTentativesMsg"), false);
+  }
+  if (statut === 404 || !CODE) {
+    return renderCodeInvalide();
+  }
+  // Serveur injoignable, coupure réseau, 500… Ce n'est pas la faute du lien, et dire à
+  // quelqu'un de vérifier son lien l'enverrait sur une fausse piste.
+  return renderBoiteErreur(t("connexionTitre"), t("connexionMsg"), false);
+}
+
+function renderBoiteErreur(titre, message, avecCode) {
+  document.getElementById("app").innerHTML = `
+      <div class="error-box">
+        <h2>${titre}</h2>
+        <p>${message}</p>
+        ${avecCode ? `<p class="error-lu">${t("codeLu")} <code>${CODE ? CODE.replace(/</g, "&lt;") : t("codeLuRien")}</code></p>` : ""}
+      </div>`;
 }
 
 function renderCodeInvalide() {
