@@ -402,7 +402,7 @@ test("interface", optionsDuTest, async (t) => {
   }
 
   await t.test("la serveuse peut envoyer sa déclaration, et la modifier l'annule", async () => {
-    const { lien } = await creerEmploye("Fatima");
+    const { lien, employe } = await creerEmploye("Fatima");
     await onglet.aller(lien, "#addBtn");
 
     // Une journée neuve : le bouton d'envoi est là, rien n'est encore envoyé.
@@ -422,9 +422,17 @@ test("interface", optionsDuTest, async (t) => {
       champ.value = "420";
       champ.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
-    await jusqua(() => onglet.ev(`document.getElementById("kpi-ventes").textContent.indexOf("420") >= 0`), {
-      quoi: "la prise en compte des ventes",
-    });
+    // On attendait ici que le total de période affiche 420. Ces totaux ont été retirés de la
+    // page — l'équipe ne s'en servait pas. On interroge donc directement le serveur, ce qui
+    // est de toute façon la vraie preuve que la saisie est enregistrée : un chiffre à
+    // l'écran peut venir d'un calcul local, une ligne en base non.
+    await jusqua(
+      async () => {
+        const rep = await (await fetch(`${serveur.base}/api/employee/${employe.access_code}`)).json();
+        return (rep.entries || []).some((e) => Number(e.ventes) === 420);
+      },
+      { quoi: "l'enregistrement des ventes" }
+    );
 
     await onglet.ev(`document.querySelector('[data-action="submit"]').click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector(".submitted-note")`), {

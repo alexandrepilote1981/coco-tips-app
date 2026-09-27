@@ -35,10 +35,7 @@
   .saved-note { font-size: 11px; opacity: 0.6; margin-top: 8px; }
   .lang-toggle { background: rgba(255,255,255,0.08); color: white; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
   .content { padding: 20px 16px 0; }
-  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
   .card { background: #161C26; border-radius: 18px; padding: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); }
-  .kpi-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 7px; display:flex; align-items:center; gap:6px;}
-  .kpi-value { font-family: 'Fraunces', serif; font-size: 21px; font-weight: 600; }
   .schedule-card { margin-top: 12px; }
   /* Disponibilités. Le tableau se remplit au pouce, sur un téléphone : les cases à cocher
      sont larges, et les menus d'heures ne s'affichent que quand ils servent vraiment. */
@@ -158,8 +155,10 @@
   }
   .message-confirm { color: #6FBF93; font-weight: 700; font-size: 12px; margin: 8px 0 0; }
   .period-card { margin-bottom: 12px; padding: 12px 14px; }
-  .period-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; margin-bottom: 0; }
+  /* Message et le bouton de langue partagent le coin droit de l'en-tête. Message est
+     monté ici parce que c'est ce que l'équipe cherche en premier : écrire au gérant. */
+  .header-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+  .period-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; margin-bottom: 8px; }
   .message-tab-btn {
     background: rgba(255,255,255,0.07); color: #F1EFEA; font-size: 11px; font-weight: 700;
     padding: 6px 12px; border-radius: 999px; white-space: nowrap; display: flex; align-items: center; gap: 6px;
@@ -604,22 +603,11 @@ async function deleteEntry(entryId) {
 
 // ---------- Mises à jour ciblées (pas de reconstruction complète de l'écran) ----------
 
+// Il y avait ici quatre totaux de période — ventes, pourboires nets, % moyen, moyenne par
+// client — recalculés à chaque frappe. Ils ont été retirés de l'écran : l'équipe ne s'en
+// servait pas et ça alourdissait la page pour rien. Le détail reste sur chaque carte de
+// journée, qui porte déjà ses ventes, ses clients, son % et son net.
 function refreshTotals() {
-  const totVentes = currentEntries.reduce((s, e) => s + e.ventes, 0);
-  const totClients = currentEntries.reduce((s, e) => s + e.clients, 0);
-  const totBrut = currentEntries.reduce((s, e) => s + e.pourboireBrut, 0);
-  const totNet = currentEntries.reduce((s, e) => s + e.net, 0);
-  const pctMoyen = totVentes > 0 ? (totBrut / totVentes) * 100 : 0;
-  const parClient = totClients > 0 ? totNet / totClients : 0;
-
-  const kv = document.getElementById("kpi-ventes");
-  const kn = document.getElementById("kpi-net");
-  const kp = document.getElementById("kpi-pct");
-  const kc = document.getElementById("kpi-client");
-  if (kv) kv.textContent = fmtMoney(totVentes);
-  if (kn) kn.textContent = fmtMoney(totNet);
-  if (kp) kp.textContent = fmtPct(pctMoyen);
-  if (kc) kc.textContent = fmtMoney(parClient);
   const dc = document.getElementById("days-count");
   if (dc) dc.textContent = t("journees", currentEntries.length);
 }
@@ -951,13 +939,6 @@ function render() {
   currentEntries = allEntries.filter((e) => (!start || e.date >= start) && (!end || e.date <= end));
   const entries = currentEntries;
 
-  const totVentes = entries.reduce((s, e) => s + e.ventes, 0);
-  const totClients = entries.reduce((s, e) => s + e.clients, 0);
-  const totBrut = entries.reduce((s, e) => s + e.pourboireBrut, 0);
-  const totNet = entries.reduce((s, e) => s + e.net, 0);
-  const pctMoyen = totVentes > 0 ? (totBrut / totVentes) * 100 : 0;
-  const parClient = totClients > 0 ? totNet / totClients : 0;
-
   const unreadReplies = conversation.filter((m) => m.sender === "admin" && !m.is_read).length;
 
   document.getElementById("app").innerHTML = `
@@ -967,7 +948,10 @@ function render() {
           <p class="eyebrow">${restaurant.name}</p>
           <h1 class="title">${t("hello")} ${employee.name.split(" ")[0]}</h1>
         </div>
-        <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+        <div class="header-actions">
+          <button class="message-tab-btn" id="openMessageModalBtn">${icon("mail", 14)} ${t("messageTab")} ${unreadReplies > 0 ? `<span class="msg-badge">${unreadReplies}</span>` : ""}</button>
+          <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+        </div>
       </div>
       <p class="saved-note">${t("savedNote")}</p>
     </div>
@@ -976,24 +960,14 @@ function render() {
       <div class="reply-banner" id="replyBanner">
         ${icon("bell", 15)} ${t("nouvelleReponse", unreadReplies)}
       </div>` : ""}
+      ${estCuisine ? "" : `
       <div class="card period-card">
-        <div class="period-title-row">
-          <div class="period-title">${estCuisine ? t("mesDispos") : t("periodeAffichee")}</div>
-          <button class="message-tab-btn" id="openMessageModalBtn">${icon("mail", 14)} ${t("messageTab")} ${unreadReplies > 0 ? `<span class="msg-badge">${unreadReplies}</span>` : ""}</button>
-        </div>
-        ${estCuisine ? "" : `
+        <div class="period-title">${t("periodeAffichee")}</div>
         <div class="period-bar">
           <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
           <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
           <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
-        </div>`}
-      </div>
-      ${estCuisine ? "" : `
-      <div class="kpi-grid">
-        <div class="card"><div class="kpi-label" style="color:#F1EFEA">${icon("dollar", 13)} ${t("ventesTotal")}</div><div class="kpi-value" id="kpi-ventes" style="color:#F1EFEA">${fmtMoney(totVentes)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#6FBF93">${icon("trending", 13)} ${t("pourboiresNets")}</div><div class="kpi-value" id="kpi-net" style="color:#6FBF93">${fmtMoney(totNet)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#D4A857">${t("pctMoyen")}</div><div class="kpi-value" id="kpi-pct" style="color:#D4A857">${fmtPct(pctMoyen)}</div></div>
-        <div class="card"><div class="kpi-label" style="color:#E2685A">${icon("users", 13)} ${t("moyClient")}</div><div class="kpi-value" id="kpi-client" style="color:#E2685A">${fmtMoney(parClient)}</div></div>
+        </div>
       </div>`}
 
       ${myShifts.length > 0 ? `

@@ -235,6 +235,16 @@ décide de rien, elle affiche la section seulement si les codes sont arrivés. C
 `test/portes-horaire.test.mjs`, qui vérifie aussi qu'aucun code ne traîne dans le texte brut
 des autres portes.
 
+### La page d'un employé, allégée
+
+Elle portait un bandeau de quatre totaux de période — ventes, pourboires nets, % moyen,
+moyenne par client. **Retiré à la demande du propriétaire** : l'équipe ne s'en servait pas et
+ça alourdissait l'écran. Le détail n'est pas perdu pour autant, chaque carte de journée porte
+déjà ses ventes, ses clients, son % et son net.
+
+Le bouton **Message** est monté dans l'en-tête, à côté du bouton de langue : c'est ce que
+l'équipe cherche en premier. Ne pas le redescendre dans la carte de période.
+
 ### La page d'un cuisinier
 
 `employee.html` connaît maintenant le secteur : un cuisinier n'y voit ni ventes, ni
