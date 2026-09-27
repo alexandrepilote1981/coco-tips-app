@@ -49,6 +49,7 @@ public/landing.html       page de présentation publique
 public/shared/tip-math.js calcul des pourboires — chargé par le serveur ET le navigateur
 public/shared/schedule-ui.js  grille d'horaire — partagée par /admin et /horaire
 public/shared/noms.js     découpage prénom / nom de famille
+public/shared/code-acces.js  lit le code dans l'adresse, en tolérant un lien abîmé en chemin
 public/shared/horaire-mise-en-page.js  mise en page de la feuille — dessinée en PDF et en image
 public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
 public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
@@ -377,6 +378,13 @@ Cinq portes d'entrée, sans compte utilisateur :
 
 - **Employé** : `/e/<access_code>` — code de 6 caractères, aucun mot de passe. Le code sert
   de jeton pour tous les appels `/api/employee/<code>/…`.
+
+  Le code se lit par `CodeAcces.depuisChemin()` et **jamais** par un `split("/").pop()`. Ça
+  vient d'un vrai incident : des employées recevaient « Code invalide » avec un code
+  parfaitement bon, parce que le lien arrivait avec une barre oblique au bout et que le
+  dernier morceau du chemin était vide. Une espace, un `%20` ou un point collé à la fin
+  faisaient pareil. On rogne donc les extrémités — mais **jamais le milieu** : réparer
+  « AB-C234 » en « ABC234 » ouvrirait la page de quelqu'un d'autre.
 - **Gérant** : `/admin`, protégé par `ADMIN_PASSWORD`. Le jeton est le mot de passe lui-même,
   gardé dans `sessionStorage` sous `adminToken` et envoyé en en-tête `X-Admin-Token`.
 - **Horaire salle** : `/horaire/<schedule_code>` ou `/horaire` avec `SCHEDULE_PASSWORD` —
@@ -463,6 +471,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   « a dit oui à tout » et « n'a jamais répondu ».
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
+- `test/code-acces.test.js` — chaque façon dont un lien s'abîme en chemin, et la limite
+  volontaire : un lien abîmé au milieu est refusé, pas deviné.
 - `test/rate-limit.test.js` — la mécanique du plafond, chaque test sur son propre guichet.
 - `test/verrou-codes.test.mjs` — la promesse vécue par une employée : mon lien marche-t-il ?
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code

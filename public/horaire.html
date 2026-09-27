@@ -527,6 +527,7 @@
 <!-- Grille d'horaire commune à cette page et à /admin : une seule définition. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
+<script src="/shared/code-acces.js"></script>
 <script src="/shared/absences.js"></script>
 <script src="/shared/disponibilites.js"></script>
 <script src="/shared/feries.js"></script>
@@ -567,8 +568,9 @@ let porte = { secteur: "salle", peutModifier: true, voitMontants: false, charges
 
 // Si l'URL est /horaire/CODE, on est en mode lien direct pour un seul restaurant —
 // aucun mot de passe requis, comme les liens employés.
-const pathParts = window.location.pathname.split("/").filter(Boolean);
-const RESTAURANT_CODE = pathParts.length >= 2 && pathParts[0] === "horaire" ? pathParts[1] : null;
+// Le nettoyage vit dans code-acces.js : une espace ou de la ponctuation collée au bout
+// d'un lien partagé refusait un code valide.
+const RESTAURANT_CODE = window.CodeAcces.depuisChemin(window.location.pathname, "horaire") || null;
 
 const I18N = {
   fr: {
