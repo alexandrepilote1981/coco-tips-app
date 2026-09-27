@@ -209,6 +209,7 @@
 
 <!-- Même fichier que celui utilisé par le serveur : une seule définition du calcul. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
+<script src="/shared/code-acces.js"></script>
 <script src="/shared/disponibilites.js"></script>
 <script src="/shared/tip-math.js"></script>
 <script>
@@ -233,7 +234,9 @@ function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
 }
 
-const CODE = window.location.pathname.split("/").pop();
+// Une barre oblique ou une espace au bout de l'adresse rendait ce morceau vide, et une
+// employée au code parfaitement bon recevait « Code invalide ». Voir code-acces.js.
+const CODE = window.CodeAcces.depuisChemin(window.location.pathname, "e");
 let state = null;
 let currentEntries = []; // liste actuellement affichée (filtrée par période) — source unique pour les mises à jour ciblées
 // Les disponibilités déclarées : l'habitude de la personne, pas sa semaine. Sept lignes,
