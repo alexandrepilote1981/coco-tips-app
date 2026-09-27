@@ -618,6 +618,8 @@ const I18N = {
     liensCopier: "Copier",
     liensCopie: "✓ Copié",
     liensCopieImpossible: "Copie impossible — sélectionne le lien à la main :",
+    codeLu: "Code lu dans l'adresse :",
+    codeLuRien: "aucun",
     congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
     dispoConflit: (texte) => `Attention : hors de ses disponibilités (${texte})`,
     dispoCourt: "Pas dispo",
@@ -704,6 +706,8 @@ const I18N = {
     liensCopier: "Copy",
     liensCopie: "✓ Copied",
     liensCopieImpossible: "Copy failed — select the link by hand:",
+    codeLu: "Code read from the address:",
+    codeLuRien: "none",
     congeConflit: (type) => `Warning: scheduled during "${type}"`,
     dispoConflit: (texte) => `Warning: outside their availability (${texte})`,
     dispoCourt: "Unavailable",
@@ -855,6 +859,12 @@ function renderInvalidCode() {
     <div class="error-box" style="margin:40px 20px; text-align:center; color:#E2685A;">
       <h2>${t("lienInvalideTitre")}</h2>
       <p>${t("lienInvalideMsg")}</p>
+      <!-- Même raison que sur la page employé : sans savoir ce qui a été lu, on répare à
+           l'aveugle. -->
+      <p style="font-size:12px; color:#8993A4; margin-top:18px;">${t("codeLu")}
+        <code style="font-family:ui-monospace,Menlo,monospace; font-size:13px; background:rgba(255,255,255,0.07); border-radius:6px; padding:3px 8px; color:#F1EFEA;">${
+          RESTAURANT_CODE ? String(RESTAURANT_CODE).replace(/</g, "&lt;") : t("codeLuRien")
+        }</code></p>
     </div>`;
 }
 

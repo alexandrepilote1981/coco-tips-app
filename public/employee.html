@@ -149,6 +149,11 @@
   .remit-btn.active-owed-employee { background: #E2685A; color: #10151D; box-shadow: 0 2px 8px rgba(226,104,90,0.35); }
   .remit-btn.active-owed-employer { background: #D4A857; color: #10151D; box-shadow: 0 2px 8px rgba(212,168,87,0.35); }
   .error-box { margin: 40px 20px; text-align: center; color: #E2685A; }
+  .error-lu { font-size: 12px; color: #8993A4; margin-top: 18px; }
+  .error-lu code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+    background: rgba(255,255,255,0.07); border-radius: 6px; padding: 3px 8px; color: #F1EFEA;
+  }
   .message-textarea {
     width: 100%; min-height: 80px; border: none; border-radius: 10px; padding: 10px;
     font-size: 14px; font-family: inherit; background: rgba(255,255,255,0.06); color: #F1EFEA; outline: none; resize: vertical;
@@ -322,6 +327,8 @@ const I18N = {
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
     codeInvalideTitle: "Code invalide",
     codeInvalideMsg: "Vérifie le lien reçu, ou contacte ton gérant.",
+    codeLu: "Code lu dans l'adresse :",
+    codeLuRien: "aucun",
     locale: "fr-CA",
   },
   en: {
@@ -396,6 +403,8 @@ const I18N = {
     confirmDelete: "Delete this day? This cannot be undone.",
     codeInvalideTitle: "Invalid code",
     codeInvalideMsg: "Check the link you received, or contact your manager.",
+    codeLu: "Code read from the address:",
+    codeLuRien: "none",
     locale: "en-CA",
   },
 };
@@ -527,6 +536,9 @@ let conversation = [];
 let myShifts = [];
 
 async function load() {
+  // Sans code du tout — un lien tronqué jusqu'à « /e/ » — inutile d'aller demander au
+  // serveur : on affiche tout de suite l'écran qui dit ce qui a été lu.
+  if (!CODE) return renderCodeInvalide();
   try {
     state = await api(`/api/employee/${CODE}`);
     try {
@@ -549,12 +561,20 @@ async function load() {
     }
     render();
   } catch (e) {
-    document.getElementById("app").innerHTML = `
+    renderCodeInvalide();
+  }
+}
+
+function renderCodeInvalide() {
+  document.getElementById("app").innerHTML = `
       <div class="error-box">
         <h2>${t("codeInvalideTitle")}</h2>
         <p>${t("codeInvalideMsg")}</p>
+        <!-- Ce que l'app a RÉELLEMENT lu dans l'adresse. Sans ça, « Code invalide » ne dit
+             pas si le lien est arrivé vide, tronqué, ou simplement inconnu — et on répare à
+             l'aveugle. La personne connaît déjà son propre code : rien n'est divulgué. -->
+        <p class="error-lu">${t("codeLu")} <code>${CODE ? CODE.replace(/</g, "&lt;") : t("codeLuRien")}</code></p>
       </div>`;
-  }
 }
 
 async function saveEntry(entry) {
