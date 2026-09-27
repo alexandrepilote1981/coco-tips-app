@@ -1210,6 +1210,14 @@ app.delete("/api/admin/employees/:id/messages", requireAdmin, (req, res) => {
 });
 
 // ---------- pages ----------
+// Un lien tronqué jusqu'à « /e/ » tombait sur la page d'erreur brute d'Express — « Cannot
+// GET /e/ », en Times New Roman. Une employée qui reçoit ça ne sait pas quoi en faire. On
+// sert la page de l'app, qui affichera son propre écran « Code invalide » avec ce qu'elle a
+// lu dans l'adresse.
+app.get(["/e", "/e/"], (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "employee.html"), NO_CACHE_HEADERS);
+});
+
 app.get("/e/:code", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "employee.html"), NO_CACHE_HEADERS);
 });
