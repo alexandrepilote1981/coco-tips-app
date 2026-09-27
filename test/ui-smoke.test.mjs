@@ -475,7 +475,24 @@ test("interface", optionsDuTest, async (t) => {
     // Renvoyée : l'état tient cette fois au rechargement.
     await onglet.ev(`document.querySelector('[data-action="submit"]').click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector(".submitted-note")`), { quoi: "le renvoi" });
-    await onglet.aller(lien, ".submitted-note");
+
+    // Après rechargement, une journée envoyée n'est plus dans la liste ouverte : elle est
+    // passée dans la section repliée. C'est ce qui garde la page courte, et c'est aussi ce
+    // qui fait qu'on ne construit pas trois cents cartes pour rien.
+    await onglet.aller(lien, "#toggleEnvoyees");
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".submitted-note")`),
+      false,
+      "repliée, la carte n'est même pas construite"
+    );
+    assert.match(
+      await onglet.ev(`document.getElementById("toggleEnvoyees").textContent`),
+      /Déjà envoyées \(1\)|Already sent \(1\)/
+    );
+
+    // Dépliée, elle est là, avec sa confirmation d'envoi.
+    await onglet.ev(`document.getElementById("toggleEnvoyees").click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector("#sentList .day-card")`), { quoi: "le dépliage" });
     assert.equal(await onglet.ev(`!!document.querySelector(".submitted-note")`), true);
   });
 
@@ -513,14 +530,19 @@ test("interface", optionsDuTest, async (t) => {
     });
 
     const { lien } = await creerEmploye("Nadia");
+    // `aller` attend déjà #addBtn : si la page restait blanche, on n'arriverait pas ici.
     await onglet.aller(lien, "#addBtn");
     assert.equal(
-      await onglet.ev(`document.querySelectorAll("[data-period]").length`),
-      3,
-      "la page employé devrait s'afficher malgré un stockage inaccessible"
+      await onglet.ev(`!!document.querySelector(".dispo-card")`),
+      true,
+      "la page employé devrait s'afficher au complet malgré un stockage inaccessible"
     );
-    await onglet.ev(`document.querySelector('[data-period="all"]').click()`);
-    assert.equal(await periodeActive(), "all", "changer de période devrait rester possible");
+    // Et elle doit rester utilisable : déplier les disponibilités écrit dans l'état, pas
+    // dans le stockage, donc ça doit marcher même ici.
+    await onglet.ev(`document.getElementById("dispoToggle").click()`);
+    await jusqua(() => onglet.ev(`document.querySelectorAll(".dispo-ligne").length === 7`), {
+      quoi: "le tableau des disponibilités sans stockage",
+    });
 
     await onglet.aller(`${serveur.base}/admin`, "#pw");
     assert.equal(
@@ -542,29 +564,8 @@ test("interface", optionsDuTest, async (t) => {
     });
   });
 
-  await t.test("la page employé garde aussi la période choisie", async () => {
-    const resto = await (
-      await api("/api/admin/restaurants", {
-        method: "POST",
-        body: JSON.stringify({ name: "Resto d'essai" }),
-      })
-    ).json();
-    const employe = await (
-      await api("/api/admin/employees", {
-        method: "POST",
-        body: JSON.stringify({ restaurant_id: resto.id, name: "Camille" }),
-      })
-    ).json();
-
-    const lien = `${serveur.base}/e/${employe.access_code}`;
-    await onglet.aller(lien, "[data-period]");
-    await onglet.ev(`localStorage.removeItem("coco-period")`);
-    await onglet.aller(lien, "[data-period]");
-
-    await onglet.ev(`document.querySelector('[data-period="all"]').click()`);
-    await jusqua(async () => (await periodeActive()) === "all", { quoi: "le changement de période" });
-
-    await onglet.aller(lien, "[data-period]");
-    assert.equal(await periodeActive(), "all", "la période devrait être relue au chargement");
-  });
+  // Il y avait ici un test sur la période choisie qui survit au rechargement. Le sélecteur
+  // de période a été retiré de la page employé : il ne servait qu'à cadrer des totaux
+  // eux-mêmes retirés. Ce qui limite la longueur de la page, désormais, c'est le repli des
+  // journées déjà envoyées — vérifié plus haut.
 });

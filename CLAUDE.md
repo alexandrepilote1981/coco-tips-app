@@ -243,7 +243,24 @@ moyenne par client. **Retiré à la demande du propriétaire** : l'équipe ne s'
 déjà ses ventes, ses clients, son % et son net.
 
 Le bouton **Message** est monté dans l'en-tête, à côté du bouton de langue : c'est ce que
-l'équipe cherche en premier. Ne pas le redescendre dans la carte de période.
+l'équipe cherche en premier.
+
+Le **sélecteur de période** (2 semaines / 30 jours / Tout) est parti avec les totaux : il ne
+servait qu'à les cadrer. Ce qui limite la longueur de la page, maintenant, c'est l'**état**
+de la journée :
+
+- **« À envoyer (n) »** — les journées non envoyées, ouvertes. C'est le travail à faire.
+- **« Déjà envoyées (n) »** — repliées dans une section qu'on déplie au besoin.
+
+Replié veut dire **non construit** : les cartes de la section fermée ne sont pas créées du
+tout. Après un an, ça fait trois cents cartes avec leurs champs — les bâtir pour rien à
+chaque ouverture rendrait l'app lente sur un téléphone. Mesuré sur douze journées envoyées :
+1 594 px de page repliée contre 7 146 px dépliée, et zéro carte construite tant que c'est
+fermé.
+
+Une journée envoyée ou modifiée pendant la visite **ne saute pas** d'une section à l'autre
+sous le doigt : le déplacement se fait au prochain rendu. Une carte qui disparaît à l'instant
+où on tape « Envoyer » est désorientante.
 
 ### La page d'un cuisinier
 
