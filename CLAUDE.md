@@ -391,6 +391,31 @@ Cinq portes d'entrée, sans compte utilisateur :
 jamais pénalisé, enchaîner des codes faux l'est. C'est ce qui rend un code de 6 caractères
 acceptable ; ne pas affaiblir ce principe.
 
+**Le piège du WiFi partagé.** Le compte se fait par adresse Internet, et toute l'équipe d'un
+restaurant partage la même. Dix codes faux en quinze minutes bloquaient donc tout le monde,
+codes valides compris. Deux mécaniques corrigent ça sans rien céder :
+
+- **Seuls les codes DISTINCTS comptent.** Une employée dont Messenger a coupé le lien en deux
+  réessaie huit fois le même mauvais code : un échec, pas huit. Une force brute change de
+  code à chaque coup, donc elle atteint le plafond aussi vite qu'avant.
+- **Un code déjà utilisé avec succès depuis cette adresse passe toujours** (`noteSuccess` /
+  `estConnu`), même pendant un blocage. Ça ne donne rien à un attaquant : pour qu'un code soit
+  « connu » de son adresse, il faut qu'il l'ait déjà utilisé — donc qu'il l'ait déjà.
+
+Les deux portes par code (`/api/employee/:code`, `/api/schedule/by-code/:code`) vérifient donc
+le code AVANT de regarder le compteur, puis appellent `noteSuccess` ou `noteFailure`. Les deux
+portes par mot de passe gardent le `guard()` en middleware : il n'y a rien à vérifier avant
+d'essayer un mot de passe.
+
+**Ce qu'il ne faut surtout pas faire** : laisser passer un code valide pendant un blocage sans
+la mémoire des codes connus. Répondre 200 pour un bon code et 429 pour un mauvais, c'est offrir
+un « oui / non » à volonté, et le plafond ne sert plus à rien. Pendant un blocage, un code
+inconnu reçoit toujours la même réponse, quel qu'il soit — vérifié dans
+`test/verrou-codes.test.mjs`.
+
+La limite assumée : quelqu'un qui ouvre son lien pour la **première** fois pendant que son WiFi
+est bloqué doit attendre la fin du blocage.
+
 Pour piloter `/admin` dans un test sans passer par l'écran de connexion :
 
 ```js
@@ -438,6 +463,10 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   « a dit oui à tout » et « n'a jamais répondu ».
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
+- `test/rate-limit.test.js` — la mécanique du plafond, chaque test sur son propre guichet.
+- `test/verrou-codes.test.mjs` — la promesse vécue par une employée : mon lien marche-t-il ?
+  C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
+  est bon, et qu'il la ferme quand même à qui essaie de deviner.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
