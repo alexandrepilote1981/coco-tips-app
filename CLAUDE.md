@@ -399,6 +399,16 @@ Cinq portes d'entrée, sans compte utilisateur :
 jamais pénalisé, enchaîner des codes faux l'est. C'est ce qui rend un code de 6 caractères
 acceptable ; ne pas affaiblir ce principe.
 
+**Un message d'erreur ne doit jamais mentir sur sa cause.** Les pages à code affichaient
+« Code invalide » pour TOUTE erreur — y compris un 429 du plafond de tentatives. Une employée
+au code parfaitement valide lisait donc « Vérifie le lien reçu », recommençait, et faisait
+chercher pendant une heure un problème de code qui n'existait pas. `api()` transporte
+maintenant le statut HTTP sur l'erreur (`erreur.statut`), et `renderErreurAcces()` distingue
+trois cas : **429** → « Trop de tentatives » avec le délai, **404** → « Code invalide » avec
+le code lu, **le reste** → « Connexion impossible ». Verrouillé par le dernier test de
+`test/ui-smoke.test.mjs` — qui doit rester le dernier du fichier, puisqu'il bloque
+volontairement 127.0.0.1 pour quinze minutes.
+
 **Le piège du WiFi partagé.** Le compte se fait par adresse Internet, et toute l'équipe d'un
 restaurant partage la même. Dix codes faux en quinze minutes bloquaient donc tout le monde,
 codes valides compris. Deux mécaniques corrigent ça sans rien céder :

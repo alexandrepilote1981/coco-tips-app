@@ -618,6 +618,10 @@ const I18N = {
     liensCopier: "Copier",
     liensCopie: "✓ Copié",
     liensCopieImpossible: "Copie impossible — sélectionne le lien à la main :",
+    tropDeTentativesTitre: "Trop de tentatives",
+    tropDeTentativesMsg: "Attends quelques minutes, puis réessaie. Ton lien est bon.",
+    connexionTitre: "Connexion impossible",
+    connexionMsg: "Vérifie ta connexion Internet et réessaie.",
     codeLu: "Code lu dans l'adresse :",
     codeLuRien: "aucun",
     congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
@@ -706,6 +710,10 @@ const I18N = {
     liensCopier: "Copy",
     liensCopie: "✓ Copied",
     liensCopieImpossible: "Copy failed — select the link by hand:",
+    tropDeTentativesTitre: "Too many attempts",
+    tropDeTentativesMsg: "Wait a few minutes, then try again. Your link is fine.",
+    connexionTitre: "Can't connect",
+    connexionMsg: "Check your internet connection and try again.",
     codeLu: "Code read from the address:",
     codeLuRien: "none",
     congeConflit: (type) => `Warning: scheduled during "${type}"`,
@@ -788,7 +796,19 @@ async function api(path, opts) {
     ...opts,
     headers: { "Content-Type": "application/json", "X-Admin-Token": TOKEN, ...(opts && opts.headers) },
   });
-  if (!res.ok) throw new Error((await res.json()).error || "Erreur");
+  if (!res.ok) {
+    let message = "";
+    try {
+      message = (await res.json()).error || "";
+    } catch (e) {
+      /* pas de JSON en retour : c'est le statut qui porte l'information */
+    }
+    const erreur = new Error(message || "Erreur");
+    // Même raison que sur la page employé : sans le statut, « trop de tentatives » et « lien
+    // inconnu » deviennent le même message, et on cherche le mauvais problème.
+    erreur.statut = res.status;
+    throw erreur;
+  }
   return res.json();
 }
 
@@ -826,7 +846,7 @@ async function load() {
       }
       render();
     } catch (e) {
-      renderInvalidCode();
+      renderErreurAcces(e);
     }
     return;
   }
@@ -852,6 +872,26 @@ async function load() {
   } catch (e) {
     renderLogin();
   }
+}
+
+// Trois raisons, trois messages. Voir la note sur la page employé : un message qui ment sur
+// la cause envoie chercher le mauvais problème.
+function renderErreurAcces(erreur) {
+  const statut = erreur && erreur.statut;
+  if (statut === 429) {
+    document.getElementById("app").innerHTML = `
+    <div class="error-box" style="margin:40px 20px; text-align:center; color:#E2685A;">
+      <h2>${t("tropDeTentativesTitre")}</h2>
+      <p>${(erreur && erreur.message) || t("tropDeTentativesMsg")}</p>
+    </div>`;
+    return;
+  }
+  if (statut === 404) return renderInvalidCode();
+  document.getElementById("app").innerHTML = `
+    <div class="error-box" style="margin:40px 20px; text-align:center; color:#E2685A;">
+      <h2>${t("connexionTitre")}</h2>
+      <p>${t("connexionMsg")}</p>
+    </div>`;
 }
 
 function renderInvalidCode() {
