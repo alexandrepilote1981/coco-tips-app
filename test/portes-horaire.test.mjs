@@ -428,6 +428,86 @@ test("les trois portes de l'horaire", async (t) => {
     assert.ok(lignes.every((l) => l.length <= 120), "aucune ligne interminable");
   });
 
+  // Les disponibilités : de l'information pour monter l'horaire, pas un secret. Toutes les
+  // portes horaire les lisent ; seul l'employé écrit les siennes, par son propre lien.
+  await t.test("l'employé écrit ses disponibilités par son lien, et lui seul", async () => {
+    const lien = (code, chemin = "", opts = {}) => fetch(`${base}/api/employee/${code}${chemin}`, opts);
+    const poster = (code, disponibilites) =>
+      lien(code, "/disponibilites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disponibilites }),
+      });
+
+    // Avant d'avoir répondu : aucune ligne, et c'est ça qui dit « jamais rempli ».
+    const avant = await (await lien(serveuse.access_code, "/disponibilites")).json();
+    assert.deepEqual(avant.disponibilites, []);
+    assert.equal(avant.aRepondu, false);
+
+    assert.equal(
+      (await poster(serveuse.access_code, [
+        { jour: 0, disponible: true },
+        { jour: 1, disponible: true, heure_debut: "09:00" },
+        { jour: 2, disponible: false },
+      ])).status,
+      200
+    );
+    const apres = await (await lien(serveuse.access_code, "/disponibilites")).json();
+    assert.equal(apres.disponibilites.length, 3);
+    assert.equal(apres.aRepondu, true);
+    assert.equal(apres.disponibilites[1].heure_debut, "09:00");
+    assert.equal(apres.disponibilites[2].disponible, 0);
+
+    // Un code inventé n'écrit chez personne.
+    assert.equal((await poster("ZZZZZZ", [{ jour: 0, disponible: false }])).status, 404);
+  });
+
+  await t.test("une saisie abîmée est nettoyée plutôt que gardée telle quelle", async () => {
+    await fetch(`${base}/api/employee/${plongeur.access_code}/disponibilites`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        disponibilites: [
+          { jour: 99, disponible: true },                                       // jour inexistant
+          { jour: 3, disponible: true, heure_debut: "15:00", heure_fin: "09:00" }, // à l'envers
+          { jour: 4, disponible: true, heure_debut: "pas une heure" },
+        ],
+      }),
+    });
+    const lu = await (await fetch(`${base}/api/employee/${plongeur.access_code}/disponibilites`)).json();
+    assert.equal(lu.disponibilites.length, 2, "le jour inexistant est jeté");
+    const jeudi = lu.disponibilites.find((d) => d.jour === 3);
+    assert.equal(jeudi.heure_debut, "09:00", "les bornes sont remises dans l'ordre");
+    assert.equal(jeudi.heure_fin, "15:00");
+    const vendredi = lu.disponibilites.find((d) => d.jour === 4);
+    assert.equal(vendredi.heure_debut, "", "une heure qui n'en est pas une est ignorée");
+  });
+
+  await t.test("les portes horaire lisent les disponibilités de leur secteur", async () => {
+    const salle = await (await parCode(CODE_SALLE, "/disponibilites")).json();
+    assert.ok(salle.disponibilites.length > 0, "la serveuse a rempli les siennes");
+    assert.ok(
+      salle.disponibilites.every((d) => d.employee_id === serveuse.id),
+      "la cuisine n'apparaît pas dans la porte de la salle"
+    );
+
+    for (const code of [CODE_CUISINE, CODE_LECTURE]) {
+      const cuisine = await (await parCode(code, "/disponibilites")).json();
+      assert.ok(
+        cuisine.disponibilites.every((d) => d.employee_id !== serveuse.id),
+        `la salle n'apparaît pas dans ${code}`
+      );
+    }
+    assert.equal((await parCode("ZZZZZZ", "/disponibilites")).status, 404);
+  });
+
+  await t.test("aucune disponibilité ne charrie de montant", async () => {
+    for (const code of [CODE_SALLE, CODE_CUISINE, CODE_LECTURE]) {
+      const texte = await (await parCode(code, "/disponibilites")).text();
+      assert.doesNotMatch(texte, /taux_horaire|heures_max|18\.5/, `porte ${code}`);
+    }
+  });
+
   await t.test("le PDF de chaque porte ne contient que son équipe", async () => {
     const pdfCuisine = Buffer.from(await (await parCode(CODE_CUISINE, "/pdf?week=2026-09-21")).arrayBuffer());
     const pdfSalle = Buffer.from(await (await parCode(CODE_SALLE, "/pdf?week=2026-09-21")).arrayBuffer());

@@ -400,6 +400,23 @@
   .empty-cell.absent.absent-cnesst {
     border-color: rgba(226,104,90,0.35); background: rgba(226,104,90,0.08); color: #E2685A;
   }
+  /* Disponibilités dans la grille. La PÂLEUR plutôt qu'une couleur : la grille porte déjà
+     les congés, les fériés, les rangées rouges du plafond d'heures et les conflits. Une
+     cinquième couleur en ferait un arbre de Noël. La pâleur est un canal encore libre — ça
+     se voit sans crier, et ça ne barre rien : le gérant peut toujours cliquer. */
+  .empty-cell.pas-dispo {
+    border-style: solid; border-color: rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.015); color: rgba(137,147,164,0.65);
+    font-size: 8.5px; font-weight: 700;
+  }
+  .empty-cell.dispo-partielle { opacity: 0.55; }
+  /* Un quart placé hors des disponibilités déclarées : un liseré, pas un contour plein —
+     le contour plein rouge est réservé aux congés, qui sont plus forts. */
+  .shift-chip.hors-dispo { border-style: dashed; border-color: rgba(137,147,164,0.7); }
+  .dispo-manquantes {
+    font-size: 11px; color: #D4A857; margin: 0 0 8px;
+    background: rgba(212,168,87,0.08); border-radius: 8px; padding: 7px 10px;
+  }
   /* Cédulé pendant une absence notée : c'est l'oubli qu'on cherche à empêcher. */
   .shift-chip.conflit { border-color: #E2685A; box-shadow: 0 0 0 1px #E2685A inset; }
   .shift-chip .rl, .shift-chip .tk {
@@ -487,6 +504,7 @@
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/absences.js"></script>
+<script src="/shared/disponibilites.js"></script>
 <script src="/shared/feries.js"></script>
 <script src="/shared/alerte-ferie.js"></script>
 <script src="/shared/cout-main-oeuvre.js"></script>
@@ -518,6 +536,7 @@ let TOKEN = lireStockage("sessionStorage", "scheduleToken") || "";
 let roster = null;
 let shifts = [];
 let absences = [];
+let disponibilites = [];
 // Ce que la porte ouverte par ce lien permet de voir et de faire. Par mot de passe (sans
 // code dans l'URL) on est sur l'horaire de la salle, comme avant.
 let porte = { secteur: "salle", peutModifier: true, voitMontants: false, chargesPct: 0 };
@@ -567,6 +586,18 @@ const I18N = {
     congeErreur: "Impossible d'enregistrer. Vérifie les dates.",
     congeConfirmRetirer: "Retirer cette demande ?",
     congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
+    dispoConflit: (texte) => `Attention : hors de ses disponibilités (${texte})`,
+    dispoCourt: "Pas dispo",
+    disposManquantes: (n, noms) =>
+      `${n} personne${n > 1 ? "s n'ont" : " n'a"} pas rempli ses disponibilités : ${noms}`,
+    confirmMalgreConge: (nom, type, periode) =>
+      `${nom} est en « ${type} » (${periode}).\n\nL'ajouter quand même ?`,
+    // Tournure sans pronom : « il » serait faux pour la moitié de l'équipe, et deviner le
+    // genre à partir d'un prénom se trompe forcément un jour.
+    confirmMalgreDispoAbsent: (nom, jour) =>
+      `${nom} a indiqué ne pas être disponible le ${jour}.\n\nL'ajouter quand même ?`,
+    confirmMalgreDispoHeures: (nom, jour, dispo, heure) =>
+      `${nom} est disponible le ${jour} : ${dispo.toLowerCase()}.\nTu l'ajoutes à ${heure}.\n\nL'ajouter quand même ?`,
     salle: "Salle",
     cuisine: "Cuisine",
     heuresSemaine: "Heures cédulées",
@@ -634,6 +665,15 @@ const I18N = {
     congeErreur: "Could not save. Check the dates.",
     congeConfirmRetirer: "Remove this request?",
     congeConflit: (type) => `Warning: scheduled during "${type}"`,
+    dispoConflit: (texte) => `Warning: outside their availability (${texte})`,
+    dispoCourt: "Unavailable",
+    disposManquantes: (n, noms) =>
+      `${n} ${n > 1 ? "people have" : "person has"} not filled in their availability: ${noms}`,
+    confirmMalgreConge: (nom, type, periode) =>
+      `${nom} is on "${type}" (${periode}).\n\nAdd them anyway?`,
+    confirmMalgreDispoAbsent: (nom, jour) => `${nom} said they are not available on ${jour}.\n\nAdd them anyway?`,
+    confirmMalgreDispoHeures: (nom, jour, dispo, heure) =>
+      `${nom} is available on ${jour}: ${dispo.toLowerCase()}.\nYou are adding them at ${heure}.\n\nAdd them anyway?`,
     salle: "Dining room",
     cuisine: "Kitchen",
     heuresSemaine: "Scheduled hours",
@@ -735,6 +775,11 @@ async function load() {
       } catch (e) {
         absences = [];
       }
+      try {
+        disponibilites = (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/disponibilites`)).json()).disponibilites || [];
+      } catch (e) {
+        disponibilites = [];
+      }
       render();
     } catch (e) {
       renderInvalidCode();
@@ -753,6 +798,11 @@ async function load() {
       absences = (await api("/api/admin/absences")).absences;
     } catch (e) {
       absences = [];
+    }
+    try {
+      disponibilites = (await api("/api/admin/disponibilites")).disponibilites;
+    } catch (e) {
+      disponibilites = [];
     }
     render();
   } catch (e) {
@@ -874,6 +924,7 @@ ScheduleUI.init({
   },
   absences: () => absences,
   setAbsences: (a) => { absences = a; },
+  disponibilites: () => disponibilites,
   reloadAbsences: async () => {
     if (RESTAURANT_CODE) {
       return (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/absences`)).json()).absences;

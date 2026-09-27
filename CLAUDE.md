@@ -53,6 +53,7 @@ public/shared/horaire-mise-en-page.js  mise en page de la feuille — dessinée 
 public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
 public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
 public/shared/absences.js  congés et vacances : plages, conflits, mise en forme des dates
+public/shared/disponibilites.js  l'habitude déclarée par chaque employé, et ses accrocs
 public/shared/feries.js    fériés du Québec et grosses journées de restaurant — calculés, pas saisis
 public/shared/alerte-ferie.js  la fenêtre qui rappelle la commande avant un férié
 public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
@@ -163,6 +164,65 @@ seule voient les absences mais n'ont ni formulaire ni bouton pour les retirer : 
 en vacances n'est un secret pour personne dans un restaurant.
 
 Une période déjà commencée mais pas terminée reste « à venir » — on est en plein dedans.
+
+## Disponibilités
+
+`public/shared/disponibilites.js`. Ce que ça répond : « le lundi je peux rentrer à 5h30, le
+mardi pas avant 9h, le jeudi pas pantoute ».
+
+C'est **l'habitude** d'une personne, pas sa semaine. Elle la remplit une fois sur son lien
+personnel et n'y retouche presque jamais — un formulaire à remplir chaque semaine, personne
+ne le remplit, et au bout d'un mois la grille est à moitié vide. Les **congés** servent aux
+exceptions. L'un dit la règle, l'autre dit l'exception, et les deux ne se marchent pas sur
+les pieds.
+
+Une ligne par jour de semaine (0 = lundi), trois états : pas disponible, toute la journée
+(heures vides), ou une plage. La case « toute la journée » existe parce que c'est le cas de
+la majorité : sans elle, il faudrait choisir deux heures sept fois pour dire « je suis
+toujours là ».
+
+### La règle à ne pas casser
+
+**Une disponibilité n'interdit rien.** Un samedi matin où quelqu'un lâche, le gérant appelle
+la personne qui avait écrit « pas le samedi » et elle dit oui pour cette fois. Si l'app
+bloquait, il faudrait aller modifier sa disponibilité déclarée pour pouvoir la placer — donc
+falsifier ce qu'elle a dit, juste pour contourner l'app. Et une disponibilité vieillit : une
+session de cours finit, personne ne met à jour.
+
+La grille **avertit** : la case pâlit, et à l'enregistrement d'un quart en accroc une
+question sort — « Marie Tremblay a indiqué ne pas être disponible le mercredi. L'ajouter
+quand même ? ». La même question sort pour un **congé**, qui est plus fort qu'une
+disponibilité générale ; ce serait bizarre d'avertir pour le petit et pas pour le gros.
+
+La question se pose **à l'enregistrement, pas au clic** : tant que l'heure n'est pas choisie,
+on ne peut pas savoir s'il y a un accroc. Une seule règle, un seul moment.
+
+### Le défaut, et « qui n'a jamais répondu »
+
+Sans aucune ligne en base, la personne est **disponible partout**. Quelqu'un qui n'a jamais
+ouvert sa page n'est donc jamais barré ni questionné.
+
+Du coup « a dit oui à tout » et « n'a jamais ouvert la page » donneraient la même
+disponibilité effective. On les distingue par l'**existence** des lignes (`aRepondu`), pas
+par leur contenu — c'est ce qui permet d'afficher au gérant la liste de ceux qu'il reste à
+relancer, au-dessus de la grille.
+
+### Ce qui n'est PAS marqué
+
+La **pâleur** plutôt qu'une couleur : la grille porte déjà les congés, les fériés, les
+rangées rouges du plafond d'heures et les conflits. Une cinquième couleur en ferait un arbre
+de Noël. La pâleur est un canal encore libre.
+
+Et **rien sur la feuille imprimée**. « Placé malgré sa disponibilité » est une affaire entre
+le gérant et la personne, pas une affaire de babillard.
+
+### La page d'un cuisinier
+
+`employee.html` connaît maintenant le secteur : un cuisinier n'y voit ni ventes, ni
+pourboires, ni bouton « Ajouter » — seulement son horaire, ses disponibilités et sa
+messagerie. Les codes d'accès existaient déjà pour tout le monde ; c'est le tableau de bord
+qui ne montrait pas le lien des cuisiniers, et la page qui leur présentait un formulaire de
+pourboires n'ayant aucun sens pour eux.
 
 ## Jours fériés et grosses journées
 
@@ -327,6 +387,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   postes, échappement) ; le fichier est chargé avec un faux `window`.
 - `test/feries.test.js` — les dates des fériés (dont Pâques sur plusieurs années) et le
   moment où l'alerte de commande sort.
+- `test/disponibilites.test.js` — le défaut, la détection d'accroc, et la différence entre
+  « a dit oui à tout » et « n'a jamais répondu ».
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.

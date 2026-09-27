@@ -40,6 +40,48 @@
   .kpi-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 7px; display:flex; align-items:center; gap:6px;}
   .kpi-value { font-family: 'Fraunces', serif; font-size: 21px; font-weight: 600; }
   .schedule-card { margin-top: 12px; }
+  /* Disponibilités. Le tableau se remplit au pouce, sur un téléphone : les cases à cocher
+     sont larges, et les menus d'heures ne s'affichent que quand ils servent vraiment. */
+  .dispo-card { margin-top: 12px; }
+  .dispo-entete { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .dispo-jamais {
+    font-size: 10.5px; font-weight: 700; color: #D4A857; margin: -6px 0 0;
+  }
+  .dispo-sous { font-size: 11.5px; color: #8993A4; line-height: 1.4; margin: 0 0 10px; }
+  .dispo-toggle {
+    background: rgba(255,255,255,0.07); color: #F1EFEA; border: none; border-radius: 8px;
+    font: inherit; font-size: 11.5px; font-weight: 700; padding: 7px 13px; cursor: pointer; flex: none;
+  }
+  .dispo-resume-ligne {
+    display: flex; justify-content: space-between; gap: 10px; padding: 6px 0;
+    border-top: 1px solid rgba(255,255,255,0.06); font-size: 12.5px;
+  }
+  .dispo-resume-ligne .drj { color: #F1EFEA; font-weight: 600; }
+  .dispo-resume-ligne .drv { color: #6FBF93; }
+  .dispo-resume-ligne.off .drv { color: #8993A4; }
+  .dispo-ligne {
+    padding: 9px 0; border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  }
+  .dispo-jour { display: flex; align-items: center; gap: 7px; min-width: 116px; cursor: pointer; }
+  .dispo-jour span { font-size: 13px; font-weight: 700; color: #F1EFEA; }
+  .dispo-ligne.off .dispo-jour span { color: #8993A4; }
+  .dispo-ligne input[type="checkbox"] { width: 18px; height: 18px; accent-color: #6FBF93; flex: none; }
+  .dispo-choix { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .dispo-toute { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .dispo-toute span { font-size: 12px; color: #8993A4; }
+  .dispo-ligne.off .dispo-toute { opacity: 0.4; }
+  .dispo-plage { display: flex; align-items: center; gap: 6px; }
+  .dispo-plage span { font-size: 12px; color: #8993A4; }
+  .dispo-plage select {
+    background: #10151D; color: #F1EFEA; border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 7px; padding: 6px 7px; font: inherit; font-size: 12.5px;
+  }
+  .dispo-save {
+    width: 100%; margin-top: 14px; padding: 13px; border: none; border-radius: 10px;
+    background: #6FBF93; color: #10151D; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .dispo-save:disabled { opacity: 0.55; }
   .section-label-sm { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
   .week-strip { display: flex; gap: 8px; margin-bottom: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
   .week-strip::-webkit-scrollbar { height: 4px; }
@@ -168,6 +210,7 @@
 
 <!-- Même fichier que celui utilisé par le serveur : une seule définition du calcul. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
+<script src="/shared/disponibilites.js"></script>
 <script src="/shared/tip-math.js"></script>
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
@@ -194,11 +237,27 @@ function icon(name, size, extraStyle) {
 const CODE = window.location.pathname.split("/").pop();
 let state = null;
 let currentEntries = []; // liste actuellement affichée (filtrée par période) — source unique pour les mises à jour ciblées
+// Les disponibilités déclarées : l'habitude de la personne, pas sa semaine. Sept lignes,
+// même si elle n'en a rempli qu'une — le module complète le reste par « toute la journée ».
+let disponibilites = [];
+let dispoOuvert = false;
+let dispoConfirme = false;
 
 // ---------- Traductions ----------
 const I18N = {
   fr: {
     savedNote: "Sauvegardé automatiquement",
+    mesDispos: "Mes disponibilités",
+    disposSousTitre: "Tes journées habituelles. À remplir une fois — pour une semaine différente, écris au gérant.",
+    disposJamaisRemplies: "Pas encore remplies",
+    dispoToute: "Toute la journée",
+    dispoPas: "Pas disponible",
+    dispoDe: "de",
+    dispoA: "à",
+    dispoEnregistrer: "Enregistrer mes disponibilités",
+    dispoEnregistre: "✓ Enregistré",
+    dispoOuvrir: "Modifier",
+    dispoFermer: "Replier",
     envoyerDeclaration: "Envoyer ma déclaration",
     envoyeeLe: (quand) => `Envoyée le ${quand}`,
     modifieeDepuisEnvoi: "Tu as changé un montant depuis l'envoi.",
@@ -264,6 +323,17 @@ const I18N = {
   },
   en: {
     savedNote: "Auto-saved",
+    mesDispos: "My availability",
+    disposSousTitre: "Your usual days. Fill it once — for a different week, message the manager.",
+    disposJamaisRemplies: "Not filled in yet",
+    dispoToute: "All day",
+    dispoPas: "Not available",
+    dispoDe: "from",
+    dispoA: "to",
+    dispoEnregistrer: "Save my availability",
+    dispoEnregistre: "✓ Saved",
+    dispoOuvrir: "Edit",
+    dispoFermer: "Collapse",
     envoyerDeclaration: "Send my declaration",
     envoyeeLe: (quand) => `Sent on ${quand}`,
     modifieeDepuisEnvoi: "You changed an amount after sending.",
@@ -485,6 +555,12 @@ async function load() {
       myShifts = resShifts.shifts;
     } catch (e) {
       myShifts = [];
+    }
+    try {
+      const resDispo = await api(`/api/employee/${CODE}/disponibilites`);
+      disponibilites = resDispo.disponibilites;
+    } catch (e) {
+      disponibilites = [];
     }
     render();
   } catch (e) {
@@ -791,8 +867,86 @@ function attachCardListeners(card, e) {
   }
 }
 
+// Le tableau des disponibilités : sept lignes, une par jour. Trois états par jour — pas
+// disponible, toute la journée, ou une plage d'heures. La case « toute la journée » existe
+// parce que c'est le cas de la majorité du monde : sans elle, il faudrait choisir deux
+// heures sept fois pour dire « je suis toujours là ».
+function dispoCardHTML() {
+  const D = window.Disponibilites;
+  const semaine = D.semaine(disponibilites);
+  const aRepondu = D.aRepondu(disponibilites);
+
+  const heures = (choisie) => {
+    const options = [];
+    for (let m = 0; m < 24 * 60; m += 15) {
+      const hh = String(Math.floor(m / 60)).padStart(2, "0");
+      const mm = String(m % 60).padStart(2, "0");
+      const v = `${hh}:${mm}`;
+      options.push(`<option value="${v}" ${v === choisie ? "selected" : ""}>${v}</option>`);
+    }
+    return options.join("");
+  };
+
+  return `
+  <div class="card dispo-card">
+    <div class="dispo-entete">
+      <div>
+        <div class="section-label-sm">${icon("calendar", 14)} ${t("mesDispos")}</div>
+        ${!aRepondu ? `<div class="dispo-jamais">${t("disposJamaisRemplies")}</div>` : ""}
+      </div>
+      <button class="dispo-toggle" id="dispoToggle">${dispoOuvert ? t("dispoFermer") : t("dispoOuvrir")}</button>
+    </div>
+    <p class="dispo-sous">${t("disposSousTitre")}</p>
+    ${
+      dispoOuvert
+        ? `<div class="dispo-grille">
+      ${semaine
+        .map(
+          (j) => `
+        <div class="dispo-ligne ${j.disponible ? "" : "off"}" data-jour="${j.jour}">
+          <label class="dispo-jour">
+            <input type="checkbox" class="dispo-actif" data-jour="${j.jour}" ${j.disponible ? "checked" : ""} />
+            <span>${D.nomDuJour(j.jour, lang)}</span>
+          </label>
+          <div class="dispo-choix">
+            <label class="dispo-toute">
+              <input type="checkbox" class="dispo-24" data-jour="${j.jour}"
+                     ${j.disponible && !j.heure_debut && !j.heure_fin ? "checked" : ""}
+                     ${j.disponible ? "" : "disabled"} />
+              <span>${t("dispoToute")}</span>
+            </label>
+            <div class="dispo-plage" ${j.disponible && (j.heure_debut || j.heure_fin) ? "" : 'style="display:none;"'}>
+              <span>${t("dispoDe")}</span>
+              <select class="dispo-debut" data-jour="${j.jour}">${heures(j.heure_debut || "05:30")}</select>
+              <span>${t("dispoA")}</span>
+              <select class="dispo-fin" data-jour="${j.jour}">${heures(j.heure_fin || "15:00")}</select>
+            </div>
+          </div>
+        </div>`
+        )
+        .join("")}
+      </div>
+      <button class="dispo-save" id="dispoSave">${dispoConfirme ? t("dispoEnregistre") : t("dispoEnregistrer")}</button>`
+        : `<div class="dispo-resume">
+             ${semaine
+               .map(
+                 (j) => `<div class="dispo-resume-ligne ${j.disponible ? "" : "off"}">
+                   <span class="drj">${D.nomDuJour(j.jour, lang)}</span>
+                   <span class="drv">${D.libelle(j, lang)}</span>
+                 </div>`
+               )
+               .join("")}
+           </div>`
+    }
+  </div>`;
+}
+
 function render() {
   const { employee, restaurant, entries: allEntries } = state;
+  // La cuisine ne déclare pas de pourboires : lui montrer des champs de ventes et un
+  // pourcentage moyen n'aurait aucun sens. Elle garde son horaire, ses disponibilités et
+  // sa messagerie — c'est tout ce que sa page a à faire.
+  const estCuisine = employee.secteur === "cuisine";
   const { start, end } = resolvePeriod();
   currentEntries = allEntries.filter((e) => (!start || e.date >= start) && (!end || e.date <= end));
   const entries = currentEntries;
@@ -824,21 +978,23 @@ function render() {
       </div>` : ""}
       <div class="card period-card">
         <div class="period-title-row">
-          <div class="period-title">${t("periodeAffichee")}</div>
+          <div class="period-title">${estCuisine ? t("mesDispos") : t("periodeAffichee")}</div>
           <button class="message-tab-btn" id="openMessageModalBtn">${icon("mail", 14)} ${t("messageTab")} ${unreadReplies > 0 ? `<span class="msg-badge">${unreadReplies}</span>` : ""}</button>
         </div>
+        ${estCuisine ? "" : `
         <div class="period-bar">
           <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w">${t("p2Semaines")}</button>
           <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month">${t("p30Jours")}</button>
           <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all">${t("pTout")}</button>
-        </div>
+        </div>`}
       </div>
+      ${estCuisine ? "" : `
       <div class="kpi-grid">
         <div class="card"><div class="kpi-label" style="color:#F1EFEA">${icon("dollar", 13)} ${t("ventesTotal")}</div><div class="kpi-value" id="kpi-ventes" style="color:#F1EFEA">${fmtMoney(totVentes)}</div></div>
         <div class="card"><div class="kpi-label" style="color:#6FBF93">${icon("trending", 13)} ${t("pourboiresNets")}</div><div class="kpi-value" id="kpi-net" style="color:#6FBF93">${fmtMoney(totNet)}</div></div>
         <div class="card"><div class="kpi-label" style="color:#D4A857">${t("pctMoyen")}</div><div class="kpi-value" id="kpi-pct" style="color:#D4A857">${fmtPct(pctMoyen)}</div></div>
         <div class="card"><div class="kpi-label" style="color:#E2685A">${icon("users", 13)} ${t("moyClient")}</div><div class="kpi-value" id="kpi-client" style="color:#E2685A">${fmtMoney(parClient)}</div></div>
-      </div>
+      </div>`}
 
       ${myShifts.length > 0 ? `
       <div class="card schedule-card">
@@ -867,11 +1023,14 @@ function render() {
         <div class="swipe-hint">${t("glisseIndication")}</div>
       </div>` : ""}
 
+      ${dispoCardHTML()}
+
+      ${estCuisine ? "" : `
       <div class="section-title">
         <span id="days-count">${t("journees", entries.length)}</span>
         <button class="add-btn" id="addBtn">${t("ajouter")}</button>
       </div>
-      <p style="font-size:11px; color:#6B7280; margin:-4px 0 12px;">${t("multiEntryHint")}</p>
+      <p style="font-size:11px; color:#6B7280; margin:-4px 0 12px;">${t("multiEntryHint")}</p>`}
       <div id="daysList"></div>
     </div>
 
@@ -902,6 +1061,84 @@ function render() {
   const list = document.getElementById("daysList");
   list.innerHTML = "";
   entries.forEach((e) => list.appendChild(buildCardElement(e)));
+
+  // ---------- disponibilités ----------
+  // Comme partout dans cette page, les nœuds sont neufs après chaque render() : tout se
+  // rebranche ici, sans garder de référence d'un rendu à l'autre.
+  const dispoToggle = document.getElementById("dispoToggle");
+  if (dispoToggle) {
+    dispoToggle.addEventListener("click", () => {
+      dispoOuvert = !dispoOuvert;
+      dispoConfirme = false;
+      render();
+    });
+  }
+
+  // Décocher un jour éteint ses heures ; cocher « toute la journée » range la plage.
+  // On ne redessine PAS toute la page à chaque clic : la personne est en train de remplir
+  // sept lignes, un rendu complet lui ferait perdre où elle en était.
+  for (const actif of document.querySelectorAll(".dispo-actif")) {
+    actif.addEventListener("change", () => {
+      const ligne = actif.closest(".dispo-ligne");
+      const toute = ligne.querySelector(".dispo-24");
+      const plage = ligne.querySelector(".dispo-plage");
+      ligne.classList.toggle("off", !actif.checked);
+      toute.disabled = !actif.checked;
+      if (!actif.checked) {
+        plage.style.display = "none";
+      } else {
+        toute.checked = true;
+        plage.style.display = "none";
+      }
+      dispoConfirme = false;
+    });
+  }
+
+  for (const toute of document.querySelectorAll(".dispo-24")) {
+    toute.addEventListener("change", () => {
+      const plage = toute.closest(".dispo-ligne").querySelector(".dispo-plage");
+      plage.style.display = toute.checked ? "none" : "flex";
+      dispoConfirme = false;
+    });
+  }
+
+  for (const champ of document.querySelectorAll(".dispo-debut, .dispo-fin")) {
+    champ.addEventListener("change", () => { dispoConfirme = false; });
+  }
+
+  const dispoSave = document.getElementById("dispoSave");
+  if (dispoSave) {
+    dispoSave.addEventListener("click", async () => {
+      const lignes = [...document.querySelectorAll(".dispo-ligne")].map((ligne) => {
+        const jour = parseInt(ligne.dataset.jour, 10);
+        const actif = ligne.querySelector(".dispo-actif").checked;
+        const toute = ligne.querySelector(".dispo-24").checked;
+        if (!actif) return { jour, disponible: false };
+        if (toute) return { jour, disponible: true, heure_debut: "", heure_fin: "" };
+        return {
+          jour,
+          disponible: true,
+          heure_debut: ligne.querySelector(".dispo-debut").value,
+          heure_fin: ligne.querySelector(".dispo-fin").value,
+        };
+      });
+      dispoSave.disabled = true;
+      try {
+        const res = await api(`/api/employee/${CODE}/disponibilites`, {
+          method: "POST",
+          body: JSON.stringify({ disponibilites: lignes }),
+        });
+        // On garde ce que le SERVEUR a retenu : c'est lui qui remet des bornes à l'envers
+        // dans l'ordre et jette une heure qui n'en est pas une.
+        disponibilites = res.disponibilites;
+        dispoConfirme = true;
+        dispoOuvert = false;
+        render();
+      } catch (e) {
+        dispoSave.disabled = false;
+      }
+    });
+  }
 
   const messageOverlay = document.getElementById("messageModalOverlay");
 
@@ -989,7 +1226,8 @@ function render() {
     });
   });
 
-  document.getElementById("addBtn").addEventListener("click", async () => {
+  const addBtn = document.getElementById("addBtn");
+  if (addBtn) addBtn.addEventListener("click", async () => {
     const today = todayLocalISO();
     const payload = { date: today, ventes: 0, clients: 0, pct: 0, remis: 0, is_hotesse: false };
     const res = await saveEntry(payload);

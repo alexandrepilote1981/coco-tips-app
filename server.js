@@ -6,6 +6,7 @@ const { buildSchedulePdf, schedulePdfFilename } = require("./pdf-horaire");
 // Le titre de la feuille est le même pour le PDF et pour la photo exportée par le
 // navigateur : il vit donc avec la mise en page, pas ici.
 const miseEnPage = require("./public/shared/horaire-mise-en-page.js");
+const Disponibilites = require("./public/shared/disponibilites.js");
 // Congés et vacances : mêmes règles de plage et de tri des deux côtés.
 const Absences = require("./public/shared/absences.js");
 const { guard, noteFailure, clearFailures } = require("./rate-limit");
@@ -131,6 +132,26 @@ app.get("/api/employee/:code", (req, res) => {
     .map(computeEntry);
 
   res.json({ employee: emp, restaurant, entries });
+});
+
+// L'employé et ses disponibilités. Le code de 6 caractères de son lien sert de clé, comme
+// pour tout le reste de sa page.
+app.get("/api/employee/:code/disponibilites", (req, res) => {
+  const emp = db.prepare("SELECT id FROM employees WHERE access_code = ?").get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+  const lignes = db.prepare("SELECT * FROM disponibilites WHERE employee_id = ? ORDER BY jour ASC").all(emp.id);
+  res.json({ disponibilites: lignes, aRepondu: Disponibilites.aRepondu(lignes) });
+});
+
+app.post("/api/employee/:code/disponibilites", (req, res) => {
+  const emp = db.prepare("SELECT id FROM employees WHERE access_code = ?").get(req.params.code.toUpperCase());
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+  if (!Array.isArray(req.body.disponibilites)) {
+    return res.status(400).json({ error: "disponibilites requis" });
+  }
+  enregistrerDisponibilites(emp.id, req.body.disponibilites);
+  const lignes = db.prepare("SELECT * FROM disponibilites WHERE employee_id = ? ORDER BY jour ASC").all(emp.id);
+  res.json({ disponibilites: lignes, aRepondu: Disponibilites.aRepondu(lignes) });
 });
 
 app.post("/api/employee/:code/entries", (req, res) => {
@@ -341,6 +362,42 @@ app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
 
 // ---------- Congés et vacances ----------
 
+// Disponibilités : l'habitude déclarée par chaque employé. C'est de l'information pour
+// monter l'horaire, pas un secret — le gérant en a besoin dans la grille, l'équipe peut la
+// voir sur les liens horaire. Rien de financier là-dedans.
+function disponibilitesDuRestaurant(restaurantId, secteur) {
+  const conditionSecteur = secteur ? " AND e.secteur = ?" : "";
+  const params = secteur ? [restaurantId, secteur] : [restaurantId];
+  return db
+    .prepare(`
+      SELECT d.* FROM disponibilites d
+      JOIN employees e ON e.id = d.employee_id
+      WHERE e.restaurant_id = ?${conditionSecteur}
+      ORDER BY d.employee_id ASC, d.jour ASC
+    `)
+    .all(...params);
+}
+
+// Sept lignes d'un coup, dans une transaction : une semaine à moitié enregistrée serait une
+// semaine qui dit des faussetés.
+function enregistrerDisponibilites(employeeId, lignes) {
+  const propres = [];
+  for (const l of lignes || []) {
+    const n = Disponibilites.normaliser(l);
+    if (n) propres.push(n);
+  }
+  const effacer = db.prepare("DELETE FROM disponibilites WHERE employee_id = ?");
+  const inserer = db.prepare(`
+    INSERT INTO disponibilites (employee_id, jour, disponible, heure_debut, heure_fin, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+  `);
+  db.transaction(() => {
+    effacer.run(employeeId);
+    for (const n of propres) inserer.run(employeeId, n.jour, n.disponible ? 1 : 0, n.heure_debut, n.heure_fin);
+  })();
+  return propres;
+}
+
 function absencesDuRestaurant(restaurantId, secteur) {
   const conditionSecteur = secteur ? " AND e.secteur = ?" : "";
   const params = secteur ? [restaurantId, secteur] : [restaurantId];
@@ -394,6 +451,20 @@ function supprimerAbsence(req, res, restaurantId, secteur) {
 
 // Sans restaurant_id, le tableau de bord reçoit tout : il affiche plusieurs restaurants à la
 // fois, et faire un appel par restaurant à chaque rafraîchissement ne rapporterait rien.
+app.get("/api/admin/disponibilites", requireScheduleAccess, (req, res) => {
+  const restaurantId = req.query.restaurant_id;
+  if (restaurantId) return res.json({ disponibilites: disponibilitesDuRestaurant(restaurantId, null) });
+  res.json({
+    disponibilites: db
+      .prepare(`
+        SELECT d.* FROM disponibilites d
+        JOIN employees e ON e.id = d.employee_id
+        ORDER BY d.employee_id ASC, d.jour ASC
+      `)
+      .all(),
+  });
+});
+
 app.get("/api/admin/absences", requireScheduleAccess, (req, res) => {
   const restaurantId = req.query.restaurant_id;
   if (restaurantId) return res.json({ absences: absencesDuRestaurant(restaurantId, null) });
@@ -600,6 +671,14 @@ app.get("/api/schedule/by-code/:code/absences", (req, res) => {
   // Même en lecture seule on les voit : savoir qui est en vacances n'est un secret pour
   // personne dans un restaurant, et c'est utile à l'équipe.
   res.json({ absences: absencesDuRestaurant(porte.restaurant.id, porte.secteur) });
+});
+
+app.get("/api/schedule/by-code/:code/disponibilites", (req, res) => {
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  // Même en lecture seule : savoir que quelqu'un ne rentre jamais avant 9h le mardi n'est
+  // un secret pour personne, et ça évite des questions dans le groupe.
+  res.json({ disponibilites: disponibilitesDuRestaurant(porte.restaurant.id, porte.secteur) });
 });
 
 app.post("/api/schedule/by-code/:code/absences", (req, res) => {
@@ -1003,6 +1082,7 @@ app.post("/api/admin/restaurants/:id/charges", requireAdmin, (req, res) => {
 
 app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {
   db.prepare("DELETE FROM absences WHERE employee_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM disponibilites WHERE employee_id = ?").run(req.params.id);
   deletePhotoFiles(db.prepare("SELECT photo_filename FROM entries WHERE employee_id = ?").all(req.params.id));
   db.prepare("DELETE FROM entries WHERE employee_id = ?").run(req.params.id);
   db.prepare("DELETE FROM shifts WHERE employee_id = ?").run(req.params.id);
