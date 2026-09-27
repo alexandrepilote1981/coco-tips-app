@@ -9,7 +9,7 @@ const miseEnPage = require("./public/shared/horaire-mise-en-page.js");
 const Disponibilites = require("./public/shared/disponibilites.js");
 // Congés et vacances : mêmes règles de plage et de tri des deux côtés.
 const Absences = require("./public/shared/absences.js");
-const { guard, noteFailure, clearFailures } = require("./rate-limit");
+const { guard, blocageSecondes, refuser, noteFailure, clearFailures, noteSuccess, estConnu } = require("./rate-limit");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
 const { computeEntry } = require("./public/shared/tip-math.js");
@@ -108,14 +108,27 @@ function requireScheduleAccess(req, res, next) {
 // Volontairement, on ne remet pas le compteur à zéro sur un succès — sinon quelqu'un
 // possédant un code valide pourrait effacer son ardoise entre deux essais et deviner
 // tranquillement les codes des autres.
-app.use("/api/employee/:code", guard("employee-code"), (req, res, next) => {
-  const emp = db
-    .prepare("SELECT id FROM employees WHERE access_code = ?")
-    .get((req.params.code || "").toUpperCase());
+app.use("/api/employee/:code", (req, res, next) => {
+  const code = (req.params.code || "").toUpperCase();
+
+  // Un code déjà utilisé avec succès depuis cette adresse passe TOUJOURS, même si le WiFi
+  // est bloqué parce que quelqu'un d'autre a raté ses essais. Voir rate-limit.js pour
+  // pourquoi ça ne donne rien à un attaquant.
+  if (estConnu("employee-code", req, code)) return next();
+
+  const attente = blocageSecondes("employee-code", req);
+  // Bloqué : on répond pareil pour tout code inconnu. Laisser passer un bon code ici
+  // reviendrait à répondre « oui / non » à volonté, et le plafond ne servirait plus à rien.
+  if (attente) return refuser(res, attente);
+
+  const emp = db.prepare("SELECT id FROM employees WHERE access_code = ?").get(code);
   if (!emp) {
-    noteFailure("employee-code", req);
+    // Le code est passé en marque : réessayer LE MÊME mauvais lien huit fois ne compte que
+    // pour un échec, alors qu'une force brute change de code à chaque coup.
+    noteFailure("employee-code", req, code);
     return res.status(404).json({ error: "Code inconnu" });
   }
+  noteSuccess("employee-code", req, code);
   next();
 });
 
@@ -642,11 +655,19 @@ function sansMontants(employes) {
 }
 
 // Même protection que pour les codes employés, sur les liens horaire par code.
-app.use("/api/schedule/by-code/:code", guard("schedule-code"), (req, res, next) => {
-  if (!getRestaurantByCode(req.params.code)) {
-    noteFailure("schedule-code", req);
+app.use("/api/schedule/by-code/:code", (req, res, next) => {
+  // Même logique que la porte employé, et pour la même raison : l'équipe partage un WiFi.
+  const code = (req.params.code || "").toUpperCase();
+  if (estConnu("schedule-code", req, code)) return next();
+
+  const attente = blocageSecondes("schedule-code", req);
+  if (attente) return refuser(res, attente);
+
+  if (!getRestaurantByCode(code)) {
+    noteFailure("schedule-code", req, code);
     return res.status(404).json({ error: "Lien invalide" });
   }
+  noteSuccess("schedule-code", req, code);
   next();
 });
 
