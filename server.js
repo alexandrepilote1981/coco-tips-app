@@ -650,6 +650,23 @@ app.use("/api/schedule/by-code/:code", guard("schedule-code"), (req, res, next) 
   next();
 });
 
+// Le code d'accès personnel d'un employé, pour la porte du gérant seulement.
+//
+// Pourquoi lui et pas les autres : ce code EST la clé de la page de la personne. Le gérant
+// en a besoin pour distribuer les liens à son équipe — sans ça, personne ne peut remplir ses
+// disponibilités. Mais le lien de LECTURE des cuisiniers ne doit jamais les recevoir :
+// n'importe quel cuisinier pourrait alors ouvrir la page d'un collègue et changer ses
+// disponibilités à sa place.
+//
+// Et jamais du côté salle : le gérant n'y a pas accès du tout, et la page d'une serveuse
+// montre ses pourboires déclarés.
+function avecCodes(employes, restaurantId) {
+  const codes = new Map(
+    db.prepare("SELECT id, access_code FROM employees WHERE restaurant_id = ?").all(restaurantId).map((e) => [e.id, e.access_code])
+  );
+  return employes.map((e) => ({ ...e, access_code: codes.get(e.id) || "" }));
+}
+
 app.get("/api/schedule/by-code/:code", (req, res) => {
   const porte = porteParCode(req.params.code);
   if (!porte) return res.status(404).json({ error: "Lien invalide" });
@@ -657,7 +674,7 @@ app.get("/api/schedule/by-code/:code", (req, res) => {
   const employees = employesDuSecteur(r.id, secteur);
   res.json({
     restaurant: { id: r.id, name: r.name },
-    employees: voitMontants ? employees : sansMontants(employees),
+    employees: voitMontants ? avecCodes(employees, r.id) : sansMontants(employees),
     secteur,
     peutModifier,
     voitMontants,

@@ -508,6 +508,50 @@ test("les trois portes de l'horaire", async (t) => {
     }
   });
 
+  // Le code d'accès personnel EST la clé de la page de quelqu'un. Le gérant en a besoin pour
+  // distribuer les liens ; personne d'autre ne doit les recevoir.
+  await t.test("seul le lien du gérant reçoit les codes d'accès personnels", async () => {
+    const gerant = await (await parCode(CODE_CUISINE)).json();
+    assert.ok(
+      gerant.employees.every((e) => typeof e.access_code === "string" && e.access_code.length === 6),
+      "le gérant reçoit les codes de son équipe"
+    );
+
+    // Le lien de lecture des cuisiniers : sans ça, n'importe quel cuisinier pourrait ouvrir
+    // la page d'un collègue et changer ses disponibilités à sa place.
+    const lecture = await (await parCode(CODE_LECTURE)).json();
+    assert.ok(lecture.employees.every((e) => e.access_code === undefined), "aucun code par le lien de lecture");
+
+    const salle = await (await parCode(CODE_SALLE)).json();
+    assert.ok(salle.employees.every((e) => e.access_code === undefined), "aucun code par le lien de la salle");
+
+    // Et l'entrée par mot de passe non plus.
+    const roster = await (await fetch(`${base}/api/schedule/roster`, { headers: { "X-Admin-Token": MOT_DE_PASSE } })).json();
+    assert.ok(
+      roster.restaurants.every((r) => r.employees.every((e) => e.access_code === undefined)),
+      "aucun code par l'entrée mot de passe"
+    );
+  });
+
+  await t.test("le gérant ne reçoit que les codes de SA cuisine", async () => {
+    const gerant = await (await parCode(CODE_CUISINE)).json();
+    const codes = gerant.employees.map((e) => e.access_code);
+    assert.ok(!codes.includes(serveuse.access_code), "le code de la serveuse ne sort pas");
+    assert.ok(codes.includes(cuisinier.access_code) && codes.includes(plongeur.access_code));
+    // Compter les employés serait fragile — d'autres sous-tests en ajoutent. Ce qui compte,
+    // c'est que tout ce qui sort par cette porte soit de la cuisine.
+    assert.ok(gerant.employees.every((e) => e.secteur === "cuisine"), "sa cuisine, et rien d'autre");
+  });
+
+  await t.test("les codes ne traînent pas dans le texte brut des mauvaises portes", async () => {
+    for (const code of [CODE_SALLE, CODE_LECTURE]) {
+      const texte = await (await parCode(code)).text();
+      for (const secret of [serveuse.access_code, cuisinier.access_code, plongeur.access_code]) {
+        assert.ok(!texte.includes(secret), `${secret} ne doit pas sortir par ${code}`);
+      }
+    }
+  });
+
   await t.test("le PDF de chaque porte ne contient que son équipe", async () => {
     const pdfCuisine = Buffer.from(await (await parCode(CODE_CUISINE, "/pdf?week=2026-09-21")).arrayBuffer());
     const pdfSalle = Buffer.from(await (await parCode(CODE_SALLE, "/pdf?week=2026-09-21")).arrayBuffer());

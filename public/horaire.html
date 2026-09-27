@@ -354,6 +354,30 @@
      c'est ce qui garantit que la case ne s'allonge pas quand on écrit une tâche. Ce qui
      dépasse est coupé — le texte complet reste visible en ouvrant le quart. */
   /* ---- Congés et vacances ---- */
+  /* Les liens personnels à distribuer. Dépliant comme les congés : c'est une chose qu'on
+     fait une fois au début, pas à chaque semaine — elle n'a pas à prendre de la place tout
+     le temps au-dessus de la grille. */
+  .liens-toggle {
+    width: 100%; text-align: left; background: rgba(255,255,255,0.04); color: #F1EFEA;
+    border: none; border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 12.5px;
+    font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+  }
+  .liens-body { margin-bottom: 12px; }
+  .liens-aide { font-size: 11.5px; color: #8993A4; line-height: 1.45; margin: 0 0 10px; }
+  .lien-ligne {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 9px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .lien-nom { font-size: 12.5px; font-weight: 700; color: #F1EFEA; min-width: 130px; }
+  .lien-relance {
+    font-size: 9.5px; font-weight: 700; color: #D4A857; background: rgba(212,168,87,0.12);
+    border-radius: 5px; padding: 2px 6px; margin-left: 5px; white-space: nowrap;
+  }
+  .lien-boite {
+    flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; color: #8993A4; background: #10151D; border-radius: 7px;
+    padding: 7px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .conges-toggle {
     width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
@@ -585,6 +609,13 @@ const I18N = {
     congeIncomplet: "Choisis un employé et une date de début.",
     congeErreur: "Impossible d'enregistrer. Vérifie les dates.",
     congeConfirmRetirer: "Retirer cette demande ?",
+    liensTitre: (n, manquants) =>
+      `Liens de l'équipe (${n})${manquants > 0 ? ` — ${manquants} à relancer` : ""}`,
+    liensAide: "Envoie son lien à chaque personne : c'est là qu'elle remplit ses disponibilités et qu'elle voit son horaire.",
+    liensPasRempli: "pas rempli",
+    liensCopier: "Copier",
+    liensCopie: "✓ Copié",
+    liensCopieImpossible: "Copie impossible — sélectionne le lien à la main :",
     congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
     dispoConflit: (texte) => `Attention : hors de ses disponibilités (${texte})`,
     dispoCourt: "Pas dispo",
@@ -664,6 +695,13 @@ const I18N = {
     congeIncomplet: "Pick an employee and a start date.",
     congeErreur: "Could not save. Check the dates.",
     congeConfirmRetirer: "Remove this request?",
+    liensTitre: (n, manquants) =>
+      `Team links (${n})${manquants > 0 ? ` — ${manquants} to chase` : ""}`,
+    liensAide: "Send each person their link: that's where they fill in their availability and see their schedule.",
+    liensPasRempli: "not filled",
+    liensCopier: "Copy",
+    liensCopie: "✓ Copied",
+    liensCopieImpossible: "Copy failed — select the link by hand:",
     congeConflit: (type) => `Warning: scheduled during "${type}"`,
     dispoConflit: (texte) => `Warning: outside their availability (${texte})`,
     dispoCourt: "Unavailable",
@@ -925,6 +963,18 @@ ScheduleUI.init({
   absences: () => absences,
   setAbsences: (a) => { absences = a; },
   disponibilites: () => disponibilites,
+  // Les liens personnels ne sont fournis que si le serveur a bien voulu les envoyer — donc
+  // uniquement sur le lien du gérant de cuisine. La page ne décide de rien.
+  liensEmployes: () => {
+    // roster garde toujours la même forme : { restaurants: [{ employees }] }, même quand il
+    // n'y en a qu'un. On aplatit plutôt que de supposer.
+    const source = ((roster && roster.restaurants) || []).flatMap((r) => r.employees || []);
+    const avecCode = source.filter((e) => e.access_code);
+    if (avecCode.length === 0) return null;
+    const par = {};
+    for (const e of avecCode) par[e.id] = `${location.origin}/e/${e.access_code}`;
+    return par;
+  },
   reloadAbsences: async () => {
     if (RESTAURANT_CODE) {
       return (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/absences`)).json()).absences;
