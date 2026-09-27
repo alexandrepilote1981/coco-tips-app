@@ -218,3 +218,113 @@ test("aucune journée n'en écrase une autre le même jour", () => {
     assert.equal(new Set(dates).size, dates.length, `doublon de date en ${annee}`);
   }
 });
+
+// ---------------------------------------------------------------- alertes de commande
+
+// Le cycle : la commande se passe une fois par semaine, la semaine d'avant. L'alerte doit
+// donc sortir le samedi qui précède cette semaine-là — la veille du dimanche où l'horaire se
+// monte. Tout ce bloc existe parce qu'une alerte qui sort un jour trop tard ne sert à rien.
+
+const cles = (a) => a.journees.map((j) => j.cle);
+
+test("l'alerte sort le samedi, neuf jours avant le lundi de la semaine visée", () => {
+  // L'exemple donné par le gérant : un férié le mercredi 14 octobre 2026, alerte le samedi
+  // 3 octobre. La semaine du 5 au 11 reste entière pour passer la commande.
+  assert.equal(F.samediDAlerte("2026-10-12"), "2026-10-03");
+  assert.equal(new Date("2026-10-03T12:00:00Z").getUTCDay(), 6, "un samedi");
+});
+
+test("le samedi d'alerte est toujours un samedi, quelle que soit l'année", () => {
+  for (const annee of [2026, 2027, 2028, 2029, 2030]) {
+    for (const f of F.feriesDeLAnnee(annee)) {
+      const lundi = F.lundiDe(f.date).toISOString().slice(0, 10);
+      const samedi = F.samediDAlerte(lundi);
+      assert.equal(new Date(`${samedi}T12:00:00Z`).getUTCDay(), 6, `${f.cle} ${annee} → ${samedi}`);
+    }
+  }
+});
+
+test("une semaine de commande complète sépare toujours l'alerte du férié", () => {
+  // C'est la promesse de toute la fonctionnalité : peu importe le jour où tombe la fête, il
+  // reste un lundi-au-samedi entier entre l'alerte et elle.
+  for (const annee of [2026, 2027, 2028]) {
+    for (const f of F.feriesDeLAnnee(annee)) {
+      const lundi = F.lundiDe(f.date).toISOString().slice(0, 10);
+      const samedi = F.samediDAlerte(lundi);
+      const jours = Math.round((Date.parse(`${f.date}T12:00:00Z`) - Date.parse(`${samedi}T12:00:00Z`)) / 86400000);
+      assert.ok(jours >= 9 && jours <= 15, `${f.cle} ${annee} : ${jours} jours d'avance`);
+    }
+  }
+});
+
+test("l'alerte apparaît le bon samedi et pas la veille", () => {
+  assert.equal(F.alertes("2026-10-02").length, 0, "le vendredi 2, rien");
+  const samedi = F.alertes("2026-10-03");
+  assert.equal(samedi.length, 1, "le samedi 3, elle sort");
+  assert.deepEqual(cles(samedi[0]), ["actionDeGrace"]);
+});
+
+test("l'alerte reste jusqu'au férié, puis s'arrête", () => {
+  for (const jour of ["2026-10-03", "2026-10-07", "2026-10-11", "2026-10-12"]) {
+    assert.equal(F.alertes(jour).length, 1, `elle devrait être là le ${jour}`);
+  }
+  // Une fois l'Action de grâce passée, « commande d'avance » ne veut plus rien dire.
+  assert.equal(F.alertes("2026-10-13").length, 0, "le lendemain, elle est partie");
+});
+
+test("une semaine qui porte trois journées ne donne qu'une alerte", () => {
+  // Vendredi saint (26 mars 2027) et dimanche de Pâques (28) sont dans la même semaine :
+  // une semaine, une commande, une alerte.
+  const a = F.alertes("2027-03-13");
+  assert.equal(a.length, 1);
+  assert.deepEqual(cles(a[0]), ["vendrediSaint", "dimanchePaques"]);
+});
+
+test("le lundi de Pâques a sa propre alerte, une semaine plus tard", () => {
+  // Il tombe dans la semaine SUIVANTE, donc il relève d'une autre commande. Deux alertes
+  // décalées d'une semaine, c'est exactement ce qu'il faut.
+  assert.equal(F.samediDAlerte(F.lundiDe("2027-03-29").toISOString().slice(0, 10)), "2027-03-20");
+  const a = F.alertes("2027-03-20");
+  assert.equal(a.length, 2, "les deux se chevauchent ce samedi-là");
+  assert.deepEqual(cles(a[0]), ["vendrediSaint", "dimanchePaques"]);
+  assert.deepEqual(cles(a[1]), ["lundiPaques"]);
+});
+
+test("Noël et le Jour de l'An se préparent en parallèle à la mi-décembre", () => {
+  assert.deepEqual(F.alertes("2026-12-12").map(cles), [["noel"]]);
+  // Le 19, les deux commandes sont en jeu : celle de la semaine de Noël et celle d'après.
+  assert.deepEqual(F.alertes("2026-12-19").map(cles), [["noel"], ["jourDeLAn"]]);
+  assert.deepEqual(F.alertes("2026-12-26").map(cles), [["jourDeLAn"]]);
+});
+
+test("une alerte à cheval sur deux années se calcule quand même", () => {
+  // La semaine du 28 décembre 2026 contient le 1er janvier 2027 : l'alerte sort en 2026
+  // pour une journée de 2027.
+  const a = F.alertes("2026-12-19").find((x) => cles(x).includes("jourDeLAn"));
+  assert.ok(a, "le Jour de l'An doit être trouvé depuis décembre");
+  assert.equal(a.debutISO, "2026-12-19");
+  assert.equal(a.finISO, "2027-01-01");
+});
+
+test("une journée ordinaire ne déclenche aucune alerte", () => {
+  for (const jour of ["2026-09-27", "2026-11-15", "2027-08-03"]) {
+    assert.deepEqual(F.alertes(jour), [], jour);
+  }
+});
+
+test("une date abîmée ne fait pas planter l'ouverture de l'app", () => {
+  // L'alerte se calcule au chargement de la page : si elle lève, c'est toute la page qui ne
+  // s'affiche plus.
+  for (const valeur of [null, undefined, "", "pas une date", 20261003, {}]) {
+    assert.deepEqual(F.alertes(valeur), [], `pour ${JSON.stringify(valeur)}`);
+  }
+});
+
+test("le 25 décembre est la seule journée où le restaurant ferme", () => {
+  const fermees = F.feriesDeLAnnee(2027).filter((f) => f.ferme);
+  assert.equal(fermees.length, 1);
+  assert.equal(fermees[0].cle, "noel");
+  // Toutes les autres portent le champ explicitement : « absent » ne doit jamais vouloir
+  // dire « ouvert » par accident.
+  for (const f of F.feriesDeLAnnee(2027)) assert.equal(typeof f.ferme, "boolean", f.cle);
+});

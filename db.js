@@ -31,6 +31,11 @@ CREATE TABLE IF NOT EXISTS restaurants (
   -- taux horaire. Reste à 0 tant que le comptable n'a pas donné le vrai chiffre : mieux vaut
   -- un coût visiblement incomplet qu'un coût inventé.
   charges_pct REAL DEFAULT 0,
+  -- Les rappels à relire avant un férié, une par ligne (« Appeler Dufour & Fils »,
+  -- « Doubler les bananes »). Du texte libre, pas une table : ce sont trois ou quatre
+  -- phrases écrites une fois, jamais triées ni comptées. Une table aurait apporté des
+  -- identifiants et un ordre à gérer, pour rien.
+  rappels_ferie TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -185,7 +190,7 @@ try {
 } catch (e) {
   // colonne déjà présente — rien à faire
 }
-for (const col of ["schedule_code_cuisine TEXT", "schedule_code_cuisine_lecture TEXT", "charges_pct REAL DEFAULT 0"]) {
+for (const col of ["schedule_code_cuisine TEXT", "schedule_code_cuisine_lecture TEXT", "charges_pct REAL DEFAULT 0", "rappels_ferie TEXT DEFAULT ''"]) {
   try {
     db.exec(`ALTER TABLE restaurants ADD COLUMN ${col};`);
   } catch (e) {
@@ -221,6 +226,7 @@ for (const colonne of ["schedule_code", "schedule_code_cuisine", "schedule_code_
   }
 }
 db.exec(`UPDATE restaurants SET charges_pct = 0 WHERE charges_pct IS NULL;`);
+db.exec(`UPDATE restaurants SET rappels_ferie = '' WHERE rappels_ferie IS NULL;`);
 
 module.exports = {
   db,

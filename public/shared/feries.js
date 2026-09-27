@@ -104,6 +104,10 @@
   // dans une colonne déjà étroite.
   const MENTION_FERIE = { fr: "férié", en: "holiday" };
 
+  function estISO(valeur) {
+    return typeof valeur === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valeur);
+  }
+
   function deuxChiffres(n) {
     return n < 10 ? `0${n}` : String(n);
   }
@@ -176,25 +180,29 @@
     const p = paques(an);
 
     const liste = [
-      { date: iso(an, 1, 1), cle: "jourDeLAn", type: "ferie", affluence: false },
-      { date: iso(an, 2, 14), cle: "saintValentin", type: "occasion", affluence: true },
+      { date: iso(an, 1, 1), cle: "jourDeLAn", type: "ferie", affluence: false, ferme: false },
+      { date: iso(an, 2, 14), cle: "saintValentin", type: "occasion", affluence: true, ferme: false },
       // La loi laisse l'employeur choisir entre Vendredi saint et lundi de Pâques ; la
       // grille montre les deux et le gérant sait lequel son restaurant observe. En cacher un
       // ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
       // c'est lui qui remplit la salle — d'où les trois journées d'affilée.
-      { date: isoDe(decaler(p, -2)), cle: "vendrediSaint", type: "ferie", affluence: false },
-      { date: isoDe(p), cle: "dimanchePaques", type: "occasion", affluence: true },
-      { date: isoDe(decaler(p, 1)), cle: "lundiPaques", type: "ferie", affluence: false },
-      { date: isoDe(lundiPrecedant(an, 5, 25)), cle: "patriotes", type: "ferie", affluence: false },
-      { date: isoDe(nieme(an, 5, 0, 2)), cle: "feteDesMeres", type: "occasion", affluence: true },
-      { date: isoDe(nieme(an, 6, 0, 3)), cle: "feteDesPeres", type: "occasion", affluence: true },
-      { date: iso(an, 6, 24), cle: "feteNationale", type: "ferie", affluence: false },
-      { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie", affluence: false },
-      { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie", affluence: false },
+      { date: isoDe(decaler(p, -2)), cle: "vendrediSaint", type: "ferie", affluence: false, ferme: false },
+      { date: isoDe(p), cle: "dimanchePaques", type: "occasion", affluence: true, ferme: false },
+      { date: isoDe(decaler(p, 1)), cle: "lundiPaques", type: "ferie", affluence: false, ferme: false },
+      { date: isoDe(lundiPrecedant(an, 5, 25)), cle: "patriotes", type: "ferie", affluence: false, ferme: false },
+      { date: isoDe(nieme(an, 5, 0, 2)), cle: "feteDesMeres", type: "occasion", affluence: true, ferme: false },
+      { date: isoDe(nieme(an, 6, 0, 3)), cle: "feteDesPeres", type: "occasion", affluence: true, ferme: false },
+      { date: iso(an, 6, 24), cle: "feteNationale", type: "ferie", affluence: false, ferme: false },
+      { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie", affluence: false, ferme: false },
+      { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie", affluence: false, ferme: false },
       // La seule journée du lot qui est les deux à la fois : la paie change ET la salle se
       // remplit.
-      { date: isoDe(nieme(an, 10, 1, 2)), cle: "actionDeGrace", type: "ferie", affluence: true },
-      { date: iso(an, 12, 25), cle: "noel", type: "ferie", affluence: false },
+      { date: isoDe(nieme(an, 10, 1, 2)), cle: "actionDeGrace", type: "ferie", affluence: true, ferme: false },
+      // `ferme` n'est pas une propriété du férié, c'est la politique du restaurant : le 25
+      // décembre est la SEULE journée de l'année où il n'ouvre pas. Ça vit ici parce que
+      // c'est ici qu'on décide quoi dire d'une journée ; si un jour vous ouvrez, c'est cette
+      // ligne qu'on change.
+      { date: iso(an, 12, 25), cle: "noel", type: "ferie", affluence: false, ferme: true },
     ];
 
     return liste.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -217,8 +225,73 @@
    * @param {string} dateISO  AAAA-MM-JJ
    */
   function ferieDuJour(dateISO) {
-    if (typeof dateISO !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+    if (!estISO(dateISO)) return null;
     return indexDeLAnnee(parseInt(dateISO.slice(0, 4), 10))[dateISO] || null;
+  }
+
+  function deISO(valeur) {
+    return jourUTC(parseInt(valeur.slice(0, 4), 10), parseInt(valeur.slice(5, 7), 10), parseInt(valeur.slice(8, 10), 10));
+  }
+
+  // Le lundi de la semaine qui contient cette date. Les semaines d'horaire vont du lundi au
+  // dimanche partout dans l'app ; celles-ci suivent, sinon une alerte ne tomberait pas sur
+  // la même semaine que la grille qu'elle concerne.
+  function lundiDe(dateISO) {
+    const d = deISO(dateISO);
+    const j = d.getUTCDay(); // 0 = dimanche
+    return decaler(d, j === 0 ? -6 : 1 - j);
+  }
+
+  // Neuf jours avant le lundi de la semaine visée — donc toujours un SAMEDI.
+  //
+  // Ce n'est pas un chiffre choisi au hasard, c'est le cycle de commande du restaurant : la
+  // commande se passe UNE FOIS PAR SEMAINE, la semaine d'avant. L'alerte doit donc être là
+  // le samedi, la veille du dimanche où l'horaire de cette semaine-là se monte. Elle arrive
+  // ainsi avant la commande, et il reste un lundi-au-samedi complet pour la passer.
+  //
+  // Une alerte qui sortirait « X jours avant le férié » se retrouverait tantôt avant, tantôt
+  // après la commande, selon le jour de la semaine où tombe la fête. Celle-ci tombe toujours
+  // au bon endroit du cycle.
+  function samediDAlerte(lundiSemaineISO) {
+    return isoDe(decaler(deISO(lundiSemaineISO), -9));
+  }
+
+  /**
+   * Les alertes actives aujourd'hui : une par SEMAINE qui contient une ou plusieurs journées
+   * marquées. Une semaine = une commande, donc une alerte — même si elle porte trois
+   * journées, comme la semaine du Vendredi saint et du dimanche de Pâques.
+   *
+   * Deux alertes peuvent être actives en même temps : à la mi-décembre, la semaine de Noël
+   * et celle du Jour de l'An se préparent en parallèle. Les deux sortent, dans l'ordre.
+   *
+   * @param {string} aujourdhuiISO
+   * @returns {Array<{lundiISO, debutISO, finISO, journees}>}
+   */
+  function alertes(aujourdhuiISO) {
+    if (!estISO(aujourdhuiISO)) return [];
+    const an = parseInt(aujourdhuiISO.slice(0, 4), 10);
+    // L'année d'avant et celle d'après : une semaine à cheval sur le Nouvel An appartient à
+    // l'année suivante, et son alerte sort en décembre.
+    const toutes = [...feriesDeLAnnee(an - 1), ...feriesDeLAnnee(an), ...feriesDeLAnnee(an + 1)];
+
+    const parSemaine = new Map();
+    for (const f of toutes) {
+      const lundi = isoDe(lundiDe(f.date));
+      if (!parSemaine.has(lundi)) parSemaine.set(lundi, []);
+      parSemaine.get(lundi).push(f);
+    }
+
+    const actives = [];
+    for (const [lundiISO, journees] of parSemaine) {
+      const debutISO = samediDAlerte(lundiISO);
+      // L'alerte s'arrête à la DERNIÈRE journée marquée de la semaine, pas à la fin de la
+      // semaine : une fois le férié passé, « commande d'avance » ne veut plus rien dire.
+      const finISO = journees[journees.length - 1].date;
+      if (aujourdhuiISO >= debutISO && aujourdhuiISO <= finISO) {
+        actives.push({ lundiISO, debutISO, finISO, journees });
+      }
+    }
+    return actives.sort((a, b) => (a.lundiISO < b.lundiISO ? -1 : a.lundiISO > b.lundiISO ? 1 : 0));
   }
 
   function estFerie(fete) {
@@ -241,7 +314,11 @@
     LIBELLES,
     paques,
     feriesDeLAnnee,
+    estISO,
     ferieDuJour,
+    lundiDe,
+    samediDAlerte,
+    alertes,
     estFerie,
     mentionFerie,
     libelle,

@@ -420,6 +420,78 @@ app.delete("/api/admin/absences/:id", requireScheduleAccess, (req, res) => {
   supprimerAbsence(req, res, restaurantId, null);
 });
 
+// ---------- Rappels avant un férié ----------
+//
+// Le problème, dans les mots du gérant : « pendant nos fériés, les horaires de livraison de
+// nos fournisseurs peuvent changer… si on manque de bananes, nous sommes dans la
+// schnoutte ». L'app ne peut pas savoir si Dufour & Fils est fermé le lundi — personne ne le
+// lui a dit. Mais elle sait quand un férié s'en vient, et elle peut ressortir à ce
+// moment-là ce que le gérant, lui, sait déjà. L'oubli qu'on vise n'est pas « je ne savais
+// pas », c'est « j'ai pas pensé à vérifier ».
+//
+// Qui y a droit : le gérant par /admin, et le gérant de cuisine par son lien. Ce sont les
+// deux qui passent les commandes. Le lien de la salle et celui des cuisiniers ne les voient
+// pas — ce n'est pas un secret, c'est du bruit pour quelqu'un qui ne commande rien.
+
+const RAPPELS_MAX = 20; // au-delà, la fenêtre devient un mur de texte que personne ne lit
+const RAPPEL_LONGUEUR_MAX = 120;
+
+function rappelsValides(valeur) {
+  return String(valeur == null ? "" : valeur)
+    .split("\n")
+    .map((l) => l.trim().slice(0, RAPPEL_LONGUEUR_MAX))
+    .filter(Boolean)
+    .slice(0, RAPPELS_MAX)
+    .join("\n");
+}
+
+app.get("/api/admin/rappels", requireAdmin, (req, res) => {
+  const restaurants = db
+    .prepare("SELECT id, name, rappels_ferie FROM restaurants ORDER BY created_at ASC")
+    .all();
+  res.json({ restaurants: restaurants.map((r) => ({ id: r.id, name: r.name, rappels: r.rappels_ferie || "" })) });
+});
+
+app.post("/api/admin/restaurants/:id/rappels", requireAdmin, (req, res) => {
+  const r = db.prepare("SELECT id FROM restaurants WHERE id = ?").get(req.params.id);
+  if (!r) return res.status(404).json({ error: "Restaurant introuvable" });
+  const rappels = rappelsValides(req.body.rappels);
+  db.prepare("UPDATE restaurants SET rappels_ferie = ? WHERE id = ?").run(rappels, r.id);
+  res.json({ rappels });
+});
+
+// Le lien du gérant de cuisine. `voitMontants` n'est vrai que pour cette porte-là : c'est
+// déjà la marque du gérant dans tout le reste du fichier, on s'en sert plutôt que d'inventer
+// un deuxième moyen de le reconnaître.
+function porteGerant(req, res) {
+  const porte = porteParCode(req.params.code);
+  if (!porte) {
+    res.status(404).json({ error: "Lien introuvable" });
+    return null;
+  }
+  if (!porte.voitMontants) {
+    res.status(403).json({ error: "Non autorisé" });
+    return null;
+  }
+  return porte;
+}
+
+app.get("/api/schedule/by-code/:code/rappels", (req, res) => {
+  const porte = porteGerant(req, res);
+  if (!porte) return;
+  res.json({
+    restaurants: [{ id: porte.restaurant.id, name: porte.restaurant.name, rappels: porte.restaurant.rappels_ferie || "" }],
+  });
+});
+
+app.post("/api/schedule/by-code/:code/rappels", (req, res) => {
+  const porte = porteGerant(req, res);
+  if (!porte) return;
+  const rappels = rappelsValides(req.body.rappels);
+  db.prepare("UPDATE restaurants SET rappels_ferie = ? WHERE id = ?").run(rappels, porte.restaurant.id);
+  res.json({ rappels });
+});
+
 // ---------- Effacement d'une semaine entière ----------
 
 function isISODate(value) {

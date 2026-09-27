@@ -574,6 +574,7 @@
 <script src="/shared/noms.js"></script>
 <script src="/shared/absences.js"></script>
 <script src="/shared/feries.js"></script>
+<script src="/shared/alerte-ferie.js"></script>
 <script src="/shared/cout-main-oeuvre.js"></script>
 <script src="/shared/horaire-mise-en-page.js"></script>
 <script src="/shared/horaire-image.js"></script>
@@ -2242,6 +2243,17 @@ TirerPourActualiser.init({
     if (TOKEN) await load();
   },
 });
+
+// La fenêtre de rappel avant un férié. Elle sort une fois par ouverture de l'app, et
+// seulement quand un férié approche — voir alerte-ferie.js pour le pourquoi du moment choisi.
+if (TOKEN) {
+  AlerteFerie.init({
+    lang: () => lang,
+    charger: async () => (await api("/api/admin/rappels")).restaurants,
+    enregistrer: (id, rappels) =>
+      api(`/api/admin/restaurants/${id}/rappels`, { method: "POST", body: JSON.stringify({ rappels }) }),
+  });
+}
 
 </script>
 </body>
