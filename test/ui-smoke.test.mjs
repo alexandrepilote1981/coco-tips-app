@@ -385,7 +385,7 @@ test("interface", optionsDuTest, async (t) => {
   });
 
   // Réutilisé par les tests de déclaration : crée un employé et rend son lien privé.
-  async function creerEmploye(nom) {
+  async function creerEmploye(nom, secteur) {
     const resto = await (
       await api("/api/admin/restaurants", {
         method: "POST",
@@ -395,7 +395,7 @@ test("interface", optionsDuTest, async (t) => {
     const employe = await (
       await api("/api/admin/employees", {
         method: "POST",
-        body: JSON.stringify({ restaurant_id: resto.id, name: nom }),
+        body: JSON.stringify({ restaurant_id: resto.id, name: nom, secteur }),
       })
     ).json();
     return { restoId: resto.id, employe, lien: `${serveur.base}/e/${employe.access_code}` };
@@ -568,6 +568,46 @@ test("interface", optionsDuTest, async (t) => {
   // de période a été retiré de la page employé : il ne servait qu'à cadrer des totaux
   // eux-mêmes retirés. Ce qui limite la longueur de la page, désormais, c'est le repli des
   // journées déjà envoyées — vérifié plus haut.
+
+  await t.test("un cuisinier ouvre sa page, quart et tâche compris", async () => {
+    // LE test de non-régression du pire bogue qu'on ait livré : pendant des jours, AUCUN
+    // cuisinier ne pouvait ouvrir sa page. Son quart porte role = "cuisinier" ; la table des
+    // postes de employee.html ne connaissait que la salle, lire [lang] sur un poste absent
+    // levait une exception, et comme render() était appelé à l'intérieur du try de load(),
+    // l'exception ressortait en « Connexion impossible ». Le serveur, lui, répondait 200 :
+    // le message accusait le réseau pour un bogue d'affichage, et personne ne cherchait au
+    // bon endroit. C'est pour ça que ce test regarde l'écran ET le contenu du quart.
+    const { employe, lien } = await creerEmploye("Trycia", "cuisine");
+    const demain = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({
+        employee_id: employe.id,
+        date: demain,
+        start_time: "05:30",
+        end_time: "15:00",
+        role: "cuisinier",
+        note: "Prép",
+      }),
+    });
+
+    await onglet.aller(lien, ".dispo-card");
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".error-box")`),
+      false,
+      "la page d'un cuisinier ne doit afficher aucun écran d'erreur"
+    );
+
+    const quart = await onglet.ev(`(document.querySelector(".day-pill.worked") || {}).innerText || ""`);
+    assert.match(quart, /05:30/, "l'heure de début");
+    assert.match(quart, /15:00/, "la cuisine finit à heure fixe : la fin doit s'afficher");
+    assert.match(quart, /Cuisinier/, "le poste de cuisine doit être traduit, pas planter");
+    assert.match(quart, /Prép/, "la tâche du quart");
+
+    // Et rien de la salle : un cuisinier ne déclare pas de pourboires.
+    assert.equal(await onglet.ev(`!!document.getElementById("addBtn")`), false, "pas de bouton Ajouter");
+    assert.equal(await onglet.ev(`!!document.querySelector(".kpi-grid")`), false, "pas de tableau de ventes");
+  });
 
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
