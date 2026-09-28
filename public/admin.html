@@ -372,6 +372,22 @@
   .cout-val.cout-egal { color: #8993A4; }
   .cout-notes { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; color: #8993A4; margin-bottom: 12px; }
   .cout-notes .cout-manque { color: #D4A857; }
+  /* L'entête d'une fiche repliée : le nom à gauche, l'argent à droite, et c'est tout.
+     C'est la ligne qu'on parcourt du pouce en cherchant quelqu'un. */
+  .fiche-entete {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    background: none; border: none; padding: 12px 0; cursor: pointer;
+    font-family: inherit; text-align: left; color: inherit;
+  }
+  .fiche-fleche { color: #D4A857; font-size: 11px; width: 10px; flex: 0 0 auto; }
+  .fiche-nom {
+    flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: #F1EFEA;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Les montants ne rétrécissent jamais : c'est l'information qu'on vient chercher, et un
+     nom long ne doit pas la pousser hors de l'écran. */
+  .fiche-resume { flex: 0 0 auto; display: flex; gap: 10px; font-size: 13px; }
+  .fiche-entete.ouverte .fiche-resume { opacity: 0.45; }
   .edition-form {
     margin-top: 10px; padding: 10px; border-radius: 12px;
     background: rgba(212,168,87,0.08); border: 1px solid rgba(212,168,87,0.25);
@@ -698,6 +714,17 @@ function ecrireStockage(zone, cle, valeur) {
 // render() reconstruit toute la page, un attribut posé sur un nœud ne survivrait pas au
 // premier rafraîchissement — et on perdrait la saisie en cours.
 const fichesEnEdition = new Set();
+
+// Quelles fiches d'employé sont dépliées dans l'onglet Déclarations. Repliées par défaut :
+// avec dix-huit personnes, l'onglet faisait 10,6 écrans de téléphone, et chaque fiche porte
+// un code, un lien, trois chiffres, un plafond et un tableau. Ce qu'on cherche en l'ouvrant,
+// c'est presque toujours UNE personne.
+const fichesOuvertes = new Set();
+
+// Modifier quelqu'un implique de le voir : une fiche en édition est forcément dépliée.
+function ficheOuverte(id) {
+  return fichesOuvertes.has(id) || fichesEnEdition.has(id);
+}
 
 const ONGLETS = ["declarations", "salle", "cuisine"];
 let onglet = ONGLETS.includes(lireStockage("localStorage", "coco-onglet-admin"))
@@ -1711,9 +1738,17 @@ function render() {
       const empPending = pendingByEmployee.find((p) => p.empId === e.id);
       html += `
         <div class="employee-card-block" id="emp-card-${e.id}">
+          <button class="fiche-entete ${ficheOuverte(e.id) ? "ouverte" : ""}" data-action="toggleFiche" data-emp="${e.id}" aria-expanded="${ficheOuverte(e.id)}">
+            <span class="fiche-fleche">${ficheOuverte(e.id) ? "▾" : "▸"}</span>
+            <span class="fiche-nom">${e.name}${e.employee_number ? ` · #${e.employee_number}` : ""}${e.secteur === "les_deux" ? `<span class="marque-deux">${t("marqueLesDeux")}</span>` : ""}</span>
+            <span class="fiche-resume">
+              <b style="color:#6FBF93;">${fmtMoney(e.totals.net)}</b>
+              ${empPending ? `<b style="color:${empPending.direction === "employer_owes" ? "#E2685A" : "#D4A857"};">${fmtMoney(empPending.amount)}</b>` : ""}
+            </span>
+          </button>
+          <div class="fiche-corps" style="display:${ficheOuverte(e.id) ? "block" : "none"};">
           <div class="employee-row">
             <div>
-              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}${e.secteur === "les_deux" ? `<span class="marque-deux">${t("marqueLesDeux")}</span>` : ""}</div>
               <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
               <div class="link-row">
                 <div class="link-box">${link}</div>
@@ -1818,6 +1853,7 @@ function render() {
               </tbody>
             </table>
             `}
+          </div>
           </div>
         </div>
       `;
@@ -2013,9 +2049,25 @@ function render() {
     });
   });
 
+  document.querySelectorAll('[data-action="toggleFiche"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.emp;
+      if (fichesOuvertes.has(id)) {
+        fichesOuvertes.delete(id);
+        // Replier une fiche qu'on était en train de modifier ferait disparaître la saisie
+        // sans rien dire : on ferme les deux ensemble, c'est le même geste.
+        fichesEnEdition.delete(id);
+      } else {
+        fichesOuvertes.add(id);
+      }
+      render();
+    });
+  });
+
   document.querySelectorAll('[data-action="modifierEmploye"]').forEach((btn) => {
     btn.addEventListener("click", () => {
       fichesEnEdition.add(btn.dataset.emp);
+      fichesOuvertes.add(btn.dataset.emp);
       render();
     });
   });
@@ -2078,38 +2130,48 @@ function render() {
 
   ScheduleUI.bindGridEvents();
 
+  // Les pastilles des bandeaux d'alerte. Depuis que les fiches sont repliées, sauter à
+  // quelqu'un veut d'abord dire OUVRIR sa fiche : sans ça, le clic amènerait sur une ligne
+  // fermée et la personne croirait que le bouton ne fait rien.
+  //
+  // L'ordre compte : on déplie, on redessine, ET ENSUITE on défile. Après un render() tous
+  // les nœuds sont neufs — une référence prise avant ne pointerait plus sur rien, et
+  // scrollIntoView() sur l'ancienne carte n'irait nulle part.
+  function ouvrirEtSauter(empId, apresRendu) {
+    fichesOuvertes.add(empId);
+    render();
+    const wrap = document.getElementById(`report-${empId}`);
+    if (wrap) wrap.style.display = "block";
+    const card = document.getElementById(`emp-card-${empId}`);
+    if (card) {
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+      card.classList.add("jump-highlight");
+      setTimeout(() => card.classList.remove("jump-highlight"), 1600);
+    }
+    if (apresRendu) apresRendu();
+  }
+
   document.querySelectorAll('[data-action="jumpToEmployee"]').forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const empId = btn.dataset.emp;
-      const wrap = document.getElementById(`report-${empId}`);
-      if (wrap) wrap.style.display = "block";
-      const card = document.getElementById(`emp-card-${empId}`);
-      if (card) {
-        card.scrollIntoView({ behavior: "smooth", block: "start" });
-        card.classList.add("jump-highlight");
-        setTimeout(() => card.classList.remove("jump-highlight"), 1600);
-      }
-    });
+    btn.addEventListener("click", () => ouvrirEtSauter(btn.dataset.emp));
   });
 
   document.querySelectorAll('[data-action="jumpToEntry"]').forEach((btn) => {
     btn.addEventListener("click", () => {
       const empId = btn.dataset.emp;
       const entryId = btn.dataset.entry;
-      const wrap = document.getElementById(`report-${empId}`);
-      if (wrap) wrap.style.display = "block";
-      // on laisse le temps au tableau de s'afficher avant de défiler jusqu'à la ligne précise
-      setTimeout(() => {
-        const row = document.getElementById(`row-${entryId}`);
-        if (row) {
-          row.scrollIntoView({ behavior: "smooth", block: "center" });
-          row.classList.add("row-jump-highlight");
-          setTimeout(() => row.classList.remove("row-jump-highlight"), 1600);
-        } else {
-          const card = document.getElementById(`emp-card-${empId}`);
-          if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }, 50);
+      ouvrirEtSauter(empId, () => {
+        // On laisse le temps au tableau de s'afficher avant de défiler jusqu'à la ligne
+        // précise. Le repli de la fiche ne change rien ici : ouvrirEtSauter l'a déjà
+        // dépliée, et c'est le TABLEAU du détail qui doit encore se poser.
+        setTimeout(() => {
+          const row = document.getElementById(`row-${entryId}`);
+          if (row) {
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            row.classList.add("row-jump-highlight");
+            setTimeout(() => row.classList.remove("row-jump-highlight"), 1600);
+          }
+        }, 50);
+      });
     });
   });
 

@@ -362,6 +362,31 @@ Une journée envoyée ou modifiée pendant la visite **ne saute pas** d'une sect
 sous le doigt : le déplacement se fait au prochain rendu. Une carte qui disparaît à l'instant
 où on tape « Envoyer » est désorientante.
 
+### Les fiches d'employé sont repliées
+
+Chaque fiche ne montre d'abord qu'une ligne : le **nom** à gauche, l'**argent** à droite — le
+pourboire net, et le montant en attente quand il y en a un. Le reste (code, lien, secteur,
+plafond, chiffres, tableau par jour) s'ouvre d'une tape.
+
+Pourquoi : l'onglet Déclarations faisait **10,6 écrans de téléphone** avec dix-huit
+personnes, et les onglets n'y changeaient rien — ils avaient réglé le TRAJET, pas la
+longueur. Ce qu'on vient y chercher est presque toujours UNE personne.
+
+Le résumé de la ligne repliée n'est pas décoratif : c'est ce qu'on parcourt du pouce. Les
+montants ne rétrécissent jamais (`flex: 0 0 auto`), un nom long s'ellipse plutôt que de les
+pousser hors de l'écran.
+
+**Le piège qu'il fallait fermer d'abord**, et c'est le propriétaire qui l'a vu : « quand je
+reçois une alerte d'argent, ça m'amène direct à la bonne place ? » Les pastilles des bandeaux
+sautent à une personne ou à une journée. Sur une fiche repliée, le clic aurait amené sur une
+ligne fermée — ce qui se lit comme un bouton qui ne fait rien. `ouvrirEtSauter()` déplie
+d'abord, redessine, ET ENSUITE défile : après un `render()` tous les nœuds sont neufs, et
+une référence prise avant ne pointerait plus sur rien.
+
+L'état vit dans `fichesOuvertes` au niveau du module, comme `fichesEnEdition` — et une fiche
+en cours de modification est forcément dépliée (`ficheOuverte()`). La replier referme aussi
+son édition : faire disparaître une saisie sans rien dire serait pire.
+
 ### Corriger un nom ou un numéro
 
 Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
