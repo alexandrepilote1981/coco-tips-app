@@ -87,12 +87,29 @@
     flex: 0 0 78px; scroll-snap-align: start; text-align: center; padding: 10px 6px; border-radius: 14px; background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06);
   }
+  /* Une teinte par POSTE, et deux familles : froid = salle, chaud = cuisine. Ici la couleur
+     remplit la pastille au lieu de se limiter à un trait comme dans la grille du gérant —
+     cette page-ci ne porte aucune alerte rouge (ni férié, ni plafond, ni congé), le fond
+     est donc libre.
+
+     Ça vient d'un vrai manque : depuis que les deux horaires sont réunis, quelqu'un qui
+     travaille des deux bords voyait son lundi en cuisine et son mardi en salle du même
+     vert. Le mot était écrit, mais la couleur ne l'aidait pas. */
   .day-pill.worked { background: rgba(111,191,147,0.14); border-color: rgba(111,191,147,0.35); }
+  .day-pill.worked.poste-hostess { background: rgba(111,159,222,0.16); border-color: rgba(111,159,222,0.45); }
+  .day-pill.worked.poste-hostess .dow { color: #8FB6E8; }
+  .day-pill.worked.poste-cuisinier { background: rgba(212,168,87,0.16); border-color: rgba(212,168,87,0.45); }
+  .day-pill.worked.poste-cuisinier .dow { color: #D4A857; }
+  .day-pill.worked.poste-plongeur { background: rgba(200,128,74,0.20); border-color: rgba(200,128,74,0.55); }
+  .day-pill.worked.poste-plongeur .dow { color: #D9915A; }
   .day-pill .dow { font-size: 10px; text-transform: uppercase; color: #8993A4; font-weight: 700; }
   .day-pill.worked .dow { color: #6FBF93; }
   .day-pill .dnum { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; margin: 2px 0 6px; color: #F1EFEA; }
-  .day-pill.is-today { border-color: rgba(212,168,87,0.5); }
-  .day-pill.is-today .dnum { color: #D4A857; }
+  /* « Aujourd'hui » était marqué en or. Depuis qu'un quart de cuisine est or lui aussi, les
+     deux se confondaient : une journée de cuisine avait l'air d'être aujourd'hui. Le blanc
+     ne veut rien dire d'autre sur cette page, il était libre. */
+  .day-pill.is-today { border-color: rgba(255,255,255,0.55); }
+  .day-pill.is-today .dnum { color: #F1EFEA; }
   .day-pill .ptime { font-size: 12px; font-weight: 700; color: #F1EFEA; line-height: 1.3; }
   .day-pill .pfin { font-size: 11px; font-weight: 700; color: #8993A4; line-height: 1.3; }
   .day-pill .prole { font-size: 8.5px; color: #8993A4; margin-top: 1px; }
@@ -519,6 +536,17 @@ const ROLES_EMP = {
 // Un poste inconnu ne doit JAMAIS faire tomber la page : la liste ci-dessus peut prendre du
 // retard sur celle du serveur, et un nom de poste manquant est un détail — une page blanche
 // n'en est pas un.
+/**
+ * Le poste qui donne sa couleur à la journée. Quand quelqu'un fait deux quarts le même
+ * jour — la cuisine le matin, la salle le soir — c'est le PREMIER qui teinte la pastille :
+ * les quarts sont triés par heure de début, donc c'est celui par lequel la journée commence.
+ * Les deux postes restent écrits l'un sous l'autre dans la case.
+ */
+const POSTES_CONNUS = ["server", "hostess", "cuisinier", "plongeur"];
+function posteClasse(role) {
+  return POSTES_CONNUS.indexOf(String(role || "")) === -1 ? "server" : String(role);
+}
+
 function posteLisible(role) {
   const poste = ROLES_EMP[role];
   return poste ? poste[lang] : "";
@@ -1076,7 +1104,7 @@ function render() {
                 .filter((s) => s.date === dStr)
                 .sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
               return `
-                <div class="day-pill ${quarts.length ? "worked" : ""} ${dStr === todayStr ? "is-today" : ""}">
+                <div class="day-pill ${quarts.length ? "worked" : ""} ${quarts.length ? `poste-${posteClasse(quarts[0].role)}` : ""} ${dStr === todayStr ? "is-today" : ""}">
                   <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
                   <div class="dnum">${d.getDate()}</div>
                   ${quarts.map((shift, i) => `

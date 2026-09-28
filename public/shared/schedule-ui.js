@@ -439,7 +439,7 @@ window.ScheduleUI = (function () {
             <div class="shift-cell ${depasse} ${jourMarque ? "col-marque" : ""}">
               ${
                 shift
-                  ? `<div class="shift-chip role-${roleSecondaire(shift.role) ? "hostess" : "server"} ${peutModifier ? "" : "lecture"} ${absence ? "conflit" : ""} ${horsDispo ? "hors-dispo" : ""}"
+                  ? `<div class="shift-chip poste-${classePoste(shift.role)} ${peutModifier ? "" : "lecture"} ${absence ? "conflit" : ""} ${horsDispo ? "hors-dispo" : ""}"
                           ${
                             absence
                               ? `title="${host.t("congeConflit", window.Absences.libelleType(absence.type, lang))}"`
@@ -635,9 +635,27 @@ window.ScheduleUI = (function () {
     return vues;
   }
 
-  // Deux teintes seulement : le poste principal en vert, le second en or.
-  function roleSecondaire(role) {
-    return role === "hostess" || role === "plongeur";
+  /**
+   * La classe qui porte la couleur d'un quart : une par POSTE.
+   *
+   * Il n'y en avait que deux — « principal » en vert, « second » en or — et c'est ce que le
+   * propriétaire a fait remonter : « quand un employé de la cuisine a un chiffre cuisinier
+   * c'est vert, s'il fait un chiffre serveuse c'est aussi vert ». Pour quelqu'un qui
+   * travaille des deux bords, ses deux sortes de quarts se ressemblaient exactement.
+   *
+   * Les quatre teintes sont rangées en deux familles, pour que la couleur dise deux choses
+   * d'un coup : le POSTE par la teinte exacte, le BORD par la famille.
+   *
+   *   froid — Serveur vert, Hôtesse bleu        → salle
+   *   chaud — Cuisinier or, Plongeur cuivre     → cuisine
+   *
+   * Un poste inconnu retombe sur « server » : mieux vaut une couleur que pas de couleur du
+   * tout, et le nom du poste reste écrit dans la case de toute façon.
+   */
+  const POSTES_CONNUS = ["server", "hostess", "cuisinier", "plongeur"];
+
+  function classePoste(role) {
+    return POSTES_CONNUS.indexOf(String(role || "")) === -1 ? "server" : String(role);
   }
 
   // Les 24 heures par tranches de 15 min. On construit la liste nous-mêmes parce que le
@@ -1254,6 +1272,7 @@ window.ScheduleUI = (function () {
     duplicateWeekToNext,
     clearWeekShifts,
     bilanEmploye,
+    classePoste,
     quartsAilleursLeMemeJour,
     ajouterConge,
     retirerConge,

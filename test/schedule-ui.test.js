@@ -286,3 +286,40 @@ test("modifier le quart de sa PROPRE fiche ne se compte pas comme un double", ()
   assert.equal(r.heures, 0);
 });
 
+// ------------------------------------------------- une couleur par poste
+//
+// « Quand un employé de la cuisine a un chiffre cuisinier c'est vert, s'il fait un chiffre
+// serveuse c'est aussi vert. » Il n'y avait que deux teintes — principal / second — et deux
+// postes de bords différents partageaient donc la même. Il en faut une par poste.
+
+test("chaque poste a sa propre classe de couleur", () => {
+  assert.equal(UI.classePoste("server"), "server");
+  assert.equal(UI.classePoste("hostess"), "hostess");
+  assert.equal(UI.classePoste("cuisinier"), "cuisinier");
+  assert.equal(UI.classePoste("plongeur"), "plongeur");
+});
+
+test("les quatre postes donnent quatre classes DIFFÉRENTES", () => {
+  // Le bogue d'origine tenait exactement là : Cuisinier et Serveur tombaient sur la même.
+  const classes = ["server", "hostess", "cuisinier", "plongeur"].map(UI.classePoste);
+  assert.equal(new Set(classes).size, 4);
+});
+
+test("un poste inconnu retombe sur une couleur plutôt que sur aucune", () => {
+  // Le nom du poste reste écrit dans la case : mieux vaut une teinte neutre qu'une case
+  // sans couleur, qui se lirait comme un quart différent des autres.
+  for (const role of [undefined, null, "", "inventé", "SERVER"]) {
+    assert.equal(UI.classePoste(role), "server", JSON.stringify(role));
+  }
+});
+
+test("tous les postes proposés par la grille ont leur couleur", () => {
+  // Si schedule-ui ajoutait un poste sans lui donner de teinte, il sortirait en vert comme
+  // un Serveur — et ce serait exactement le bogue qu'on vient de corriger.
+  for (const secteur of ["salle", "cuisine"]) {
+    for (const role of UI.rolesDe(secteur)) {
+      assert.equal(UI.classePoste(role), role, `${role} doit avoir sa propre couleur`);
+    }
+  }
+});
+
