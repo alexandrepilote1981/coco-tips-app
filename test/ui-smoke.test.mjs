@@ -1101,6 +1101,56 @@ test("interface", optionsDuTest, async (t) => {
     );
   });
 
+  await t.test("chaque poste porte sa couleur, et les alertes rouges restent les plus fortes", async () => {
+    // Deux moitiés, et la seconde compte autant que la première. La couleur du poste passe
+    // par une BARRE sur le côté et non par le fond de la case : mesuré en maquette, les
+    // quatre couleurs dans le fond noyaient complètement la colonne rouge d'un férié. On
+    // vérifie donc que la barre est là ET que le fond reste neutre.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Couleurs" }),
+    })).json();
+    const creer = (nom, secteur) =>
+      api("/api/admin/employees", { method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: nom, secteur }) })
+        .then((r) => r.json());
+    const serveuse = await creer("Une Serveuse", "salle");
+    const hotesse = await creer("Une Hotesse", "salle");
+    const demain = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
+    for (const [emp, role] of [[serveuse, "server"], [hotesse, "hostess"]]) {
+      await api("/api/admin/shifts", {
+        method: "POST",
+        body: JSON.stringify({ employee_id: emp.id, date: demain, start_time: "09:00", end_time: "17:00", role }),
+      });
+    }
+
+    // On ouvre par les déclarations — ouvrirAdmin() attend la barre de période, qui n'existe
+    // que là — puis on passe à l'horaire de salle par son onglet.
+    await ouvrirAdmin();
+    await onglet.ev(`document.querySelector('[data-onglet="salle"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".shift-chip")`), { quoi: "la grille de salle" });
+
+    const vu = await onglet.ev(`(() => {
+      const chips = [...document.querySelectorAll(".shift-chip")];
+      const lire = (cls) => {
+        const c = chips.find((n) => n.classList.contains(cls));
+        if (!c) return null;
+        const barre = getComputedStyle(c, "::before").backgroundColor;
+        return { barre, fond: getComputedStyle(c).backgroundColor };
+      };
+      return { serveur: lire("poste-server"), hotesse: lire("poste-hostess") };
+    })()`);
+
+    assert.ok(vu.serveur, "un quart de Serveur doit porter sa classe");
+    assert.ok(vu.hotesse, "un quart d'Hôtesse doit porter sa classe");
+    assert.notEqual(vu.serveur.barre, vu.hotesse.barre, "les deux postes doivent avoir des barres de couleurs différentes");
+    assert.equal(vu.serveur.fond, vu.hotesse.fond, "le fond, lui, reste le même — il appartient aux alertes");
+
+    // Le fond doit être neutre, donc sans dominante : aucune composante ne se détache.
+    const [r, v, b] = vu.serveur.fond.match(/\d+/g).map(Number);
+    assert.ok(Math.max(r, v, b) - Math.min(r, v, b) < 12, `le fond d'une case doit rester neutre, il est rgb(${r},${v},${b})`);
+
+    await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

@@ -106,6 +106,44 @@ La **cuisine** ne déclare rien. Son horaire affiche `début → fin`, parce qu'
 (`public/shared/cout-main-oeuvre.js`). C'est le coût du PLAN, pas du réel : personne ne
 poinçonne. Les postes diffèrent aussi (Cuisinier / Plongeur contre Serveur / Hôtesse).
 
+### Une couleur par poste
+
+Chaque poste a sa teinte, et les quatre se rangent en deux familles — la couleur dit donc
+**deux choses d'un coup** : le poste par la teinte exacte, le bord par la famille.
+
+| Poste | Teinte | Famille |
+| --- | --- | --- |
+| Serveur | vert `#6FBF93` | froide → salle |
+| Hôtesse | bleu `#6F9FDE` | froide → salle |
+| Cuisinier | or `#D4A857` | chaude → cuisine |
+| Plongeur | cuivre `#C8804A` | chaude → cuisine |
+
+Il n'y en avait que deux avant — « poste principal » en vert, « second » en or — et le
+propriétaire a mis le doigt sur ce que ça cachait : « quand un employé de la cuisine a un
+chiffre cuisinier c'est vert, s'il fait un chiffre serveuse c'est aussi vert ». Pour
+quelqu'un qui travaille des deux bords, ses deux sortes de quarts se ressemblaient
+exactement.
+
+**Dans la grille, la couleur passe par une BARRE sur le côté, jamais par le fond.** Le fond
+appartient aux alertes, qui sont toutes rouges : colonne d'un férié, rangée d'un dépassement
+d'heures, contour d'un quart posé pendant un congé. Mesuré en maquette avant de choisir :
+les quatre couleurs dans le fond noyaient complètement la colonne rouge d'un férié — on
+gagnait le poste et on perdait les alertes. Le test d'interface vérifie les deux, la barre
+ET la neutralité du fond.
+
+**Sur la page de l'employé, elles remplissent la pastille**, parce que cette page-là ne porte
+aucune alerte rouge : le fond y est libre. Quand quelqu'un a deux quarts le même jour, c'est
+le PREMIER qui teinte la journée — les quarts sont triés par heure de début, donc c'est celui
+par lequel la journée commence ; les deux postes restent écrits l'un sous l'autre.
+
+« Aujourd'hui » y a quitté l'or pour le blanc : depuis qu'un quart de cuisine est or, une
+journée de cuisine avait l'air d'être aujourd'hui.
+
+**Le vert et l'or servent aussi aux congés** (Vacances en vert, Congé en or) — la question
+a été posée, et vérifiée en maquette. Ils ne se confondent pas parce qu'ils ne prennent
+jamais la même forme : une absence est une CASE entière teintée qui porte son mot écrit, un
+poste est un TRAIT sur une case qui porte une heure en gros.
+
 Chaque quart de cuisine peut aussi porter une **tâche** (« Prép », « Commande à défaire »).
 Elle s'ajoute au poste sans le remplacer : on avait d'abord misé sur la couleur de la
 pastille pour dire le poste, mais dans une grille de quatorze personnes on lit les mots, pas
@@ -637,8 +675,8 @@ dans Déclarations, parce que ses cartes SONT les déclarations. Vérifié dans
 `test/ui-smoke.test.mjs`, dans les deux sens : présent dans l'onglet cuisine, absent des
 déclarations.
 
-L'onglet Déclarations reste long (8,6 écrans) : c'est la liste des employés de salle, pas la
-navigation. Un repli par employé reste à faire si le besoin revient.
+Le repli des fiches d'employé, livré depuis, a ramené cet onglet de 10,6 à 5,2 écrans : voir
+« Les fiches d'employé sont repliées » plus haut.
 
 ## Accès et authentification
 
