@@ -9,6 +9,9 @@ const miseEnPage = require("./public/shared/horaire-mise-en-page.js");
 const Disponibilites = require("./public/shared/disponibilites.js");
 // Congés et vacances : mêmes règles de plage et de tri des deux côtés.
 const Absences = require("./public/shared/absences.js");
+// Qui travaille où. Chargé ici ET par les pages : c'est lui qui décide qu'un quart
+// appartient à un secteur par son POSTE, et plus par le secteur de la personne.
+const Secteurs = require("./public/shared/secteurs.js");
 const { guard, blocageSecondes, refuser, noteFailure, clearFailures, noteSuccess, estConnu } = require("./rate-limit");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
@@ -379,8 +382,9 @@ app.get("/api/schedule/roster", requireScheduleAccess, (req, res) => {
 // monter l'horaire, pas un secret — le gérant en a besoin dans la grille, l'équipe peut la
 // voir sur les liens horaire. Rien de financier là-dedans.
 function disponibilitesDuRestaurant(restaurantId, secteur) {
-  const conditionSecteur = secteur ? " AND e.secteur = ?" : "";
-  const params = secteur ? [restaurantId, secteur] : [restaurantId];
+  const equipe = secteur ? Secteurs.conditionEmployeSQL(secteur, "e.secteur") : null;
+  const conditionSecteur = equipe ? ` AND ${equipe.sql}` : "";
+  const params = equipe ? [restaurantId, ...equipe.params] : [restaurantId];
   return db
     .prepare(`
       SELECT d.* FROM disponibilites d
@@ -412,8 +416,9 @@ function enregistrerDisponibilites(employeeId, lignes) {
 }
 
 function absencesDuRestaurant(restaurantId, secteur) {
-  const conditionSecteur = secteur ? " AND e.secteur = ?" : "";
-  const params = secteur ? [restaurantId, secteur] : [restaurantId];
+  const equipe = secteur ? Secteurs.conditionEmployeSQL(secteur, "e.secteur") : null;
+  const conditionSecteur = equipe ? ` AND ${equipe.sql}` : "";
+  const params = equipe ? [restaurantId, ...equipe.params] : [restaurantId];
   return db
     .prepare(`
       SELECT a.* FROM absences a
@@ -427,8 +432,9 @@ function absencesDuRestaurant(restaurantId, secteur) {
 // Une absence n'existe que pour un employé de CE restaurant, et de CE secteur quand la porte
 // en a un : le lien de la cuisine ne pose pas de congé à une serveuse.
 function employePourAbsence(employeeId, restaurantId, secteur) {
-  const conditionSecteur = secteur ? " AND secteur = ?" : "";
-  const params = secteur ? [employeeId, restaurantId, secteur] : [employeeId, restaurantId];
+  const equipe = secteur ? Secteurs.conditionEmployeSQL(secteur) : null;
+  const conditionSecteur = equipe ? ` AND ${equipe.sql}` : "";
+  const params = equipe ? [employeeId, restaurantId, ...equipe.params] : [employeeId, restaurantId];
   return db.prepare(`SELECT * FROM employees WHERE id = ? AND restaurant_id = ?${conditionSecteur}`).get(...params);
 }
 
@@ -449,8 +455,9 @@ function creerAbsence(req, res, restaurantId, secteur) {
 }
 
 function supprimerAbsence(req, res, restaurantId, secteur) {
-  const conditionSecteur = secteur ? " AND e.secteur = ?" : "";
-  const params = secteur ? [req.params.id, restaurantId, secteur] : [req.params.id, restaurantId];
+  const equipe = secteur ? Secteurs.conditionEmployeSQL(secteur, "e.secteur") : null;
+  const conditionSecteur = equipe ? ` AND ${equipe.sql}` : "";
+  const params = equipe ? [req.params.id, restaurantId, ...equipe.params] : [req.params.id, restaurantId];
   const absence = db
     .prepare(`
       SELECT a.* FROM absences a JOIN employees e ON e.id = a.employee_id
@@ -590,13 +597,17 @@ function deleteShiftsBetween(restaurantId, from, to, secteur) {
   // Sans secteur, on efface toute la semaine du restaurant — c'est ce que fait le tableau de
   // bord. Avec, on reste dans son équipe : le gérant de cuisine ne vide pas la salle.
   if (secteur) {
+    // Le filtre porte sur le POSTE du quart, pas sur l'équipe de la personne. Sans ça,
+    // « effacer la semaine » depuis la cuisine effacerait aussi les quarts de SALLE d'un
+    // employé mixte — un effacement en lot sans annulation possible.
+    const quart = Secteurs.conditionQuartSQL(secteur, "role");
     return db
       .prepare(`
         DELETE FROM shifts
-        WHERE date >= ? AND date <= ?
-          AND employee_id IN (SELECT id FROM employees WHERE restaurant_id = ? AND secteur = ?)
+        WHERE date >= ? AND date <= ? AND ${quart.sql}
+          AND employee_id IN (SELECT id FROM employees WHERE restaurant_id = ?)
       `)
-      .run(from, to, restaurantId, secteur);
+      .run(from, to, ...quart.params, restaurantId);
   }
   return db
     .prepare(`
@@ -643,9 +654,10 @@ function employesDuSecteur(restaurantId, secteur) {
   return db
     .prepare(`
       SELECT id, name, employee_number, secteur, taux_horaire, heures_max
-      FROM employees WHERE restaurant_id = ? AND secteur = ? ORDER BY created_at ASC
+      FROM employees WHERE restaurant_id = ? AND ${Secteurs.conditionEmployeSQL(secteur).sql}
+      ORDER BY created_at ASC
     `)
-    .all(restaurantId, secteur);
+    .all(restaurantId, ...Secteurs.conditionEmployeSQL(secteur).params);
 }
 
 // Les montants ne sont pas simplement cachés à l'écran : ils ne sortent pas du serveur.
@@ -740,10 +752,10 @@ app.get("/api/schedule/by-code/:code/shifts", (req, res) => {
     .prepare(`
       SELECT s.* FROM shifts s
       JOIN employees e ON e.id = s.employee_id
-      WHERE e.restaurant_id = ? AND e.secteur = ?
+      WHERE e.restaurant_id = ? AND ${Secteurs.conditionQuartSQL(porte.secteur).sql}
       ORDER BY s.date ASC, s.start_time ASC
     `)
-    .all(porte.restaurant.id, porte.secteur);
+    .all(porte.restaurant.id, ...Secteurs.conditionQuartSQL(porte.secteur).params);
   res.json({ shifts });
 });
 
@@ -758,9 +770,10 @@ app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
   }
   // Le secteur compte autant que le restaurant : le lien cuisine ne doit pas pouvoir
   // céduler une serveuse, ni l'inverse.
+  const equipe = Secteurs.conditionEmployeSQL(porte.secteur);
   const emp = db
-    .prepare("SELECT * FROM employees WHERE id = ? AND restaurant_id = ? AND secteur = ?")
-    .get(employee_id, r.id, porte.secteur);
+    .prepare(`SELECT * FROM employees WHERE id = ? AND restaurant_id = ? AND ${equipe.sql}`)
+    .get(employee_id, r.id, ...equipe.params);
   if (!emp) return res.status(403).json({ error: "Cet employé n'est pas dans cette équipe" });
   const id = nanoid(10);
   db.prepare(
@@ -776,9 +789,9 @@ app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
   const shift = db
     .prepare(`
       SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id
-      WHERE s.id = ? AND e.restaurant_id = ? AND e.secteur = ?
+      WHERE s.id = ? AND e.restaurant_id = ? AND ${Secteurs.conditionQuartSQL(porte.secteur).sql}
     `)
-    .get(req.params.id, porte.restaurant.id, porte.secteur);
+    .get(req.params.id, porte.restaurant.id, ...Secteurs.conditionQuartSQL(porte.secteur).params);
   if (!shift) return res.status(404).json({ error: "Quart introuvable" });
   const { date, start_time, end_time, role, note } = req.body;
   db.prepare(
@@ -805,9 +818,9 @@ app.delete("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
   const shift = db
     .prepare(`
       SELECT s.* FROM shifts s JOIN employees e ON e.id = s.employee_id
-      WHERE s.id = ? AND e.restaurant_id = ? AND e.secteur = ?
+      WHERE s.id = ? AND e.restaurant_id = ? AND ${Secteurs.conditionQuartSQL(porte.secteur).sql}
     `)
-    .get(req.params.id, porte.restaurant.id, porte.secteur);
+    .get(req.params.id, porte.restaurant.id, ...Secteurs.conditionQuartSQL(porte.secteur).params);
   if (!shift) return res.status(404).json({ error: "Quart introuvable" });
   db.prepare("DELETE FROM shifts WHERE id=?").run(req.params.id);
   res.json({ ok: true });
@@ -830,9 +843,10 @@ function employeesOf(restaurantId, secteur) {
     return db
       .prepare(`
         SELECT id, name, employee_number FROM employees
-        WHERE restaurant_id = ? AND secteur = ? ORDER BY created_at ASC
+        WHERE restaurant_id = ? AND ${Secteurs.conditionEmployeSQL(secteur).sql}
+        ORDER BY created_at ASC
       `)
-      .all(restaurantId, secteur);
+      .all(restaurantId, ...Secteurs.conditionEmployeSQL(secteur).params);
   }
   return db
     .prepare("SELECT id, name, employee_number FROM employees WHERE restaurant_id = ? ORDER BY created_at ASC")
@@ -859,7 +873,9 @@ async function sendSchedulePdf(res, restaurant, weekStartISO, lang, secteur) {
   const buffer = await buildSchedulePdf({
     restaurantName: miseEnPage.nomFeuille(restaurant.name, secteur, lang),
     employees: employes,
-    shifts: shiftsOfWeek(restaurant.id, weekStartISO).filter((q) => ids.has(q.employee_id)),
+    shifts: shiftsOfWeek(restaurant.id, weekStartISO).filter(
+      (q) => ids.has(q.employee_id) && (!secteur || Secteurs.duRole(q.role) === secteur)
+    ),
     weekStartISO,
     lang,
     // La cuisine finit à l'heure : son horaire affiche donc l'heure de fin. En salle, une
@@ -1053,9 +1069,7 @@ function tacheValide(valeur) {
   return String(valeur == null ? "" : valeur).trim().slice(0, miseEnPage.TACHE_MAX);
 }
 
-function secteurValide(valeur) {
-  return valeur === "cuisine" ? "cuisine" : "salle";
-}
+const secteurValide = Secteurs.valide;
 function tauxValide(valeur) {
   const n = typeof valeur === "number" ? valeur : parseFloat(valeur);
   if (!Number.isFinite(n) || n < 0) return 0;

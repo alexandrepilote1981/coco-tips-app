@@ -110,6 +110,25 @@ window.ScheduleUI = (function () {
     return contextes[cle(restaurantId, secteur)] || { secteur: secteur || "salle", employees: [], peutModifier: true, voitMontants: false, chargesPct: 0 };
   }
 
+  // Les quarts de CETTE grille, et rien d'autre.
+  //
+  // Le piège qu'on ferme ici : la grille suppose UN quart par personne par jour (elle fait
+  // un `find` sur employé + date). Tant qu'une personne n'était que d'un bord, c'était vrai.
+  // Un employé qui travaille des deux bords peut avoir un quart de cuisine le lundi et un
+  // quart de salle le mardi — sans ce filtre, chaque grille attraperait le quart de l'autre,
+  // et pire, « effacer la semaine » depuis la cuisine effacerait les quarts de salle.
+  //
+  // C'est le POSTE du quart qui tranche, jamais le secteur de la personne : voir
+  // public/shared/secteurs.js.
+  function quartsDe(secteur) {
+    const S = window.Secteurs;
+    const quarts = host.shifts();
+    // Sans le module — un vieux cache qui n'a pas rechargé la page — mieux vaut tout
+    // montrer que vider la grille : une grille vide se lit comme une semaine non faite.
+    if (!S) return quarts;
+    return quarts.filter((q) => S.duRole(q.role) === S.valide(secteur));
+  }
+
   // Ce que la semaine affichée va coûter — et surtout combien elle coûte DE MOINS que la
   // précédente. C'est le troisième chiffre qui compte : un total tout seul ne dit rien, un
   // total qui baisse se regarde. Et c'est le coût du PLAN : personne ne poinçonne.
@@ -117,7 +136,7 @@ window.ScheduleUI = (function () {
     const t = host.t;
     const lang = host.lang();
     const C = window.CoutMainOeuvre;
-    const quarts = host.shifts();
+    const quarts = quartsDe(secteur);
 
     const precedente = C.coutSurPeriode(employees, quarts, weekDates(addDays(weekStart, -7)).map(isoDate), chargesPct);
     const diff = C.ecart(actuelle, precedente);
@@ -310,7 +329,7 @@ window.ScheduleUI = (function () {
     const t = host.t;
     const icon = host.icon;
     const lang = host.lang();
-    const shifts = host.shifts();
+    const shifts = quartsDe(secteur);
     const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
 
     // Le bilan de la semaine sert deux fois : à la barre du haut, et à chaque rangée pour
@@ -507,8 +526,7 @@ window.ScheduleUI = (function () {
     if (secteur !== "cuisine") return [];
     const ids = new Set((employees || []).map((e) => e.id));
     const vues = [];
-    const quarts = host
-      .shifts()
+    const quarts = quartsDe(secteur)
       .filter((q) => ids.has(q.employee_id) && String(q.note || "").trim())
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     for (const q of quarts) {
@@ -730,7 +748,7 @@ window.ScheduleUI = (function () {
     const ctx = contexteDe(restaurantId, secteur);
     const empIds = ctx.employees.map((e) => e.id);
     const dates = weekDates(weekStart).map((d) => isoDate(d));
-    const weekShifts = host.shifts().filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
+    const weekShifts = quartsDe(ctx.secteur).filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
 
     if (weekShifts.length === 0) {
       alert(host.t("aucunQuartACopier"));
@@ -745,7 +763,7 @@ window.ScheduleUI = (function () {
       let skipped = 0;
       for (const s of weekShifts) {
         const newDate = isoDate(addDays(new Date(s.date + "T12:00:00"), 7));
-        const alreadyExists = host.shifts().some((x) => x.employee_id === s.employee_id && x.date === newDate);
+        const alreadyExists = quartsDe(ctx.secteur).some((x) => x.employee_id === s.employee_id && x.date === newDate);
         if (alreadyExists) {
           skipped++;
           continue;
@@ -784,7 +802,7 @@ window.ScheduleUI = (function () {
     const ctx = contexteDe(restaurantId, secteur);
     const empIds = ctx.employees.map((e) => e.id);
     const dates = weekDates(weekStart).map((d) => isoDate(d));
-    const weekShifts = host.shifts().filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
+    const weekShifts = quartsDe(ctx.secteur).filter((s) => empIds.includes(s.employee_id) && dates.includes(s.date));
 
     if (weekShifts.length === 0) {
       alert(host.t("aucunQuartAEffacer"));
@@ -896,7 +914,7 @@ window.ScheduleUI = (function () {
         const blob = await window.HoraireImage.construireImageHoraire({
           restaurantName: nomFeuille,
           employees: ctx.employees,
-          shifts: host.shifts(),
+          shifts: quartsDe(ctx.secteur),
           weekStartISO: weekISO,
           lang: host.lang(),
           avecHeureFin: ctx.secteur === "cuisine",

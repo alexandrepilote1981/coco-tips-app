@@ -97,6 +97,7 @@
   .day-pill .pfin { font-size: 11px; font-weight: 700; color: #8993A4; line-height: 1.3; }
   .day-pill .prole { font-size: 8.5px; color: #8993A4; margin-top: 1px; }
   .day-pill .ptache { font-size: 8.5px; color: #D4A857; margin-top: 1px; }
+  .day-pill .pquart-sep { height: 1px; background: rgba(255,255,255,0.14); margin: 6px 4px 5px; }
   .swipe-hint { font-size: 10px; color: #6B7280; text-align: center; }
   .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 22px 0 10px; display:flex; justify-content:space-between; align-items:center;}
   .add-btn { background:#6FBF93; color:#10151D; border:none; border-radius:999px; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; }
@@ -218,6 +219,7 @@
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/code-acces.js"></script>
 <script src="/shared/disponibilites.js"></script>
+<script src="/shared/secteurs.js"></script>
 <script src="/shared/tip-math.js"></script>
 <script>
 // ---------- Icônes (SVG en ligne, remplace les emojis pour un rendu pro cohérent) ----------
@@ -1016,10 +1018,14 @@ function render() {
   // travail à faire, le reste est de l'historique. C'est l'historique qui gonflait la page.
   const aFaire = allEntries.filter((e) => !e.submitted_at);
   const envoyees = allEntries.filter((e) => e.submitted_at);
-  // La cuisine ne déclare pas de pourboires : lui montrer des champs de ventes et un
+  // La cuisine PURE ne déclare pas de pourboires : lui montrer des champs de ventes et un
   // pourcentage moyen n'aurait aucun sens. Elle garde son horaire, ses disponibilités et
   // sa messagerie — c'est tout ce que sa page a à faire.
-  const estCuisine = employee.secteur === "cuisine";
+  //
+  // Quelqu'un qui travaille des deux bords, lui, garde son formulaire : il fait des
+  // pourboires dès qu'il met le pied sur le plancher. C'est la règle de Secteurs, et elle
+  // n'est écrite qu'une fois.
+  const estCuisine = !Secteurs.declarePourboires(employee.secteur);
   currentEntries = allEntries;
 
   const unreadReplies = conversation.filter((m) => m.sender === "admin" && !m.is_read).length;
@@ -1054,17 +1060,25 @@ function render() {
             const todayStr = dateToISO(today);
             return Array.from({ length: 14 }, (_, i) => addDaysLocal(today, i)).map((d) => {
               const dStr = dateToISO(d);
-              const shift = myShifts.find((s) => s.date === dStr);
+              // TOUS les quarts de la journée, pas le premier trouvé. Quelqu'un qui travaille
+              // des deux bords peut faire la cuisine le matin et la salle le soir : n'en
+              // montrer qu'un se lirait comme un quart annulé. Les deux grilles du gérant
+              // empêchent déjà d'en mettre deux du MÊME secteur le même jour, donc il y en a
+              // au plus deux ici.
+              const quarts = myShifts
+                .filter((s) => s.date === dStr)
+                .sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
               return `
-                <div class="day-pill ${shift ? "worked" : ""} ${dStr === todayStr ? "is-today" : ""}">
+                <div class="day-pill ${quarts.length ? "worked" : ""} ${dStr === todayStr ? "is-today" : ""}">
                   <div class="dow">${d.toLocaleDateString(t("locale"), { weekday: "short" })}</div>
                   <div class="dnum">${d.getDate()}</div>
-                  ${shift ? `
+                  ${quarts.map((shift, i) => `
+                    ${i > 0 ? `<div class="pquart-sep"></div>` : ""}
                     <div class="ptime">${shift.start_time}</div>
-                    ${estCuisine && shift.end_time ? `<div class="pfin">→ ${shift.end_time}</div>` : ""}
+                    ${Secteurs.duRole(shift.role) === "cuisine" && shift.end_time ? `<div class="pfin">→ ${shift.end_time}</div>` : ""}
                     <div class="prole">${posteLisible(shift.role)}</div>
                     ${shift.note ? `<div class="ptache">${String(shift.note).replace(/</g, "&lt;")}</div>` : ""}
-                  ` : ""}
+                  `).join("")}
                 </div>
               `;
             }).join("");

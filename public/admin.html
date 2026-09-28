@@ -372,6 +372,16 @@
   .cout-val.cout-egal { color: #8993A4; }
   .cout-notes { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; color: #8993A4; margin-bottom: 12px; }
   .cout-notes .cout-manque { color: #D4A857; }
+  .secteur-select {
+    background: rgba(255,255,255,0.06); color: #F1EFEA; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px; padding: 4px 8px; font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+  }
+  /* La marque qui dit pourquoi la même personne apparaît dans les deux listes. */
+  .marque-deux {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+    background: rgba(212,168,87,0.18); color: #D4A857; font-size: 10px; font-weight: 800;
+    vertical-align: middle;
+  }
   /* Section « Employés cuisine », repliée par défaut. */
   .secteur-toggle {
     width: 100%; display: flex; align-items: center; gap: 8px; margin-top: 10px;
@@ -617,6 +627,7 @@
 <script src="/shared/noms.js"></script>
 <script src="/shared/absences.js"></script>
 <script src="/shared/disponibilites.js"></script>
+<script src="/shared/secteurs.js"></script>
 <script src="/shared/feries.js"></script>
 <script src="/shared/alerte-ferie.js"></script>
 <script src="/shared/cout-main-oeuvre.js"></script>
@@ -687,6 +698,21 @@ let disponibilites = [];
 // reconstruit toute la page, et une section refermée à chaque rafraîchissement serait
 // insupportable.
 const cuisinesOuvertes = new Set();
+// Le secteur d'une personne : un seul choix à trois, et non deux boutons « → Cuisine » et
+// « → Salle » qu'il aurait fallu multiplier pour ajouter « les deux ». Un menu dit d'un coup
+// d'œil où la personne est ET ce qu'elle peut devenir.
+function choixSecteurHTML(e) {
+  const actuel = Secteurs.valide(e.secteur);
+  return `
+    <select class="secteur-select" data-action="changerSecteur" data-id="${e.id}" aria-label="${t("secteurDe", e.name)}">
+      ${[
+        ["salle", t("secteurSalle")],
+        ["cuisine", t("secteurCuisine")],
+        ["les_deux", t("secteurLesDeux")],
+      ].map(([v, nom]) => `<option value="${v}" ${v === actuel ? "selected" : ""}>${nom}</option>`).join("")}
+    </select>`;
+}
+
 function cuisineOuverte(rid) {
   return cuisinesOuvertes.has(rid);
 }
@@ -785,6 +811,12 @@ const I18N = {
     sousCuisine: "Sa page : horaire et disponibilités, aucun pourboire à déclarer",
     versCuisine: "→ Cuisine",
     versSalle: "→ Salle",
+    secteurSalle: "Salle",
+    secteurCuisine: "Cuisine",
+    secteurLesDeux: "Les deux",
+    secteurDe: (nom) => `Secteur de ${nom}`,
+    marqueLesDeux: "Les deux",
+    confirmVersLesDeux: "Mettre cette personne dans les DEUX équipes ?\n\nElle apparaîtra dans l'horaire de la salle ET dans celui de la cuisine, et gardera son formulaire de déclaration de pourboires.",
     confirmVersCuisine: "Déplacer cette personne en cuisine ?\n\nElle ne déclarera plus de pourboires. Ses quarts déjà cédulés la suivent.",
     confirmVersSalle: "Déplacer cette personne en salle ?\n\nElle pourra de nouveau déclarer ses pourboires. Ses quarts déjà cédulés la suivent.",
     employesCuisine: (n) => `Employés cuisine (${n})`,
@@ -981,6 +1013,12 @@ const I18N = {
     sousCuisine: "Their page: schedule and availability, no tips to declare",
     versCuisine: "→ Kitchen",
     versSalle: "→ Dining room",
+    secteurSalle: "Dining room",
+    secteurCuisine: "Kitchen",
+    secteurLesDeux: "Both",
+    secteurDe: (nom) => `${nom}'s team`,
+    marqueLesDeux: "Both",
+    confirmVersLesDeux: "Put this person on BOTH teams?\n\nThey will appear in the dining room schedule AND the kitchen schedule, and will keep their tip declaration form.",
     confirmVersCuisine: "Move this person to the kitchen?\n\nThey will no longer declare tips. Shifts already scheduled follow them.",
     confirmVersSalle: "Move this person to the dining room?\n\nThey will be able to declare tips again. Shifts already scheduled follow them.",
     employesCuisine: (n) => `Kitchen staff (${n})`,
@@ -1479,8 +1517,11 @@ function render() {
     const totNet = r.employees.reduce((s, e) => s + e.totals.net, 0);
     // La salle déclare des pourboires, la cuisine non : les deux listes n'ont pas les mêmes
     // colonnes, et mélanger les deux remplirait la page de 0,00 $ sans signification.
-    const equipeSalle = r.employees.filter((e) => e.secteur !== "cuisine");
-    const equipeCuisine = r.employees.filter((e) => e.secteur === "cuisine");
+    // Quelqu'un qui travaille des deux bords apparaît dans les DEUX listes et les DEUX
+    // grilles — c'est ce que veut dire « les deux ». Sa fiche porte une marque, sinon le
+    // voir deux fois dans la page se lirait comme un doublon.
+    const equipeSalle = r.employees.filter((e) => Secteurs.travailleEn(e.secteur, "salle"));
+    const equipeCuisine = r.employees.filter((e) => Secteurs.travailleEn(e.secteur, "cuisine"));
 
     // L'équipe de cuisine — ses liens, ses taux, ses plafonds, les charges — vit dans
     // l'onglet de SON horaire, pas dans celui des déclarations. La cuisine ne déclare rien :
@@ -1514,7 +1555,7 @@ function render() {
         ${equipeCuisine.map((e) => `
           <div class="cuisine-row">
             <div>
-              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
+              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}${e.secteur === "les_deux" ? `<span class="marque-deux">${t("marqueLesDeux")}</span>` : ""}</div>
               <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
               <div class="link-row">
                 <div class="link-box">${origin}/e/${e.access_code}</div>
@@ -1542,7 +1583,7 @@ function render() {
               </div>
             </div>
             <div class="employee-row-actions">
-              <button class="secondary-btn" data-action="changerSecteur" data-id="${e.id}" data-vers="salle">${t("versSalle")}</button>
+              ${choixSecteurHTML(e)}
               <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
             </div>
           </div>
@@ -1611,7 +1652,7 @@ function render() {
         <div class="employee-card-block" id="emp-card-${e.id}">
           <div class="employee-row">
             <div>
-              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
+              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}${e.secteur === "les_deux" ? `<span class="marque-deux">${t("marqueLesDeux")}</span>` : ""}</div>
               <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
               <div class="link-row">
                 <div class="link-box">${link}</div>
@@ -1620,7 +1661,7 @@ function render() {
             </div>
             <div class="employee-row-actions">
               <button class="secondary-btn" data-action="messageEmployee" data-id="${e.id}" data-name="${e.name}" data-resto="${r.name}">${icon("mail", 12)} ${t("messageTab")}</button>
-              <button class="secondary-btn" data-action="changerSecteur" data-id="${e.id}" data-vers="cuisine">${t("versCuisine")}</button>
+              ${choixSecteurHTML(e)}
               <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
             </div>
           </div>
@@ -1877,18 +1918,23 @@ function render() {
 
   // Déplacer quelqu'un d'une équipe à l'autre. Ses quarts déjà cédulés le suivent : ils sont
   // attachés à la personne, pas à l'équipe — c'est voulu, on ne perd pas un horaire déjà fait.
-  document.querySelectorAll('[data-action="changerSecteur"]').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const vers = btn.dataset.vers;
-      if (!confirm(t(vers === "cuisine" ? "confirmVersCuisine" : "confirmVersSalle"))) return;
-      if (vers === "cuisine") {
-        const carte = btn.closest(".card");
-        if (carte) cuisinesOuvertes.add(btn.dataset.resto || "");
+  document.querySelectorAll('select[data-action="changerSecteur"]').forEach((menu) => {
+    const avant = menu.value;
+    menu.addEventListener("change", async () => {
+      const vers = menu.value;
+      const question = vers === "cuisine" ? "confirmVersCuisine" : vers === "les_deux" ? "confirmVersLesDeux" : "confirmVersSalle";
+      if (!confirm(t(question))) {
+        // Remettre le menu où il était : laisser le nouveau choix affiché après un refus
+        // ferait croire que le changement a eu lieu.
+        menu.value = avant;
+        return;
       }
+      if (vers !== "salle") cuisinesOuvertes.add(menu.dataset.resto || "");
       try {
-        await api(`/api/admin/employees/${btn.dataset.id}`, { method: "POST", body: JSON.stringify({ secteur: vers }) });
+        await api(`/api/admin/employees/${menu.dataset.id}`, { method: "POST", body: JSON.stringify({ secteur: vers }) });
         await load();
       } catch (err) {
+        menu.value = avant;
         alert(t("erreurEnregistrement"));
       }
     });

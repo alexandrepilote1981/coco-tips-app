@@ -50,6 +50,7 @@ public/shared/tip-math.js calcul des pourboires — chargé par le serveur ET le
 public/shared/schedule-ui.js  grille d'horaire — partagée par /admin et /horaire
 public/shared/noms.js     découpage prénom / nom de famille
 public/shared/code-acces.js  lit le code dans l'adresse, en tolérant un lien abîmé en chemin
+public/shared/secteurs.js  qui travaille où ; c'est le POSTE d'un quart qui dit son secteur
 public/shared/horaire-mise-en-page.js  mise en page de la feuille — dessinée en PDF et en image
 public/shared/horaire-image.js  export de la feuille en PNG (surface canvas)
 public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulement)
@@ -141,6 +142,64 @@ n'est pas un dépassement.
 Les taux horaires et les plafonds ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
 `test/portes-horaire.test.mjs`.
+
+## Travailler des deux bords
+
+Certaines personnes font la cuisine ET la salle. Un employé porte donc un `secteur` qui vaut
+`salle`, `cuisine` ou **`les_deux`**, et `public/shared/secteurs.js` tient toute la règle.
+
+### Le changement de règle, et pourquoi il fallait le faire
+
+Partout, le secteur d'un QUART se déduisait du secteur de la PERSONNE : les requêtes
+filtraient sur `e.secteur`, la page employé décidait d'afficher l'heure de fin d'après
+`employee.secteur`. Tant qu'une personne n'était que d'un bord, les deux revenaient au même.
+
+Dès qu'elle est des deux, ils se séparent — et **c'est le QUART qui a raison**. Une serveuse
+qui fait un midi à la plonge ne devient pas plongeuse ; c'est ce quart-là qui est en cuisine.
+Le poste du quart le disait déjà : `Secteurs.duRole()` le lit, et plus rien ne devine.
+
+Ce que ça règle du même coup, sans rien ajouter :
+
+- le lien du gérant de cuisine ne reçoit que les quarts de cuisine, **même ceux d'un employé
+  mixte** — un quart de salle ne fuit pas vers une porte qui n'y a pas droit ;
+- la masse salariale ne compte que les heures de cuisine, parce qu'un quart de salle n'a pas
+  d'heure de fin ;
+- **« effacer la semaine » n'efface que les quarts de SA grille.** C'est le piège du lot :
+  un effacement en lot n'a aucune annulation possible, et filtrer sur le secteur de la
+  personne aurait emporté les quarts de salle d'un employé mixte sans que personne ne s'en
+  aperçoive avant le service. Vérifié dans `test/portes-horaire.test.mjs`.
+
+Un poste inconnu compte comme **salle**, jamais comme cuisine : se tromper vers la salle fait
+apparaître un quart au mauvais endroit, se tromper vers la cuisine le ferait entrer dans un
+calcul d'argent.
+
+### Ce que ça donne à l'écran
+
+Un employé `les_deux` apparaît dans les DEUX listes du tableau de bord et les DEUX grilles,
+avec une marque « Les deux » sur sa fiche — sans elle, le voir deux fois se lirait comme un
+doublon. Son secteur se change par un menu à trois choix plutôt que par les anciens boutons
+« → Cuisine » / « → Salle », qu'il aurait fallu multiplier.
+
+Sur **sa page à lui**, une seule bande d'horaire porte ses deux sortes de quarts : chacun
+s'affiche d'après SON poste, donc un quart de cuisine montre `05:30 → 15:00` et un quart de
+salle montre `16:00` tout court. La bande montre TOUS les quarts d'une journée et non le
+premier trouvé : quelqu'un peut faire la cuisine le matin et la salle le soir, et n'en
+montrer qu'un se lirait comme un quart annulé.
+
+Et il **garde son formulaire de déclaration** (`Secteurs.declarePourboires()`) : seule la
+cuisine PURE n'en a pas. Quelqu'un qui met le pied sur le plancher fait des pourboires.
+
+### Les liens personnels
+
+Le lien du gérant de cuisine porte les codes d'accès de son équipe, **employés mixtes
+compris** — demande explicite du propriétaire : « je veux que les gérants soient en mesure de
+distribuer les liens perso des employés ».
+
+Le lien de la SALLE, lui, n'en reçoit toujours aucun, et c'est une décision, pas un oubli :
+la cuisine a deux liens (gérant et lecture), la salle n'en a qu'un, partagé à toute l'équipe.
+Y mettre les codes donnerait à chaque serveuse la page de ses collègues, pourboires déclarés
+compris. Le propriétaire a tranché : « le code gérant salle doit pouvoir juste gérer
+l'horaire, je vais gérer par mon code admin perso ».
 
 ## Congés et absences
 
@@ -528,6 +587,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
 - `test/code-acces.test.js` — chaque façon dont un lien s'abîme en chemin, et la limite
   volontaire : un lien abîmé au milieu est refusé, pas deviné.
+- `test/secteurs.test.js` — le secteur d'un quart se lit sur son poste, « les deux » est des
+  deux équipes, et un poste inconnu penche toujours vers la salle.
 - `test/rate-limit.test.js` — la mécanique du plafond, chaque test sur son propre guichet.
 - `test/verrou-codes.test.mjs` — la promesse vécue par une employée : mon lien marche-t-il ?
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code

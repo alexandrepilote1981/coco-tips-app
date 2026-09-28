@@ -675,6 +675,45 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
   });
 
+  await t.test("un employé des deux bords voit UN horaire, et garde son formulaire", async () => {
+    // La demande, mot pour mot : « dans son horaire à lui il voit une horaire avec toutes
+    // ses chiffres cuisine et salle dans le même ». Le piège que ce test ferme : la page
+    // décidait d'afficher l'heure de fin d'après le secteur de la PERSONNE. Pour quelqu'un
+    // des deux bords, il n'y a pas de bonne réponse à cette question — c'est chaque QUART
+    // qui a la sienne.
+    const { employe, lien } = await creerEmploye("Trycia", "les_deux");
+    const jour = (n) => {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: employe.id, date: jour(1), start_time: "05:30", end_time: "15:00", role: "cuisinier", note: "Prép" }),
+    });
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: employe.id, date: jour(2), start_time: "16:00", end_time: "23:00", role: "server" }),
+    });
+
+    await onglet.aller(lien, ".dispo-card");
+    assert.equal(await onglet.ev(`!!document.querySelector(".error-box")`), false, "aucune erreur");
+
+    const bande = await onglet.ev(`[...document.querySelectorAll(".day-pill.worked")].map(n => n.innerText).join(" | ")`);
+    assert.match(bande, /05:30/, "son quart de cuisine");
+    assert.match(bande, /15:00/, "la cuisine finit à heure fixe : la fin s'affiche");
+    assert.match(bande, /Cuisinier/);
+    assert.match(bande, /Prép/);
+    assert.match(bande, /16:00/, "son quart de salle, dans la MÊME bande");
+    assert.match(bande, /Serveur/);
+    // Et surtout : le quart de SALLE n'a pas d'heure de fin. Une serveuse part quand la
+    // salle est vide ; écrire 23:00 serait une promesse fausse.
+    assert.doesNotMatch(bande, /23:00/, "un quart de salle ne montre jamais son heure de fin");
+
+    // Il fait des pourboires dès qu'il met le pied sur le plancher : son formulaire reste.
+    assert.equal(await onglet.ev(`!!document.getElementById("addBtn")`), true, "le bouton Ajouter doit rester");
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
