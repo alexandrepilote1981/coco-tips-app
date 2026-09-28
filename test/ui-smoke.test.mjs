@@ -934,6 +934,55 @@ test("interface", optionsDuTest, async (t) => {
     );
   });
 
+  await t.test("les boutons d'une fiche ne se mettent pas en colonne sur un grand écran", async () => {
+    // « Tu as une énorme perte d'espace, pourquoi c'est laid comme ça ? » — et c'était vrai.
+    // Les quatre boutons d'action étaient en flex-direction: column QUELLE QUE SOIT la
+    // largeur. Sur une tablette, la colonne devenait plus haute que le texte à sa gauche et
+    // la carte se retrouvait à moitié vide. Ça ne se voyait pas en testant au téléphone.
+    const { employe } = await creerEmploye("Marie-Eve Mainville");
+    await onglet.taille(1024);
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="toggleFiche"][data-emp="${employe.id}"]')`), {
+      quoi: "la fiche",
+    });
+    await onglet.ev(`document.querySelector('[data-action="toggleFiche"][data-emp="${employe.id}"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector("#emp-card-${employe.id} .employee-row-actions")`), {
+      quoi: "les boutons de la fiche",
+    });
+
+    const mesures = await onglet.ev(`(() => {
+      const zone = document.querySelector("#emp-card-${employe.id} .employee-row-actions");
+      const boutons = [...zone.children].map((n) => Math.round(n.getBoundingClientRect().top));
+      return { hauteur: Math.round(zone.getBoundingClientRect().height), lignes: new Set(boutons).size, combien: boutons.length };
+    })()`);
+    // Ce qu'on interdit, c'est la COLONNE — chaque bouton sur sa propre ligne. Exiger une
+    // ligne unique serait fragile : le nombre de boutons et la longueur d'une adresse
+    // changent, et le test casserait pour une raison qui n'a rien à voir.
+    assert.ok(
+      mesures.lignes < mesures.combien,
+      `${mesures.combien} boutons sur ${mesures.lignes} lignes : ils sont en colonne`
+    );
+    assert.ok(mesures.hauteur < 80, `la rangée devrait rester basse, elle fait ${mesures.hauteur}px`);
+
+    // Sur un téléphone ils ont le droit de passer à la ligne — c'est même le but. La seule
+    // chose interdite reste la même : un bouton par ligne.
+    await onglet.taille(390);
+    await jusqua(async () => (await onglet.ev(`window.innerWidth`)) === 390, { quoi: "la largeur téléphone" });
+    const surTel = await onglet.ev(`(() => {
+      const zone = document.querySelector("#emp-card-${employe.id} .employee-row-actions");
+      if (!zone) return null;
+      const tops = [...zone.children].map((n) => Math.round(n.getBoundingClientRect().top));
+      return { lignes: new Set(tops).size, combien: tops.length };
+    })()`);
+    if (surTel) {
+      assert.ok(
+        surTel.lignes < surTel.combien,
+        `${surTel.combien} boutons sur ${surTel.lignes} lignes : ils sont en colonne même au téléphone`
+      );
+    }
+    await onglet.taille(1000);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

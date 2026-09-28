@@ -121,9 +121,20 @@
     background: #1B222D; border-radius: 14px; padding: 16px 16px 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.06);
   }
   .employee-card-block:last-of-type { margin-bottom: 0; }
-  .employee-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 0 10px; }
+  .employee-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 0 0 10px; }
+  /* Le bloc de gauche prend la place qui reste, mais accepte de rétrécir : sans min-width:0
+     une adresse longue refuse de se replier et pousse les boutons hors de la carte. */
+  .employee-row > div:first-child { flex: 1 1 240px; min-width: 0; }
   .employee-card-block:first-of-type .employee-row { border-top: none; }
-  .employee-row-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  /* Les boutons étaient empilés en COLONNE, quelle que soit la largeur. Sur un téléphone
+     ça se défendait ; sur une tablette, quatre boutons l'un sous l'autre rendaient la
+     rangée plus haute que le texte à sa gauche, et la carte se retrouvait à moitié vide.
+     En ligne avec retour automatique : une seule ligne sur grand écran, deux sur un
+     téléphone, et plus jamais de colonne de la hauteur de la carte. */
+  .employee-row-actions {
+    display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px;
+    align-items: center; justify-content: flex-end; margin-left: auto;
+  }
   .secondary-btn { background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 10px; padding: 3px 8px; border-radius: 6px; white-space: nowrap; height: fit-content; }
   .employee-stats { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 0 12px; align-items: flex-end; }
   .employee-stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #8993A4; font-weight: 700; margin-bottom: 3px; }
