@@ -132,12 +132,35 @@ couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Sa longueur 
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
 réfèrent tous les deux.
 
-Chaque employé de cuisine peut aussi porter un **plafond d'heures par semaine**
-(`employees.heures_max`, 0 = aucun plafond). Quand la semaine cédulée le dépasse, toute la
+Chaque employé — **de cuisine comme de salle** — peut porter un **plafond d'heures par
+semaine** (`employees.heures_max`, 0 = aucun plafond). Quand la semaine cédulée le dépasse, toute la
 rangée de la personne rougit dans la grille, et ses heures s'écrivent sous son nom sous la
 forme `24 h / 20 h`. Les heures s'affichent pour toute la grille et pas seulement pour ceux
 qui ont un plafond : sinon les rangées n'auraient pas la même hauteur. Être pile au plafond
 n'est pas un dépassement.
+
+**Le plafond compte les heures des DEUX équipes.** Dans les mots du propriétaire : « si un
+employé dit qu'il peut faire 20 h, c'est 20 h total, c'est souvent des restrictions de visa
+étudiant, et le reste est indiqué à 40 h vu que je veux pas payer de overtime ». Un plafond
+porte donc sur la PERSONNE, pas sur un poste : une limite de visa ne se divise pas entre la
+cuisine et la salle, et l'overtime non plus.
+
+Ça oblige chaque grille à connaître des heures qu'elle n'affiche pas. Une porte par code ne
+reçoit que les quarts de son secteur ; le serveur lui envoie donc, à côté, `heuresAilleurs` —
+`{employee_id, date, heures}` et rien d'autre, seulement pour les employés `les_deux`. La
+porte apprend que la personne a travaillé 7 h ailleurs ce jour-là, jamais ce qu'elle y
+faisait. Sans ça, quelqu'un à 15 h de cuisine et 16 h de salle s'affichait « 15 h / 20 h »,
+en vert, alors qu'il était à 31 h — et on lui ajoutait un quart en croyant qu'il restait de
+la place.
+
+La barre du haut, elle, reste à 15 h : c'est la masse salariale de la CUISINE, des heures
+qu'on multiplie par un taux. Les deux chiffres ne mesurent pas la même chose — l'un est un
+budget, l'autre est une personne.
+
+Les heures et les montants sont deux permissions séparées (`avecHeures` et `voitMontants`
+dans `renderWeekGrid`). Le tableau de bord montre les heures de la salle sans lui inventer de
+masse salariale ; le lien de salle, partagé à toute l'équipe, n'en montre aucune — « 15 h /
+20 h » sur la rangée de quelqu'un dirait à ses collègues qu'il est limité, et pourquoi.
 
 Les taux horaires et les plafonds ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par

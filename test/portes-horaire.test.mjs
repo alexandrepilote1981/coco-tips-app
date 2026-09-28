@@ -649,6 +649,32 @@ test("les trois portes de l'horaire", async (t) => {
     }
   });
 
+  await t.test("la porte cuisine reçoit ses HEURES de salle, et rien de plus", async () => {
+    // Un plafond d'heures porte sur la personne — visa étudiant, ou éviter l'overtime — pas
+    // sur un poste. Sans ce complément, quelqu'un à 15 h de cuisine et 16 h de salle
+    // s'afficherait « 15 h / 20 h », en vert, alors qu'il est à 31 h : le gérant ajouterait
+    // un quart en croyant qu'il reste de la place.
+    const d = await (await parCode(CODE_CUISINE, "/shifts")).json();
+    const siennes = (d.heuresAilleurs || []).filter((h) => h.employee_id === mixte.id);
+    assert.deepEqual(siennes.map((h) => h.date), [J_SALLE]);
+    assert.equal(siennes[0].heures, 7, "16:00 → 23:00");
+
+    // Des HEURES, pas un horaire : ni poste, ni tâche, ni heure d'arrivée. La porte apprend
+    // qu'il a travaillé 7 h ailleurs ce jour-là, pas ce qu'il y faisait.
+    assert.deepEqual(Object.keys(siennes[0]).sort(), ["date", "employee_id", "heures"]);
+    for (const h of d.heuresAilleurs) {
+      assert.ok(!("start_time" in h) && !("role" in h) && !("note" in h));
+    }
+  });
+
+  await t.test("un employé d'un seul bord n'a pas d'heures ailleurs", async () => {
+    const d = await (await parCode(CODE_CUISINE, "/shifts")).json();
+    for (const h of d.heuresAilleurs || []) {
+      assert.notEqual(h.employee_id, cuisinier.id, "un cuisinier pur n'a rien en salle");
+      assert.notEqual(h.employee_id, serveuse.id, "et une serveuse n'a rien à faire ici");
+    }
+  });
+
   await t.test("effacer la semaine en cuisine n'efface pas ses quarts de salle", async () => {
     // LE piège de tout ce chantier. L'effacement en lot n'a aucune annulation possible :
     // s'il filtrait sur le secteur de la PERSONNE, il emporterait les quarts de salle d'un

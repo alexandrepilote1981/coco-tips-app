@@ -561,6 +561,10 @@ let lang = lireStockage("localStorage", "coco-lang") || "fr";
 let TOKEN = lireStockage("sessionStorage", "scheduleToken") || "";
 let roster = null;
 let shifts = [];
+// Les heures faites de l'autre bord par les employés qui travaillent des deux. Cette porte
+// ne reçoit que les quarts de SON secteur ; sans ce complément, un plafond d'heures se
+// lirait sur une moitié de la semaine de la personne.
+let heuresAilleurs = [];
 let absences = [];
 let disponibilites = [];
 // Ce que la porte ouverte par ce lien permet de voir et de faire. Par mot de passe (sans
@@ -832,8 +836,10 @@ async function load() {
         const shiftsRes = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
         const shiftsData = await shiftsRes.json();
         shifts = shiftsData.shifts || [];
+        heuresAilleurs = shiftsData.heuresAilleurs || [];
       } catch (e) {
         shifts = [];
+        heuresAilleurs = [];
       }
       try {
         absences = (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/absences`)).json()).absences || [];
@@ -1006,10 +1012,13 @@ ScheduleUI.init({
   restaurants: () => roster.restaurants,
   shifts: () => shifts,
   setShifts: (s) => { shifts = s; },
+  heuresAilleurs: () => heuresAilleurs,
   reloadShifts: async () => {
     if (RESTAURANT_CODE) {
       const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
-      return (await res.json()).shifts;
+      const data = await res.json();
+      heuresAilleurs = data.heuresAilleurs || [];
+      return data.shifts;
     }
     return (await api("/api/admin/shifts")).shifts;
   },

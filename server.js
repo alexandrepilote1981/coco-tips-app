@@ -16,6 +16,7 @@ const { guard, blocageSecondes, refuser, noteFailure, clearFailures, noteSuccess
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
 const { computeEntry } = require("./public/shared/tip-math.js");
+const CoutMainOeuvre = require("./public/shared/cout-main-oeuvre.js");
 const { buildBackupZip } = require("./backup");
 
 const app = express();
@@ -756,7 +757,29 @@ app.get("/api/schedule/by-code/:code/shifts", (req, res) => {
       ORDER BY s.date ASC, s.start_time ASC
     `)
     .all(porte.restaurant.id, ...Secteurs.conditionQuartSQL(porte.secteur).params);
-  res.json({ shifts });
+
+  // Les heures faites de L'AUTRE bord par les employés qui travaillent des deux.
+  //
+  // Un plafond d'heures porte sur la personne — visa étudiant, ou éviter l'overtime — et pas
+  // sur un poste. Cette porte ne reçoit que les quarts de son secteur : sans ce complément,
+  // quelqu'un à 15 h de cuisine et 16 h de salle s'afficherait « 15 h / 20 h », en vert,
+  // alors qu'il est à 31 h. Le gérant ajouterait un quart en croyant qu'il reste de la place.
+  //
+  // On n'envoie QUE des heures : ni poste, ni tâche, ni heure d'arrivée. La porte apprend
+  // qu'il a travaillé 8 h ailleurs ce jour-là, pas l'horaire de l'autre équipe. Et seulement
+  // pour les employés « les deux » — ceux d'un seul bord n'ont rien ailleurs.
+  const autre = Secteurs.conditionQuartSQL(porte.secteur === "cuisine" ? "salle" : "cuisine");
+  const heuresAilleurs = db
+    .prepare(`
+      SELECT s.employee_id, s.date, s.start_time, s.end_time FROM shifts s
+      JOIN employees e ON e.id = s.employee_id
+      WHERE e.restaurant_id = ? AND e.secteur = ? AND ${autre.sql}
+      ORDER BY s.date ASC
+    `)
+    .all(porte.restaurant.id, Secteurs.LES_DEUX, ...autre.params)
+    .map((q) => ({ employee_id: q.employee_id, date: q.date, heures: CoutMainOeuvre.heuresDuQuart(q) }));
+
+  res.json({ shifts, heuresAilleurs });
 });
 
 app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
