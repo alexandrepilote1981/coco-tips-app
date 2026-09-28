@@ -801,6 +801,29 @@ test("les trois portes de l'horaire", async (t) => {
     assert.deepEqual(Object.keys(siennes[0]).sort(), ["date", "employee_id", "heures"]);
   });
 
+  await t.test("la page d'un employé ne reçoit ni son taux ni son plafond", async () => {
+    // Elle ne les affiche pas et ne les a jamais utilisés : ils partaient uniquement parce
+    // que la requête fait SELECT *. Ce n'est pas une fuite — c'est sa fiche, avec son code —
+    // mais un lien personnel se fait suivre, et ce qui ne sert pas n'a pas à sortir.
+    const paye = await (await admin("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Bien Payé", secteur: "cuisine", taux_horaire: 27.5, heures_max: 32 }),
+    })).json();
+    assert.equal(paye.taux_horaire, 27.5, "le taux est bien enregistré");
+
+    const reponse = await fetch(`${base}/api/employee/${paye.access_code}`);
+    const texte = await reponse.text();
+    const d = JSON.parse(texte);
+    assert.ok(!("taux_horaire" in d.employee), "le taux ne doit même pas être envoyé");
+    assert.ok(!("heures_max" in d.employee), "le plafond non plus");
+    assert.doesNotMatch(texte, /27\.5|taux_horaire/, "aucune trace dans le texte brut");
+
+    // Et ce dont sa page a VRAIMENT besoin est toujours là.
+    for (const champ of ["id", "name", "secteur", "employee_number", "access_code"]) {
+      assert.ok(champ in d.employee, `${champ} doit rester`);
+    }
+  });
+
   await t.test("un numéro d'employé se pose, se corrige, et ne change pas le code", async () => {
     // Corriger une faute de frappe ne doit jamais coûter son lien à quelqu'un : avant, il
     // fallait retirer la personne et la recréer, ce qui lui donnait un nouveau code.

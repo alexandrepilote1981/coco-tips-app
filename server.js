@@ -136,6 +136,23 @@ app.use("/api/employee/:code", (req, res, next) => {
   next();
 });
 
+/**
+ * La fiche telle qu'elle sort vers la page d'un employé.
+ *
+ * Sa page n'affiche NI son taux NI son plafond — elle ne les a jamais utilisés. Ils
+ * partaient quand même, parce que la requête fait `SELECT *` : chaque colonne ajoutée à la
+ * table se met à voyager toute seule, sans que personne ne l'ait décidé.
+ *
+ * Ce n'est pas une fuite — c'est SA fiche, ouverte avec SON code, et personne ne voit le
+ * taux d'un collègue. Mais un lien personnel se fait suivre plus souvent qu'on pense, et le
+ * principe du dépôt est que ce qui ne sert pas ne sort pas du serveur. Le jour où sa page
+ * aura besoin de son taux, on l'ajoutera exprès.
+ */
+function ficheEmploye(emp) {
+  const { taux_horaire, heures_max, ...reste } = emp;
+  return reste;
+}
+
 app.get("/api/employee/:code", (req, res) => {
   const emp = db
     .prepare("SELECT * FROM employees WHERE access_code = ?")
@@ -148,7 +165,7 @@ app.get("/api/employee/:code", (req, res) => {
     .all(emp.id)
     .map(computeEntry);
 
-  res.json({ employee: emp, restaurant, entries });
+  res.json({ employee: ficheEmploye(emp), restaurant, entries });
 });
 
 // L'employé et ses disponibilités. Le code de 6 caractères de son lien sert de clé, comme
