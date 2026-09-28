@@ -228,7 +228,17 @@ test("les trois portes de l'horaire", async (t) => {
 
   await t.test("le plafond d'heures se règle, se borne, et reste côté gestion", async () => {
     const emp = await creer("Plafonné", "cuisine", 20);
-    assert.equal(emp.heures_max, 0, "aucun plafond par défaut : inventer un chiffre ferait rougir sans raison");
+    // 40 h par défaut. Ce test affirmait le contraire — « aucun plafond, inventer un chiffre
+    // ferait rougir sans raison » — et le propriétaire a tranché autrement : « le plafond,
+    // mets 40 h par défaut ». Sa raison est la paie : au-delà de 40 h les heures se paient en
+    // temps supplémentaire, donc tomber dedans sans s'en apercevoir coûte de l'argent, et
+    // « aucun plafond » devient l'exception qu'on choisit.
+    assert.equal(emp.heures_max, 40, "40 h par défaut : c'est là que commence le temps supplémentaire");
+    const sansPlafond = await (await admin("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Sans Plafond", heures_max: 0 }),
+    })).json();
+    assert.equal(sansPlafond.heures_max, 0, "et 0 reste possible : le défaut n'est pas une obligation");
 
     const pose = await (await admin(`/api/admin/employees/${emp.id}`, {
       method: "POST",
@@ -740,6 +750,44 @@ test("les trois portes de l'horaire", async (t) => {
     const d = await horaireDe(meSalle.access_code);
     assert.equal(d.fichesJumelees, 2, "toujours ses deux fiches à elle, pas trois");
     assert.equal(d.shifts.length, 2, "et pas le quart du restaurant d'à côté");
+  });
+
+  await t.test("le plafond est un total PAR NUMÉRO : il se recopie sur les deux fiches", async () => {
+    // « Le plafond, mets 40 h par défaut, total. C'est un total par numéro d'employé. »
+    // Son 20 h de visa ne se divise pas en deux fiches : on écrit donc la même valeur
+    // partout, pour qu'on lise et qu'on modifie le même chiffre quelle que soit la fiche.
+    await admin(`/api/admin/employees/${meSalle.id}`, {
+      method: "POST", body: JSON.stringify({ heures_max: 20 }),
+    });
+    const relire = async () => {
+      const d = await (await admin("/api/admin/overview")).json();
+      const tous = d.restaurants.flatMap((r) => r.employees);
+      return [meSalle.id, meCuisine.id].map((id) => tous.find((e) => e.id === id).heures_max);
+    };
+    assert.deepEqual(await relire(), [20, 20], "les deux fiches portent le même plafond");
+
+    // Et une personne au numéro différent n'est pas touchée.
+    const d = await (await admin("/api/admin/overview")).json();
+    const sarah = d.restaurants.flatMap((r) => r.employees).find((e) => e.id === serveuse.id);
+    assert.notEqual(sarah.heures_max, 20, "le voisin n'a rien demandé");
+  });
+
+  await t.test("changer le numéro et le plafond du même coup n'écrit pas sur l'ancien numéro", async () => {
+    // Le piège : si on se servait de l'ANCIEN numéro pour propager, on poserait le plafond
+    // sur les fiches de quelqu'un d'autre.
+    const seul = await (await admin("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Change De Numero", employee_number: "900" }),
+    })).json();
+    await admin(`/api/admin/employees/${seul.id}`, {
+      method: "POST", body: JSON.stringify({ employee_number: "120", heures_max: 12 }),
+    });
+    const d = await (await admin("/api/admin/overview")).json();
+    const tous = d.restaurants.flatMap((r) => r.employees);
+    // Il rejoint le numéro 120 : les trois fiches partagent maintenant le même plafond.
+    for (const id of [seul.id, meSalle.id, meCuisine.id]) {
+      assert.equal(tous.find((e) => e.id === id).heures_max, 12, `fiche ${id}`);
+    }
   });
 
   await t.test("le plafond d'heures voit ce que fait l'AUTRE fiche", async () => {

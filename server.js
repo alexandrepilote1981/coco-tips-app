@@ -1168,10 +1168,29 @@ function tauxValide(valeur) {
 
 // Plafond d'heures par semaine. 0 signifie « aucun plafond » ; au-delà de 168 on a dépassé
 // le nombre d'heures qu'une semaine contient.
+// Le plafond par défaut, en heures. 40 parce que c'est là que commence le temps
+// supplémentaire : le plafond sert d'abord à ne pas y tomber sans s'en apercevoir.
+const HEURES_MAX_DEFAUT = 40;
+
 function heuresMaxValide(valeur) {
   const n = typeof valeur === "number" ? valeur : parseFloat(valeur);
   if (!Number.isFinite(n) || n < 0) return 0;
   return Math.min(n, 168);
+}
+
+/**
+ * Le plafond est un total PAR NUMÉRO D'EMPLOYÉ, pas par fiche.
+ *
+ * « Le plafond, mets 40 h par défaut, total. C'est un total par numéro d'employé. »
+ * Quelqu'un inscrit des deux bords a deux fiches ; son 20 h de visa ne se divise pas en
+ * deux. On écrit donc la même valeur sur toutes ses fiches : peu importe celle qu'on ouvre,
+ * on lit et on modifie le même chiffre.
+ */
+function ecrirePlafondSurToutesSesFiches(emp, heures) {
+  const numero = String(emp.employee_number || "").trim();
+  if (!numero) return;
+  db.prepare("UPDATE employees SET heures_max = ? WHERE restaurant_id = ? AND employee_number = ?")
+    .run(heures, emp.restaurant_id, numero);
 }
 
 app.post("/api/admin/employees", requireAdmin, (req, res) => {
@@ -1186,7 +1205,7 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
   const id = nanoid(10);
   const secteur = secteurValide(req.body.secteur);
   const taux = tauxValide(req.body.taux_horaire);
-  const heuresMax = heuresMaxValide(req.body.heures_max);
+  const heuresMax = req.body.heures_max === undefined ? HEURES_MAX_DEFAUT : heuresMaxValide(req.body.heures_max);
   db.prepare(`
     INSERT INTO employees (id, restaurant_id, name, employee_number, access_code, secteur, taux_horaire, heures_max)
     VALUES (?,?,?,?,?,?,?,?)
@@ -1209,6 +1228,12 @@ app.post("/api/admin/employees/:id", requireAdmin, (req, res) => {
 
   db.prepare("UPDATE employees SET name=?, employee_number=?, secteur=?, taux_horaire=?, heures_max=? WHERE id=?")
     .run(name, numero, secteur, taux, heuresMax, emp.id);
+  // Le plafond appartient à la PERSONNE : on le recopie sur ses autres fiches. On passe le
+  // numéro qui vient d'être enregistré, pas l'ancien — sinon changer le numéro et le plafond
+  // du même coup écrirait sur les fiches de l'ancien numéro.
+  if (req.body.heures_max !== undefined) {
+    ecrirePlafondSurToutesSesFiches({ ...emp, employee_number: numero }, heuresMax);
+  }
   res.json({ id: emp.id, name, employee_number: numero, secteur, taux_horaire: taux, heures_max: heuresMax });
 });
 

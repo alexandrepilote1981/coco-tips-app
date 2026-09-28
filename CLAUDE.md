@@ -139,6 +139,22 @@ forme `24 h / 20 h`. Les heures s'affichent pour toute la grille et pas seulemen
 qui ont un plafond : sinon les rangées n'auraient pas la même hauteur. Être pile au plafond
 n'est pas un dépassement.
 
+**Le défaut est 40 h**, et c'est la paie qui le dicte : au-delà de 40 h dans une semaine, les
+heures se paient en temps supplémentaire. Tomber dedans sans s'en apercevoir coûte de
+l'argent, alors « aucun plafond » (0) devient l'exception qu'on choisit. Les employés déjà en
+place y sont passés par une migration marquée dans `PRAGMA user_version` — **une seule fois** :
+sans ce garde, quelqu'un qu'on remet volontairement à 0 repasserait à 40 h au prochain
+redéploiement et le réglage ne tiendrait jamais.
+
+**Le plafond est un total par NUMÉRO d'employé**, pas par fiche. Quelqu'un inscrit des deux
+bords a deux fiches ; son 20 h de visa ne se divise pas en deux. Le serveur recopie donc la
+valeur sur toutes les fiches du même numéro (`ecrirePlafondSurToutesSesFiches`), en se servant
+du numéro qui vient d'être enregistré et non de l'ancien — sinon changer le numéro et le
+plafond du même coup écrirait sur les fiches de quelqu'un d'autre. Côté grille, `plafondDe()`
+retient le plus PETIT plafond non nul parmi ses fiches, pour les données antérieures à cette
+règle : un plafond de visa est une limite légale, et se tromper vers le haut la ferait
+dépasser en silence.
+
 **Le plafond compte les heures des DEUX équipes.** Dans les mots du propriétaire : « si un
 employé dit qu'il peut faire 20 h, c'est 20 h total, c'est souvent des restrictions de visa
 étudiant, et le reste est indiqué à 40 h vu que je veux pas payer de overtime ». Un plafond

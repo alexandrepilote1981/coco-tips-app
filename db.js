@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS employees (
   taux_horaire REAL DEFAULT 0,
   -- Plafond d'heures par semaine. 0 = aucun plafond : la plupart des employés n'en ont pas,
   -- et une valeur par défaut inventée ferait rougir des rangées sans raison.
-  heures_max REAL DEFAULT 0,
+  heures_max REAL DEFAULT 40,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -184,7 +184,7 @@ try {
 
 // Secteur et taux horaire. Le défaut 'salle' est volontaire : tout le monde déjà en place
 // reste exactement où il était, et c'est le gérant qui déplace ensuite les gens en cuisine.
-for (const col of ["secteur TEXT DEFAULT 'salle'", "taux_horaire REAL DEFAULT 0", "heures_max REAL DEFAULT 0"]) {
+for (const col of ["secteur TEXT DEFAULT 'salle'", "taux_horaire REAL DEFAULT 0", "heures_max REAL DEFAULT 40"]) {
   try {
     db.exec(`ALTER TABLE employees ADD COLUMN ${col};`);
   } catch (e) {
@@ -193,6 +193,20 @@ for (const col of ["secteur TEXT DEFAULT 'salle'", "taux_horaire REAL DEFAULT 0"
 }
 db.exec(`UPDATE employees SET secteur = 'salle' WHERE secteur IS NULL OR secteur = '';`);
 db.exec(`UPDATE employees SET heures_max = 0 WHERE heures_max IS NULL;`);
+
+// 40 h par défaut pour tout le monde — demande du propriétaire, et la raison est la paie :
+// au-delà de 40 h dans une semaine, les heures se paient en temps supplémentaire. Le plafond
+// sert d'abord à ne pas y tomber sans s'en apercevoir, donc 40 est le bon défaut et « aucun
+// plafond » devient l'exception.
+//
+// UNE SEULE FOIS, marqué par PRAGMA user_version : sans ce garde, quelqu'un qu'on a
+// délibérément remis à « aucun plafond » se retrouverait à 40 h au prochain redéploiement,
+// et le réglage ne tiendrait jamais. Pas de table de configuration pour ça — user_version
+// est fait exactement pour marquer une migration déjà passée.
+if (db.pragma("user_version", { simple: true }) < 1) {
+  db.exec(`UPDATE employees SET heures_max = 40 WHERE heures_max = 0;`);
+  db.pragma("user_version = 1");
+}
 
 function makeAccessCode() {
   // court, facile à lire/dicter au téléphone : 6 caractères, sans caractères ambigus.

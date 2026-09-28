@@ -546,12 +546,28 @@ window.ScheduleUI = (function () {
   // affiché pour tout le monde : la plupart des employés n'en ont pas, et écrire « / 0 h »
   // partout ne dirait rien. La ligne, elle, s'affiche pour toute la grille — sinon les
   // rangées n'auraient pas toutes la même hauteur.
+  /**
+   * Le plafond d'une PERSONNE, pas d'une fiche.
+   *
+   * Le serveur recopie déjà la même valeur sur toutes les fiches d'un même numéro. Ce calcul
+   * couvre ce qu'il ne peut pas : les données d'avant cette règle, où les deux fiches
+   * peuvent porter des chiffres différents. On retient alors le PLUS PETIT non nul — un
+   * plafond de visa étudiant est une limite légale, et se tromper vers le haut la ferait
+   * dépasser en silence. Zéro veut dire « aucun plafond » et n'est donc pas un candidat.
+   */
+  function plafondDe(emp) {
+    const candidats = [Number(emp.heures_max) || 0];
+    for (const autre of autresFichesDe(emp.id)) candidats.push(Number(autre.heures_max) || 0);
+    const poses = candidats.filter((n) => n > 0);
+    return poses.length ? Math.min(...poses) : 0;
+  }
+
   function bilanEmploye(emp, jours) {
     if (!jours) return null;
     // TOUTES les heures de la personne, les deux bords confondus : un plafond de visa ou une
     // limite d'overtime porte sur elle, pas sur un poste.
     const heures = heuresSemaine(emp.id, host.shifts(), jours);
-    const plafond = Number(emp.heures_max) || 0;
+    const plafond = plafondDe(emp);
     return { heures, plafond, depasse: plafond > 0 && heures > plafond + 1e-9 };
   }
 
