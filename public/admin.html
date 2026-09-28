@@ -246,6 +246,32 @@
   .totals b { color: #F1EFEA; }
   .add-form { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .add-form input { flex: 1; min-width: 120px; margin-bottom: 0; }
+  /* La barre d'onglets. Collée en haut : sur un téléphone la grille d'horaire fait plusieurs
+     écrans de haut, et une barre qui défile avec la page obligerait à remonter tout en haut
+     juste pour changer de section — exactement ce qu'on cherche à supprimer. */
+  .onglets {
+    position: sticky; top: 0; z-index: 30; display: flex; gap: 6px;
+    padding: 8px 0 10px; margin-bottom: 4px;
+    background: #10151D; border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .onglet {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 9px 4px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.03); color: #8993A4;
+    font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+    position: relative; line-height: 1.2; text-align: center;
+  }
+  .onglet.actif { background: rgba(111,191,147,0.14); border-color: rgba(111,191,147,0.45); color: #6FBF93; }
+  /* Le nom ne revient jamais à la ligne : trois onglets de hauteurs différentes feraient
+     sauter la barre en changeant de section. */
+  .onglet .onglet-nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  /* La pastille dit combien de journées attendent, même quand on est dans un horaire : sinon
+     passer la semaine dans l'onglet cuisine ferait manquer les virements dus. */
+  .onglet-pastille {
+    position: absolute; top: 3px; right: 6px; min-width: 17px; height: 17px; padding: 0 4px;
+    border-radius: 999px; background: #E2685A; color: #10151D;
+    font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+  }
   .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 20px 0 8px; }
   .period-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
   .period-btn {
@@ -642,6 +668,14 @@ function ecrireStockage(zone, cle, valeur) {
   }
 }
 
+// Quel onglet du tableau de bord est ouvert. Gardé dans localStorage parce qu'un gérant qui
+// monte son horaire de cuisine rafraîchit la page vingt fois : le renvoyer aux déclarations
+// à chaque fois lui coûterait le trajet à refaire.
+const ONGLETS = ["declarations", "salle", "cuisine"];
+let onglet = ONGLETS.includes(lireStockage("localStorage", "coco-onglet-admin"))
+  ? lireStockage("localStorage", "coco-onglet-admin")
+  : "declarations";
+
 let TOKEN = lireStockage("sessionStorage", "adminToken") || "";
 let overview = null;
 let messages = [];
@@ -682,6 +716,11 @@ let period = readPeriod();
 const I18N = {
   fr: {
     dashboardTitle: "Tableau de bord — Déclaration Pourboire",
+    sections: "Sections",
+    ongletDeclarations: "Déclarations",
+    ongletHoraireSalle: "Horaire salle",
+    ongletHoraireCuisine: "Horaire cuisine",
+    aTraiter: (n) => `${n} à traiter`,
     accesAdmin: "Accès admin",
     loginTagline: "Vérifie tes restos, où que tu sois.",
     retourAccueil: "← Retour à l'accueil",
@@ -873,6 +912,11 @@ const I18N = {
   },
   en: {
     dashboardTitle: "Dashboard — Tip Declaration",
+    sections: "Sections",
+    ongletDeclarations: "Declarations",
+    ongletHoraireSalle: "Floor schedule",
+    ongletHoraireCuisine: "Kitchen schedule",
+    aTraiter: (n) => `${n} to handle`,
     accesAdmin: "Admin access",
     loginTagline: "Check your restaurants, wherever you are.",
     retourAccueil: "← Back to homepage",
@@ -1350,6 +1394,25 @@ function render() {
       <button class="lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
     </div>
     <div class="content">
+      <nav class="onglets" role="tablist" aria-label="${t("sections")}">
+        ${[
+          ["declarations", "dollar", t("ongletDeclarations"), flaggedTotal + pendingCount],
+          ["salle", "calendar", t("ongletHoraireSalle"), 0],
+          ["cuisine", "chef", t("ongletHoraireCuisine"), 0],
+        ].map(([cle, ic, nom, pastille]) => `
+          <button class="onglet ${onglet === cle ? "actif" : ""}" role="tab"
+                  aria-selected="${onglet === cle}" data-onglet="${cle}">
+            ${icon(ic, 18)}
+            <span class="onglet-nom">${nom}</span>
+            ${pastille > 0 ? `<span class="onglet-pastille" aria-label="${t("aTraiter", pastille)}">${pastille}</span>` : ""}
+          </button>`).join("")}
+      </nav>
+  `;
+
+  // Les déclarations : bandeaux d'alerte, messagerie, période, et la fiche de chaque
+  // restaurant avec son équipe. Les deux horaires ont leur propre onglet plus bas.
+  if (onglet === "declarations") {
+    html += `
       ${flaggedTotal > 0 ? `
       <div class="pending-banner banner-delay">
         <div>${icon("search", 15, "margin-right:6px;")}${t("journeesRetardModif", lateCount, modifiedCount)}</div>
@@ -1408,11 +1471,36 @@ function render() {
           <button id="addRestaurantBtn">${t("ajouter")}</button>
         </div>
       </div>
-  `;
+    `;
+  }
 
   overview.restaurants.forEach((r) => {
     const totVentes = r.employees.reduce((s, e) => s + e.totals.ventes, 0);
     const totNet = r.employees.reduce((s, e) => s + e.totals.net, 0);
+    // La salle déclare des pourboires, la cuisine non : les deux listes n'ont pas les mêmes
+    // colonnes, et mélanger les deux remplirait la page de 0,00 $ sans signification.
+    const equipeSalle = r.employees.filter((e) => e.secteur !== "cuisine");
+    const equipeCuisine = r.employees.filter((e) => e.secteur === "cuisine");
+
+    if (onglet === "salle") {
+      html += `
+      <div class="card">
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${r.name} — ${t("salle")}</div>
+        ${equipeSalle.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, equipeSalle, { secteur: "salle" })}
+      </div>`;
+      return;
+    }
+    if (onglet === "cuisine") {
+      html += equipeCuisine.length === 0
+        ? `<div class="card"><div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div><p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p></div>`
+        : `
+      <div class="card">
+        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div>
+        ${ScheduleUI.renderWeekGrid(r.id, equipeCuisine, { secteur: "cuisine", voitMontants: true, chargesPct: r.charges_pct || 0 })}
+      </div>`;
+      return;
+    }
+
     html += `
       <div class="card">
         <div class="restaurant-title">
@@ -1430,11 +1518,6 @@ function render() {
           </div>
         </div>
     `;
-    // La salle déclare des pourboires, la cuisine non : les deux listes n'ont pas les mêmes
-    // colonnes, et mélanger les deux remplirait la page de 0,00 $ sans signification.
-    const equipeSalle = r.employees.filter((e) => e.secteur !== "cuisine");
-    const equipeCuisine = r.employees.filter((e) => e.secteur === "cuisine");
-
     equipeSalle.forEach((e) => {
       const link = `${origin}/e/${e.access_code}`;
       const empPending = pendingByEmployee.find((p) => p.empId === e.id);
@@ -1625,15 +1708,6 @@ function render() {
           </div>
         </div>
       </div>
-      <div class="card">
-        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${t("horaireTitre")} — ${t("salle")}</div>
-        ${equipeSalle.length === 0 ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p>` : ScheduleUI.renderWeekGrid(r.id, equipeSalle, { secteur: "salle" })}
-      </div>
-      ${equipeCuisine.length === 0 ? "" : `
-      <div class="card">
-        <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("calendar", 17, "margin-right:8px;")}${t("horaireTitre")} — ${t("cuisine")}</div>
-        ${ScheduleUI.renderWeekGrid(r.id, equipeCuisine, { secteur: "cuisine", voitMontants: true, chargesPct: r.charges_pct || 0 })}
-      </div>`}
     `;
   });
 
@@ -1645,9 +1719,25 @@ function render() {
   document.getElementById("app").innerHTML = html;
   if (scrollAvant) window.scrollTo(0, scrollAvant);
 
-  renderMessagesInbox();
-
   document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
+
+  document.querySelectorAll("[data-onglet]").forEach((bouton) => {
+    bouton.addEventListener("click", () => {
+      if (bouton.dataset.onglet === onglet) return;
+      onglet = bouton.dataset.onglet;
+      ecrireStockage("localStorage", "coco-onglet-admin", onglet);
+      // render() restaure la position de défilement — le bon réflexe pour un
+      // rafraîchissement, le mauvais ici : on arrive dans une section neuve, donc à son début.
+      window.scrollTo(0, 0);
+      render();
+    });
+  });
+
+  // Tout ce qui suit n'existe que dans l'onglet des déclarations. Sans ce garde, ouvrir un
+  // horaire lèverait sur le premier getElementById venu et laisserait la page à moitié
+  // branchée — les grilles s'afficheraient sans répondre au doigt.
+  if (onglet === "declarations") {
+  renderMessagesInbox();
 
   const changePeriod = async (next) => {
     setPeriod(next);
@@ -1700,6 +1790,7 @@ function render() {
     await api("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name }) });
     await load();
   });
+  }
 
   document.querySelectorAll('[data-action="addEmployee"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
