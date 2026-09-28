@@ -697,6 +697,34 @@ window.ScheduleUI = (function () {
     });
   }
 
+  /**
+   * Les heures déjà cédulées à cette personne, ce jour-là, DANS L'AUTRE secteur.
+   *
+   * Deux sources, parce que les deux portes ne reçoivent pas la même chose : le tableau de
+   * bord a tous les quarts et les filtre lui-même, une porte par code n'a que ceux de son
+   * secteur et reçoit le reste en heures (voir heuresAilleurs dans le contrat du host).
+   */
+  function quartsAilleursLeMemeJour(payload) {
+    const S = window.Secteurs;
+    const C = window.CoutMainOeuvre;
+    const secteurDuNouveau = S ? S.duRole(payload.role) : null;
+    let heures = 0;
+
+    if (S) {
+      for (const q of host.shifts()) {
+        if (q.employee_id !== payload.employee_id || q.date !== payload.date) continue;
+        // Son propre quart, quand on le modifie, n'est pas un double.
+        if (payload.id && q.id === payload.id) continue;
+        if (S.duRole(q.role) === secteurDuNouveau) continue;
+        heures += C.heuresDuQuart(q);
+      }
+    }
+    for (const h of (host.heuresAilleurs ? host.heuresAilleurs() : [])) {
+      if (h.employee_id === payload.employee_id && h.date === payload.date) heures += Number(h.heures) || 0;
+    }
+    return { heures };
+  }
+
   // Retourne false seulement si la personne répond « non » à la question.
   async function confirmerAccroc(payload) {
     const nom = nomDeEmploye(
@@ -721,6 +749,27 @@ window.ScheduleUI = (function () {
         window.Absences.fmtPeriode(absence, lang)
       );
       return confirm(message);
+    }
+
+    // Déjà cédulé de l'AUTRE bord ce jour-là. C'est le risque que « les deux » a créé : la
+    // grille de cuisine ne montre pas les quarts de salle et l'inverse, donc rien à l'écran
+    // ne dit qu'on est en train d'inscrire quelqu'un deux fois le même jour.
+    //
+    // Avant la disponibilité mais après le congé : c'est un fait de CETTE semaine, alors
+    // qu'une disponibilité n'est qu'une habitude ; un congé, lui, veut dire que la personne
+    // ne rentre pas du tout, dans aucune des deux équipes.
+    const ailleurs = quartsAilleursLeMemeJour(payload);
+    if (ailleurs.heures > 0) {
+      return confirm(
+        host.t(
+          "confirmDejaCeduleAilleurs",
+          nom,
+          // Une journée s'écrit déjà quelque part : une période dont le début et la fin sont
+          // le même jour. Pas de deuxième formateur de date à garder en phase avec celui-là.
+          window.Absences.fmtPeriode({ date_debut: payload.date, date_fin: payload.date }, lang),
+          window.CoutMainOeuvre.fmtHeures(ailleurs.heures, lang)
+        )
+      );
     }
 
     const accroc = window.Disponibilites.conflit(disposDeEmploye(payload.employee_id), quart);
@@ -754,7 +803,10 @@ window.ScheduleUI = (function () {
     // doit pouvoir inscrire la personne qui vient dépanner, même si elle avait écrit « pas
     // le samedi ». Si l'app bloquait, il faudrait aller falsifier la disponibilité déclarée
     // pour la contourner.
-    if (!(await confirmerAccroc(payload))) return;
+    // shiftId à part du payload : il ne part pas au serveur (l'URL le porte déjà), mais
+    // confirmerAccroc en a besoin pour ne pas compter comme un double le quart qu'on est
+    // justement en train de modifier.
+    if (!(await confirmerAccroc({ ...payload, id: shiftId || null }))) return;
 
     const btn = document.getElementById("shiftSaveBtn");
     btn.disabled = true;
@@ -1141,6 +1193,7 @@ window.ScheduleUI = (function () {
     duplicateWeekToNext,
     clearWeekShifts,
     bilanEmploye,
+    quartsAilleursLeMemeJour,
     ajouterConge,
     retirerConge,
     rolesDe,

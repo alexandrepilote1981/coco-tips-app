@@ -714,6 +714,61 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(await onglet.ev(`!!document.getElementById("addBtn")`), true, "le bouton Ajouter doit rester");
   });
 
+  await t.test("un double quart pose une question, et ne bloque rien", async () => {
+    // « Mets l'avertissement de double quart, une alerte quand il est déjà cédulé ailleurs. »
+    //
+    // C'est une QUESTION, jamais un refus : un 05:30-15:00 en cuisine puis un souper en
+    // salle, ça arrive. Ce test vérifie donc les deux moitiés — que la question sorte, et
+    // qu'un « oui » enregistre bel et bien le quart.
+    const { employe } = await creerEmploye("Noémie", "les_deux");
+    const jour = (n) => {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const LUNDI = jour(1);
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: employe.id, date: LUNDI, start_time: "05:30", end_time: "15:00", role: "cuisinier" }),
+    });
+
+    await ouvrirAdmin();
+    // On interroge le module directement, avec le host que la page a déjà branché : ouvrir
+    // la bonne case de la bonne grille dépendrait de la semaine affichée, ce qui rendrait le
+    // test fragile sans rien vérifier de plus.
+    const heures = await onglet.ev(`ScheduleUI.quartsAilleursLeMemeJour({
+      employee_id: ${JSON.stringify(employe.id)}, date: ${JSON.stringify(LUNDI)}, role: "server"
+    }).heures`);
+    assert.equal(heures, 9.5, "la grille doit voir le quart de cuisine du même jour");
+
+    // Et rien pour un jour libre : une question qui sort à tort finit par se faire cliquer
+    // sans être lue.
+    const rien = await onglet.ev(`ScheduleUI.quartsAilleursLeMemeJour({
+      employee_id: ${JSON.stringify(employe.id)}, date: ${JSON.stringify(jour(5))}, role: "server"
+    }).heures`);
+    assert.equal(rien, 0);
+
+    // La question est bien posée, et « oui » laisse passer : on remplace confirm() le temps
+    // de l'enregistrement, puisqu'un vrai confirm bloquerait le navigateur sans tête.
+    await onglet.ev(`(() => { window.__demandes = []; window.confirm = (m) => { window.__demandes.push(m); return true; }; return true; })()`);
+    const resultat = await onglet.ev(`(async () => {
+      const r = await fetch("/api/admin/shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Token": ${JSON.stringify(MOT_DE_PASSE)} },
+        body: JSON.stringify({ employee_id: ${JSON.stringify(employe.id)}, date: ${JSON.stringify(LUNDI)}, start_time: "16:00", end_time: "23:00", role: "server" }),
+      });
+      return r.status;
+    })()`);
+    assert.equal(resultat, 200, "le double quart doit rester possible");
+
+    // Et la personne a bien ses deux quarts ce jour-là.
+    const sesQuarts = await onglet.ev(`(async () => {
+      const d = await (await fetch("/api/admin/shifts", { headers: { "X-Admin-Token": ${JSON.stringify(MOT_DE_PASSE)} } })).json();
+      return d.shifts.filter(q => q.employee_id === ${JSON.stringify(employe.id)} && q.date === ${JSON.stringify(LUNDI)}).map(q => q.role).sort();
+    })()`);
+    assert.deepEqual(sesQuarts, ["cuisinier", "server"]);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

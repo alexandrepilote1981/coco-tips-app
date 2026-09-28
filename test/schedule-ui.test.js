@@ -177,3 +177,52 @@ test("sans jours — une grille qui ne montre pas les heures — aucune rangée 
   assert.equal(UI.bilanEmploye({ id: "a", heures_max: 1 }, null), null);
 });
 
+// ---------------------------------------------------- déjà cédulé de l'autre bord
+//
+// Le risque que « les deux » a créé : la grille de cuisine ne montre pas les quarts de
+// salle, et l'inverse. Rien à l'écran ne dit qu'on inscrit quelqu'un deux fois le même jour.
+// C'est un AVERTISSEMENT et jamais un refus — un 05:30-15:00 en cuisine puis un souper en
+// salle, ça arrive, et le gérant doit pouvoir le faire.
+
+const quartComplet = (empId, date, debut, fin, role, id) =>
+  ({ id: id || `q-${date}-${role}`, employee_id: empId, date, start_time: debut, end_time: fin, role });
+
+test("un quart dans l'AUTRE secteur le même jour est signalé", () => {
+  avecQuarts([quartComplet("a", SEMAINE[0], "05:30", "15:00", "cuisinier")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "a", date: SEMAINE[0], role: "server" });
+  assert.equal(r.heures, 9.5);
+});
+
+test("un quart du MÊME secteur n'est pas un double", () => {
+  // Deux quarts de cuisine le même jour, la grille ne le permet pas de toute façon : poser
+  // la question ici ferait sortir un avertissement à chaque simple modification.
+  avecQuarts([quartComplet("a", SEMAINE[0], "05:30", "15:00", "cuisinier")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "a", date: SEMAINE[0], role: "plongeur" });
+  assert.equal(r.heures, 0);
+});
+
+test("un autre jour ne déclenche rien", () => {
+  avecQuarts([quartComplet("a", SEMAINE[0], "05:30", "15:00", "cuisinier")]);
+  assert.equal(UI.quartsAilleursLeMemeJour({ employee_id: "a", date: SEMAINE[1], role: "server" }).heures, 0);
+});
+
+test("le quart d'une autre personne ne déclenche rien", () => {
+  avecQuarts([quartComplet("a", SEMAINE[0], "05:30", "15:00", "cuisinier")]);
+  assert.equal(UI.quartsAilleursLeMemeJour({ employee_id: "b", date: SEMAINE[0], role: "server" }).heures, 0);
+});
+
+test("modifier un quart ne le compte pas comme son propre double", () => {
+  // Sans ce garde, changer l'heure d'un quart de salle ferait sortir « a déjà un quart dans
+  // l'autre équipe » en parlant de lui-même.
+  avecQuarts([quartComplet("a", SEMAINE[0], "16:00", "23:00", "server", "LE-SIEN")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "a", date: SEMAINE[0], role: "server", id: "LE-SIEN" });
+  assert.equal(r.heures, 0);
+});
+
+test("une porte par code compte les heures qu'elle reçoit en complément", () => {
+  // Elle ne voit que les quarts de son secteur : sans heuresAilleurs, elle ne pourrait pas
+  // savoir que la personne travaille déjà ce jour-là.
+  avecQuarts([], [{ employee_id: "a", date: SEMAINE[0], heures: 7 }]);
+  assert.equal(UI.quartsAilleursLeMemeJour({ employee_id: "a", date: SEMAINE[0], role: "cuisinier" }).heures, 7);
+});
+

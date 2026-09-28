@@ -280,6 +280,23 @@ disponibilité générale ; ce serait bizarre d'avertir pour le petit et pas pou
 La question se pose **à l'enregistrement, pas au clic** : tant que l'heure n'est pas choisie,
 on ne peut pas savoir s'il y a un accroc. Une seule règle, un seul moment.
 
+### Déjà cédulé de l'autre bord
+
+Troisième cas, né de « les deux » : la grille de cuisine ne montre pas les quarts de salle et
+l'inverse, donc **rien à l'écran ne dit qu'on inscrit quelqu'un deux fois le même jour**.
+Enregistrer un quart pendant qu'il y en a déjà un dans l'autre équipe sort la question
+« Noémie a déjà un quart dans l'autre équipe le 28 septembre (9,5 h). L'ajouter quand même ? »
+
+L'ordre des trois questions n'est pas arbitraire — **congé, puis double quart, puis
+disponibilité**. Un congé veut dire que la personne ne rentre pas du tout, dans aucune des
+deux équipes ; un double quart est un fait de CETTE semaine ; une disponibilité n'est qu'une
+habitude. On ne pose qu'une question à la fois, la plus forte.
+
+Comme les deux autres, elle n'interdit rien : un 05:30-15:00 en cuisine puis un souper en
+salle, ça arrive. `quartsAilleursLeMemeJour()` lit les quarts que la grille a déjà plus les
+`heuresAilleurs` des portes par code, et ne compte évidemment pas comme un double le quart
+qu'on est en train de modifier.
+
 ### Le défaut, et « qui n'a jamais répondu »
 
 Sans aucune ligne en base, la personne est **disponible partout**. Quelqu'un qui n'a jamais
