@@ -325,6 +325,18 @@ salle, ça arrive. `quartsAilleursLeMemeJour()` lit les quarts que la grille a d
 `heuresAilleurs` des portes par code, et ne compte évidemment pas comme un double le quart
 qu'on est en train de modifier.
 
+**Et il faut réunir les fiches jumelles**, sinon l'avertissement ne sort jamais dans le cas
+le plus courant. Rapporté ainsi : « Try était cédulée mardi cuisine. Je l'ai ajoutée
+serveuse et ça rien fait. » Ses deux fiches portent le même matricule mais ont deux id
+différents, et la grille ne cherchait que l'id de la fiche ouverte — le quart de mardi vivait
+sur l'autre.
+
+`autresFichesDe()` retrouve les fiches de même numéro dans l'effectif que le host expose. Ça
+ne marche que là où l'effectif COMPLET est connu, c'est-à-dire le tableau de bord ; une porte
+par code ne reçoit que son secteur, et c'est le serveur qui lui envoie `heuresAilleurs`. Les
+deux chemins ne se recouvrent jamais, donc rien n'est compté deux fois. Le plafond d'heures
+passe par la même fonction, pour la même raison.
+
 ### Le défaut, et « qui n'a jamais répondu »
 
 Sans aucune ligne en base, la personne est **disponible partout**. Quelqu'un qui n'a jamais

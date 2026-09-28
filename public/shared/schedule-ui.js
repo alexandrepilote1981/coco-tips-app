@@ -478,6 +478,36 @@ window.ScheduleUI = (function () {
   }
 
   /**
+   * Les AUTRES fiches de la même personne — celles qui portent le même numéro d'employé.
+   *
+   * Le propriétaire inscrit les gens qui travaillent des deux bords avec une fiche par
+   * équipe et le même matricule de paie sur les deux. Ce sont donc deux id différents pour
+   * la même personne, et tout ce qui raisonne « par employé » doit les réunir.
+   *
+   * Le cas qui l'a fait remonter : « Try était cédulée mardi cuisine. Je l'ai ajoutée
+   * serveuse et ça rien fait. » L'avertissement de double quart ne cherchait que son id à
+   * elle, et son quart de mardi vivait sur l'autre fiche.
+   *
+   * Ne marche que là où l'effectif COMPLET est connu — le tableau de bord. Une porte par
+   * code ne reçoit que son secteur : la fiche jumelle n'y est pas, et c'est le serveur qui
+   * envoie ses heures à part (heuresAilleurs). Les deux chemins ne se recouvrent donc jamais,
+   * et rien n'est compté deux fois.
+   *
+   * Jamais sur un numéro vide : sinon toutes les fiches sans matricule n'en feraient qu'une.
+   */
+  function autresFichesDe(empId) {
+    for (const r of host.restaurants() || []) {
+      const equipe = r.employees || [];
+      const moi = equipe.find((e) => e.id === empId);
+      if (!moi) continue;
+      const numero = String(moi.employee_number || "").trim();
+      if (!numero) return [];
+      return equipe.filter((e) => e.id !== empId && String(e.employee_number || "").trim() === numero);
+    }
+    return [];
+  }
+
+  /**
    * Les heures d'une personne sur les jours affichés — TOUS ses quarts, les deux bords.
    *
    * Pourquoi le total et pas seulement les heures de cette grille-ci, dans les mots du
@@ -495,6 +525,14 @@ window.ScheduleUI = (function () {
     let total = quartsGrille
       .filter((q) => q.employee_id === empId && jours.has(q.date))
       .reduce((somme, q) => somme + C.heuresDuQuart(q), 0);
+
+    // Ce que font ses AUTRES fiches, quand on les connaît (tableau de bord).
+    const autres = autresFichesDe(empId).map((e) => e.id);
+    if (autres.length) {
+      total += quartsGrille
+        .filter((q) => autres.indexOf(q.employee_id) !== -1 && jours.has(q.date))
+        .reduce((somme, q) => somme + C.heuresDuQuart(q), 0);
+    }
 
     // Le tableau de bord voit déjà tous les quarts : lui ajouter heuresAilleurs() compterait
     // les mêmes heures deux fois. Seules les portes par code en fournissent.
@@ -710,12 +748,19 @@ window.ScheduleUI = (function () {
     const secteurDuNouveau = S ? S.duRole(payload.role) : null;
     let heures = 0;
 
+    const autres = autresFichesDe(payload.employee_id).map((e) => e.id);
     if (S) {
       for (const q of host.shifts()) {
-        if (q.employee_id !== payload.employee_id || q.date !== payload.date) continue;
+        if (q.date !== payload.date) continue;
         // Son propre quart, quand on le modifie, n'est pas un double.
         if (payload.id && q.id === payload.id) continue;
-        if (S.duRole(q.role) === secteurDuNouveau) continue;
+        if (q.employee_id === payload.employee_id) {
+          // Sur SA fiche, seul un quart de l'autre équipe compte : deux quarts du même
+          // secteur le même jour, la grille ne les permet pas de toute façon.
+          if (S.duRole(q.role) === secteurDuNouveau) continue;
+        } else if (autres.indexOf(q.employee_id) === -1) {
+          continue;
+        }
         heures += C.heuresDuQuart(q);
       }
     }
