@@ -1041,6 +1041,66 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(await onglet.ev(`!!document.getElementById("addBtn")`), false);
   });
 
+  await t.test("le double quart se voit AUSSI entre deux fiches du même numéro", async () => {
+    // Le cas exact rapporté par le propriétaire : « Try était cédulée mardi cuisine. Je l'ai
+    // ajoutée serveuse et ça rien fait. » Ses deux fiches portent le même matricule mais ont
+    // des id différents, et l'avertissement ne cherchait que l'id de la fiche ouverte.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Double" }),
+    })).json();
+    const creer = (secteur) =>
+      api("/api/admin/employees", {
+        method: "POST",
+        body: JSON.stringify({ restaurant_id: resto.id, name: "Trycia Dufour", employee_number: "113", secteur }),
+      }).then((r) => r.json());
+    const cuisine = await creer("cuisine");
+    const salle = await creer("salle");
+    const seule = await (await api("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Sarah Côté", employee_number: "121", secteur: "salle" }),
+    })).json();
+
+    const mardi = (() => { const d = new Date(); d.setDate(d.getDate() + 2); return d.toISOString().slice(0, 10); })();
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: cuisine.id, date: mardi, start_time: "05:30", end_time: "15:00", role: "cuisinier" }),
+    });
+
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`typeof ScheduleUI !== "undefined" && !!ScheduleUI.quartsAilleursLeMemeJour`), {
+      quoi: "la grille",
+    });
+
+    // Ajouter un quart de SALLE le même jour, sur son autre fiche : l'avertissement doit sortir.
+    const vu = await onglet.ev(`ScheduleUI.quartsAilleursLeMemeJour({
+      employee_id: ${JSON.stringify(salle.id)}, date: ${JSON.stringify(mardi)}, role: "server"
+    }).heures`);
+    assert.equal(vu, 9.5, "son quart de cuisine du même jour doit être vu depuis sa fiche de salle");
+
+    // Et l'inverse : depuis la cuisine, si on l'ajoutait en salle d'abord.
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: salle.id, date: mardi, start_time: "16:00", end_time: "23:00", role: "server" }),
+    });
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`typeof ScheduleUI !== "undefined" && !!ScheduleUI.quartsAilleursLeMemeJour`), { quoi: "la grille" });
+    assert.equal(
+      await onglet.ev(`ScheduleUI.quartsAilleursLeMemeJour({
+        employee_id: ${JSON.stringify(cuisine.id)}, date: ${JSON.stringify(mardi)}, role: "cuisinier"
+      }).heures`),
+      7,
+      "et son quart de salle doit être vu depuis sa fiche de cuisine"
+    );
+
+    // Quelqu'un d'autre n'attrape rien : un rapprochement à tort serait pire que rien.
+    assert.equal(
+      await onglet.ev(`ScheduleUI.quartsAilleursLeMemeJour({
+        employee_id: ${JSON.stringify(seule.id)}, date: ${JSON.stringify(mardi)}, role: "server"
+      }).heures`),
+      0
+    );
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

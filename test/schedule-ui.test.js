@@ -226,3 +226,63 @@ test("une porte par code compte les heures qu'elle reçoit en complément", () =
   assert.equal(UI.quartsAilleursLeMemeJour({ employee_id: "a", date: SEMAINE[0], role: "cuisinier" }).heures, 7);
 });
 
+// ------------------------------------------- deux fiches, une seule personne
+//
+// Signalé par le propriétaire, et c'est LE cas de sa façon de travailler : « Try était
+// cédulée mardi cuisine. Je l'ai ajoutée serveuse et ça rien fait. » Ses deux fiches portent
+// le même numéro d'employé, mais ce sont deux id différents — la grille ne cherchait que
+// l'id de la fiche ouverte, et ne voyait donc jamais le quart de l'autre.
+
+function avecDeuxFiches(quarts) {
+  UI.init({
+    t: (c) => c, icon: () => "", lang: () => "fr",
+    // Le tableau de bord donne TOUT l'effectif du restaurant : c'est là que les deux fiches
+    // de la même personne se retrouvent.
+    restaurants: () => [{ id: "resto1", employees: [
+      { id: "trycia-salle", name: "Trycia Dufour", employee_number: "113" },
+      { id: "trycia-cuisine", name: "Trycia Dufour", employee_number: "113" },
+      { id: "sarah", name: "Sarah Côté", employee_number: "121" },
+      { id: "sans-numero-a", name: "Sans Numero A", employee_number: "" },
+      { id: "sans-numero-b", name: "Sans Numero B", employee_number: "" },
+    ] }],
+    shifts: () => quarts,
+    setShifts: () => {}, reloadShifts: async () => [], absences: () => [],
+    setAbsences: () => {}, reloadAbsences: async () => [], shiftApi: async () => ({}),
+    pdfRequest: () => ({ url: "", options: {} }), rerender: () => {},
+  });
+}
+
+test("le quart de l'AUTRE fiche déclenche l'avertissement", () => {
+  avecDeuxFiches([quartComplet("trycia-cuisine", SEMAINE[0], "05:30", "15:00", "cuisinier")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "trycia-salle", date: SEMAINE[0], role: "server" });
+  assert.equal(r.heures, 9.5, "ajouter un quart de salle doit voir le quart de cuisine de son autre fiche");
+});
+
+test("les heures de l'autre fiche comptent dans le plafond", () => {
+  avecDeuxFiches([
+    quartComplet("trycia-cuisine", SEMAINE[0], "05:30", "15:00", "cuisinier"),
+    quartComplet("trycia-salle", SEMAINE[1], "16:00", "23:00", "server"),
+  ]);
+  const b = UI.bilanEmploye({ id: "trycia-salle", heures_max: 20 }, new Set(SEMAINE));
+  assert.equal(b.heures, 16.5, "9,5 h de cuisine + 7 h de salle");
+});
+
+test("un numéro VIDE ne rapproche jamais deux personnes", () => {
+  // Sans ce garde, toutes les fiches sans matricule n'en feraient qu'une.
+  avecDeuxFiches([quartComplet("sans-numero-b", SEMAINE[0], "08:00", "12:00", "plongeur")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "sans-numero-a", date: SEMAINE[0], role: "server" });
+  assert.equal(r.heures, 0);
+});
+
+test("un numéro différent ne rapproche rien", () => {
+  avecDeuxFiches([quartComplet("trycia-cuisine", SEMAINE[0], "05:30", "15:00", "cuisinier")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "sarah", date: SEMAINE[0], role: "server" });
+  assert.equal(r.heures, 0);
+});
+
+test("modifier le quart de sa PROPRE fiche ne se compte pas comme un double", () => {
+  avecDeuxFiches([quartComplet("trycia-salle", SEMAINE[0], "16:00", "23:00", "server", "LE-SIEN")]);
+  const r = UI.quartsAilleursLeMemeJour({ employee_id: "trycia-salle", date: SEMAINE[0], role: "server", id: "LE-SIEN" });
+  assert.equal(r.heures, 0);
+});
+
