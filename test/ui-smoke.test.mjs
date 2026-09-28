@@ -631,6 +631,20 @@ test("interface", optionsDuTest, async (t) => {
       false,
       "les déclarations ne doivent plus être dans la page"
     );
+    // Tout ce qui concerne la cuisine vit avec SON horaire. Le premier découpage avait
+    // laissé l'équipe de cuisine — ses liens, ses taux, les charges — dans l'onglet des
+    // déclarations, parce qu'il avait suivi la disposition de l'ancienne page au lieu du
+    // sens. La cuisine ne déclare rien : elle n'a rien à faire là.
+    assert.equal(
+      await onglet.ev(`!!document.querySelector('[data-action="toggleCuisine"]')`),
+      true,
+      "l'équipe de cuisine doit être dans l'onglet de son horaire"
+    );
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".chargesInput")`),
+      true,
+      "les charges de l'employeur nourrissent la masse salariale affichée ici"
+    );
 
     // Le choix survit à un rechargement : un gérant qui monte son horaire rafraîchit
     // souvent, et repartir des déclarations lui referait le trajet à chaque fois.
@@ -646,6 +660,11 @@ test("interface", optionsDuTest, async (t) => {
     await jusqua(() => onglet.ev(`!!document.querySelector(".period-bar")`), {
       quoi: "le retour des déclarations",
     });
+    assert.equal(
+      await onglet.ev(`!!document.querySelector('[data-action="toggleCuisine"]')`),
+      false,
+      "et elle ne doit pas rester en double dans les déclarations"
+    );
     await onglet.ev(`document.querySelector('[data-period="month"]').click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector('[data-period="month"].active')`), {
       quoi: "le bouton de période qui répond après un changement d'onglet",

@@ -1482,6 +1482,90 @@ function render() {
     const equipeSalle = r.employees.filter((e) => e.secteur !== "cuisine");
     const equipeCuisine = r.employees.filter((e) => e.secteur === "cuisine");
 
+    // L'équipe de cuisine — ses liens, ses taux, ses plafonds, les charges — vit dans
+    // l'onglet de SON horaire, pas dans celui des déclarations. La cuisine ne déclare rien :
+    // sa place était dans l'onglet des déclarations par accident d'historique, parce que le
+    // découpage en onglets avait suivi la disposition de l'ancienne page au lieu du sens.
+    const blocEquipeCuisine = `
+      <button class="secteur-toggle ${cuisineOuverte(r.id) ? "ouvert" : ""}" data-action="toggleCuisine" data-resto="${r.id}">
+        <span class="secteur-fleche">${cuisineOuverte(r.id) ? "▾" : "▸"}</span>
+        ${icon("chef", 13)} ${t("employesCuisine", equipeCuisine.length)}
+      </button>
+      <div class="secteur-body" id="cuisine-${r.id}" style="display:${cuisineOuverte(r.id) ? "block" : "none"};">
+        <div class="lien-confidentiel">
+          <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienGerantCuisine")}</div>
+          <div class="link-row">
+            <div class="link-box">${origin}/horaire/${r.schedule_code_cuisine}</div>
+            <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine}">${icon("copy", 13)} ${t("copier")}</button>
+          </div>
+          <div class="lien-avis">${icon("alert", 11, "margin-right:4px;")}${t("lienGerantCuisineAvis")}</div>
+        </div>
+        <div style="margin:14px 0;">
+          <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienCuisiniers")}</div>
+          <div class="link-row">
+            <div class="link-box">${origin}/horaire/${r.schedule_code_cuisine_lecture}</div>
+            <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine_lecture}">${icon("copy", 13)} ${t("copier")}</button>
+          </div>
+        </div>
+
+        ${equipeCuisine.length === 0
+          ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployeCuisine")}</p>`
+          : `<div class="lien-avis" style="color:#8993A4; margin-bottom:4px;">${t("heuresMaxAide")}</div>`}
+        ${equipeCuisine.map((e) => `
+          <div class="cuisine-row">
+            <div>
+              <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
+              <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
+              <div class="link-row">
+                <div class="link-box">${origin}/e/${e.access_code}</div>
+                <button class="copy-btn" data-action="copyLink" data-link="${origin}/e/${e.access_code}">${icon("copy", 13)} ${t("copier")}</button>
+              </div>
+              <div class="lien-avis">${t("sousCuisine")}</div>
+            </div>
+            <div class="cuisine-taux">
+              <div class="taux-paire">
+                <div>
+                  <label class="employee-stat-label" for="taux-${e.id}">${t("tauxHoraire")}</label>
+                  <div class="taux-champ">
+                    <input type="number" step="0.05" min="0" id="taux-${e.id}" class="tauxInput" data-emp="${e.id}" value="${e.taux_horaire || ""}" placeholder="0,00" />
+                    <span>$/h</span>
+                  </div>
+                </div>
+                <div>
+                  <label class="employee-stat-label" for="hmax-${e.id}">${t("heuresMax")}</label>
+                  <div class="taux-champ">
+                    <input type="number" step="0.5" min="0" max="168" id="hmax-${e.id}" class="hmaxInput" data-emp="${e.id}" value="${e.heures_max || ""}" placeholder="—" />
+                    <span>h</span>
+                  </div>
+                </div>
+                <button class="copy-btn" data-action="saveTaux" data-emp="${e.id}">${t("enregistrerTaux")}</button>
+              </div>
+            </div>
+            <div class="employee-row-actions">
+              <button class="secondary-btn" data-action="changerSecteur" data-id="${e.id}" data-vers="salle">${t("versSalle")}</button>
+              <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
+            </div>
+          </div>
+        `).join("")}
+
+        <div class="add-form">
+          <input type="text" placeholder="${t("nomEmployePlaceholder")}" data-restaurant="${r.id}" class="cuisName" />
+          <input type="number" step="0.05" min="0" placeholder="${t("tauxHoraire")}" data-restaurant="${r.id}" class="cuisTaux" style="max-width:120px;" />
+          <button data-action="addCuisine" data-id="${r.id}">${t("ajouterEmploye")}</button>
+        </div>
+
+        <div class="charges-form">
+          <label class="employee-stat-label" for="charges-${r.id}">${t("chargesEmployeur")}</label>
+          <div class="taux-champ">
+            <input type="number" step="0.5" min="0" max="100" id="charges-${r.id}" class="chargesInput" data-resto="${r.id}" value="${r.charges_pct || ""}" placeholder="0" />
+            <span>%</span>
+            <button class="copy-btn" data-action="saveCharges" data-resto="${r.id}">${t("enregistrerTaux")}</button>
+          </div>
+          <div class="lien-avis" style="margin-top:6px;">${t("chargesAide")}</div>
+        </div>
+      </div>
+    `;
+
     if (onglet === "salle") {
       html += `
       <div class="card">
@@ -1492,12 +1576,14 @@ function render() {
     }
     if (onglet === "cuisine") {
       html += equipeCuisine.length === 0
-        ? `<div class="card"><div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div><p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p></div>`
+        ? `<div class="card"><div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div><p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p></div>
+           <div class="card">${blocEquipeCuisine}</div>`
         : `
       <div class="card">
         <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div>
         ${ScheduleUI.renderWeekGrid(r.id, equipeCuisine, { secteur: "cuisine", voitMontants: true, chargesPct: r.charges_pct || 0 })}
-      </div>`;
+      </div>
+      <div class="card">${blocEquipeCuisine}</div>`;
       return;
     }
 
@@ -1630,83 +1716,6 @@ function render() {
           <button data-action="addEmployee" data-id="${r.id}">${t("ajouterEmploye")}</button>
         </div>
 
-        <button class="secteur-toggle ${cuisineOuverte(r.id) ? "ouvert" : ""}" data-action="toggleCuisine" data-resto="${r.id}">
-          <span class="secteur-fleche">${cuisineOuverte(r.id) ? "▾" : "▸"}</span>
-          ${icon("chef", 13)} ${t("employesCuisine", equipeCuisine.length)}
-        </button>
-        <div class="secteur-body" id="cuisine-${r.id}" style="display:${cuisineOuverte(r.id) ? "block" : "none"};">
-          <div class="lien-confidentiel">
-            <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienGerantCuisine")}</div>
-            <div class="link-row">
-              <div class="link-box">${origin}/horaire/${r.schedule_code_cuisine}</div>
-              <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine}">${icon("copy", 13)} ${t("copier")}</button>
-            </div>
-            <div class="lien-avis">${icon("alert", 11, "margin-right:4px;")}${t("lienGerantCuisineAvis")}</div>
-          </div>
-          <div style="margin:14px 0;">
-            <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienCuisiniers")}</div>
-            <div class="link-row">
-              <div class="link-box">${origin}/horaire/${r.schedule_code_cuisine_lecture}</div>
-              <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine_lecture}">${icon("copy", 13)} ${t("copier")}</button>
-            </div>
-          </div>
-
-          ${equipeCuisine.length === 0
-            ? `<p style="font-size:12px; color:#8993A4;">${t("aucunEmployeCuisine")}</p>`
-            : `<div class="lien-avis" style="color:#8993A4; margin-bottom:4px;">${t("heuresMaxAide")}</div>`}
-          ${equipeCuisine.map((e) => `
-            <div class="cuisine-row">
-              <div>
-                <div class="employee-name">${e.name} ${e.employee_number ? "· #" + e.employee_number : ""}</div>
-                <div class="employee-sub">${t("code")} : <b>${e.access_code}</b></div>
-                <div class="link-row">
-                  <div class="link-box">${origin}/e/${e.access_code}</div>
-                  <button class="copy-btn" data-action="copyLink" data-link="${origin}/e/${e.access_code}">${icon("copy", 13)} ${t("copier")}</button>
-                </div>
-                <div class="lien-avis">${t("sousCuisine")}</div>
-              </div>
-              <div class="cuisine-taux">
-                <div class="taux-paire">
-                  <div>
-                    <label class="employee-stat-label" for="taux-${e.id}">${t("tauxHoraire")}</label>
-                    <div class="taux-champ">
-                      <input type="number" step="0.05" min="0" id="taux-${e.id}" class="tauxInput" data-emp="${e.id}" value="${e.taux_horaire || ""}" placeholder="0,00" />
-                      <span>$/h</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label class="employee-stat-label" for="hmax-${e.id}">${t("heuresMax")}</label>
-                    <div class="taux-champ">
-                      <input type="number" step="0.5" min="0" max="168" id="hmax-${e.id}" class="hmaxInput" data-emp="${e.id}" value="${e.heures_max || ""}" placeholder="—" />
-                      <span>h</span>
-                    </div>
-                  </div>
-                  <button class="copy-btn" data-action="saveTaux" data-emp="${e.id}">${t("enregistrerTaux")}</button>
-                </div>
-              </div>
-              <div class="employee-row-actions">
-                <button class="secondary-btn" data-action="changerSecteur" data-id="${e.id}" data-vers="salle">${t("versSalle")}</button>
-                <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
-              </div>
-            </div>
-          `).join("")}
-
-          <div class="add-form">
-            <input type="text" placeholder="${t("nomEmployePlaceholder")}" data-restaurant="${r.id}" class="cuisName" />
-            <input type="number" step="0.05" min="0" placeholder="${t("tauxHoraire")}" data-restaurant="${r.id}" class="cuisTaux" style="max-width:120px;" />
-            <button data-action="addCuisine" data-id="${r.id}">${t("ajouterEmploye")}</button>
-          </div>
-
-          <div class="charges-form">
-            <label class="employee-stat-label" for="charges-${r.id}">${t("chargesEmployeur")}</label>
-            <div class="taux-champ">
-              <input type="number" step="0.5" min="0" max="100" id="charges-${r.id}" class="chargesInput" data-resto="${r.id}" value="${r.charges_pct || ""}" placeholder="0" />
-              <span>%</span>
-              <button class="copy-btn" data-action="saveCharges" data-resto="${r.id}">${t("enregistrerTaux")}</button>
-            </div>
-            <div class="lien-avis" style="margin-top:6px;">${t("chargesAide")}</div>
-          </div>
-        </div>
       </div>
     `;
   });

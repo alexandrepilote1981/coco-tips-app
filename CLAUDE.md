@@ -405,7 +405,16 @@ branchée — les grilles s'afficheraient sans répondre au doigt. Couvert par
 `test/ui-smoke.test.mjs`, qui revient aux déclarations et vérifie qu'un bouton de période
 répond encore.
 
-L'onglet Déclarations reste long (8,7 écrans) : c'est la liste des employés, pas la
+**Le découpage suit le SENS, pas l'ancienne disposition.** Le premier essai avait déplacé
+les deux grilles et laissé tout le reste où il était — l'équipe de cuisine, ses liens, ses
+taux, ses plafonds et les charges de l'employeur restaient donc dans l'onglet des
+déclarations. La cuisine ne déclare rien : tout ce qui la concerne vit avec son horaire, et
+les charges y nourrissent la masse salariale affichée juste au-dessus. La salle, elle, reste
+dans Déclarations, parce que ses cartes SONT les déclarations. Vérifié dans
+`test/ui-smoke.test.mjs`, dans les deux sens : présent dans l'onglet cuisine, absent des
+déclarations.
+
+L'onglet Déclarations reste long (8,6 écrans) : c'est la liste des employés de salle, pas la
 navigation. Un repli par employé reste à faire si le besoin revient.
 
 ## Accès et authentification
