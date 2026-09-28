@@ -609,6 +609,53 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(await onglet.ev(`!!document.querySelector(".kpi-grid")`), false, "pas de tableau de ventes");
   });
 
+  await t.test("les trois onglets ouvrent leur section, et la barre reste atteignable", async () => {
+    // Le tableau de bord faisait onze écrans sur un téléphone : l'horaire de la cuisine
+    // commençait à près de dix écrans du haut. Ce qui est vérifié ici, c'est surtout le
+    // piège du découpage : les écouteurs des déclarations sont sous un garde, et sans lui
+    // une grille s'afficherait sans répondre au doigt.
+    await ouvrirAdmin();
+    assert.equal(await onglet.ev(`document.querySelectorAll("[data-onglet]").length`), 3);
+    assert.equal(
+      await onglet.ev(`getComputedStyle(document.querySelector(".onglets")).position`),
+      "sticky",
+      "la barre doit rester collée en haut, sinon il faut remonter pour changer de section"
+    );
+
+    await onglet.ev(`document.querySelector('[data-onglet="cuisine"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".onglet.actif[data-onglet='cuisine']")`), {
+      quoi: "l'onglet cuisine",
+    });
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".period-bar")`),
+      false,
+      "les déclarations ne doivent plus être dans la page"
+    );
+
+    // Le choix survit à un rechargement : un gérant qui monte son horaire rafraîchit
+    // souvent, et repartir des déclarations lui referait le trajet à chaque fois.
+    await onglet.aller(`${serveur.base}/admin`, ".onglets");
+    assert.equal(
+      await onglet.ev(`(document.querySelector(".onglet.actif") || {}).dataset.onglet`),
+      "cuisine"
+    );
+
+    // Retour aux déclarations : la période doit être là ET répondre. C'est ce qui prouve
+    // que les écouteurs sont rebranchés après un changement d'onglet.
+    await onglet.ev(`document.querySelector('[data-onglet="declarations"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".period-bar")`), {
+      quoi: "le retour des déclarations",
+    });
+    await onglet.ev(`document.querySelector('[data-period="month"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-period="month"].active')`), {
+      quoi: "le bouton de période qui répond après un changement d'onglet",
+    });
+
+    // On repart des déclarations : les tests suivants passent par ouvrirAdmin(), qui
+    // attend la barre de période.
+    await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

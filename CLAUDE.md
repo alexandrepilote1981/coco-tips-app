@@ -372,6 +372,42 @@ Seuls **`/admin` et le lien du gérant de cuisine** voient la fenêtre et écriv
 ce sont les deux qui commandent. C'est le **serveur** qui refuse les autres portes (403), pas
 la page — `porteGerant()` dans `server.js`, couvert par `test/portes-horaire.test.mjs`.
 
+## Le tableau de bord, en trois onglets
+
+`/admin` était une seule page. Avec une équipe de 12 en salle et 6 en cuisine, elle faisait
+**onze écrans de téléphone** : la grille d'horaire de la cuisine commençait à 8 241 px du
+haut, soit près de dix écrans de défilement pour l'atteindre — à refaire chaque fois qu'on
+monte une semaine.
+
+Trois onglets, collés en haut : **Déclarations**, **Horaire salle**, **Horaire cuisine**.
+Mesuré sur la même équipe : 1,6 écran pour l'horaire de salle, 1,4 pour celui de la cuisine.
+
+**Des onglets et non des raccourcis vers des ancres.** Un raccourci laisserait la page
+longue, et une fois au fond d'une grille il faudrait remonter tout en haut pour changer de
+section. La barre est `position: sticky` pour la même raison : c'est elle qui règle le
+problème, pas les icônes.
+
+Deux choix qui ne sont pas cosmétiques :
+
+- la **pastille rouge** sur Déclarations compte les journées en retard et les virements dus.
+  Les bandeaux d'alerte vivent maintenant dans un onglet qu'on n'ouvre plus tous les jours ;
+  sans la pastille, une semaine passée dans l'horaire de la cuisine les ferait manquer.
+- l'**onglet actif** est gardé dans `localStorage` (`coco-onglet-admin`). Un gérant qui monte
+  son horaire rafraîchit vingt fois ; le renvoyer aux déclarations à chaque fois lui coûterait
+  le trajet à refaire. En revanche, CHANGER d'onglet remet le défilement à zéro — `render()`
+  restaure la position, ce qui est juste pour un rafraîchissement et faux pour une section
+  neuve.
+
+**Le piège à ne pas rouvrir** : les écouteurs des déclarations (période, export, sauvegarde,
+ajout de restaurant, messagerie) sont sous un `if (onglet === "declarations")`. Sans ce garde,
+ouvrir un horaire lèverait sur le premier `getElementById` venu et laisserait la page à moitié
+branchée — les grilles s'afficheraient sans répondre au doigt. Couvert par
+`test/ui-smoke.test.mjs`, qui revient aux déclarations et vérifie qu'un bouton de période
+répond encore.
+
+L'onglet Déclarations reste long (8,7 écrans) : c'est la liste des employés, pas la
+navigation. Un repli par employé reste à faire si le besoin revient.
+
 ## Accès et authentification
 
 Cinq portes d'entrée, sans compte utilisateur :
