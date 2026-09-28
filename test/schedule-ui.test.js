@@ -10,7 +10,13 @@ const path = require("node:path");
 // ne touche au DOM, seulement l'intérieur des fonctions.
 function chargerScheduleUI() {
   const source = fs.readFileSync(path.join(__dirname, "..", "public", "shared", "schedule-ui.js"), "utf8");
-  const fenetre = {};
+  // Les vrais modules voisins, pas des bouchons : le calcul des heures d'un quart est
+  // précisément ce qu'on veut vérifier ici, et un bouchon le remplacerait par une fiction.
+  const fenetre = {
+    CoutMainOeuvre: require("../public/shared/cout-main-oeuvre.js"),
+    Secteurs: require("../public/shared/secteurs.js"),
+    Noms: require("../public/shared/noms.js"),
+  };
   new Function("window", source)(fenetre);
   return fenetre.ScheduleUI;
 }
@@ -72,31 +78,102 @@ test("une tâche est échappée avant d'être posée dans la grille", () => {
   assert.equal(UI.echapper("Prép"), "Prép");
 });
 
-test("le plafond d'heures ne rougit qu'une fois vraiment dépassé", () => {
-  const bilan = { parEmploye: { a: { heures: 40 }, b: { heures: 40 }, c: { heures: 40.25 }, d: { heures: 12 } } };
+// ---------------------------------------------------------------- le plafond d'heures
+//
+// Un plafond porte sur la PERSONNE, pas sur un poste : « si un employé dit qu'il peut faire
+// 20 h, c'est 20 h total, c'est souvent des restrictions de visa étudiant, et le reste est
+// indiqué à 40 h vu que je veux pas payer de overtime ». Les heures des deux bords comptent
+// donc ensemble, et c'est ce que ces tests vérifient.
 
-  // Pile au plafond : ce n'est pas un dépassement. Quelqu'un cédulé exactement 40 h sur un
-  // plafond de 40 h ne doit pas voir sa rangée rougir chaque semaine.
-  assert.equal(ScheduleUI_bilan({ id: "a", heures_max: 40 }, bilan).depasse, false);
-  // Un quart de plus, oui.
-  assert.equal(ScheduleUI_bilan({ id: "c", heures_max: 40 }, bilan).depasse, true);
+const SEMAINE = ["2026-09-28", "2026-09-29", "2026-09-30"];
+
+// Un host minimal : la grille lit ses quarts par là. `ailleurs` sert aux portes par code,
+// qui ne reçoivent que les quarts de LEUR secteur et ne pourraient pas compter le reste.
+function avecQuarts(quarts, ailleurs) {
+  UI.init({
+    t: (c) => c,
+    icon: () => "",
+    lang: () => "fr",
+    restaurants: () => [],
+    shifts: () => quarts,
+    setShifts: () => {},
+    reloadShifts: async () => quarts,
+    absences: () => [],
+    setAbsences: () => {},
+    reloadAbsences: async () => [],
+    heuresAilleurs: () => ailleurs || [],
+    shiftApi: async () => ({}),
+    pdfRequest: () => ({ url: "", options: {} }),
+    rerender: () => {},
+  });
+  return new Set(SEMAINE);
+}
+
+const quart = (empId, date, debut, fin) => ({ employee_id: empId, date, start_time: debut, end_time: fin });
+
+test("le plafond ne rougit qu'une fois vraiment dépassé", () => {
+  const jours = avecQuarts([
+    quart("a", SEMAINE[0], "08:00", "18:00"), // 10 h
+    quart("a", SEMAINE[1], "08:00", "18:00"), // 10 h → 20 h pile
+    quart("c", SEMAINE[0], "08:00", "18:00"),
+    quart("c", SEMAINE[1], "08:00", "18:15"), // 20,25 h
+    quart("d", SEMAINE[0], "08:00", "12:00"), // 4 h
+  ]);
+
+  // Pile au plafond : ce n'est PAS un dépassement. Quelqu'un cédulé exactement à son
+  // plafond ne doit pas voir sa rangée rougir chaque semaine.
+  assert.equal(UI.bilanEmploye({ id: "a", heures_max: 20 }, jours).depasse, false);
+  // Un quart d'heure de plus, oui.
+  assert.equal(UI.bilanEmploye({ id: "c", heures_max: 20 }, jours).depasse, true);
   // Sans plafond, jamais.
-  assert.equal(ScheduleUI_bilan({ id: "b", heures_max: 0 }, bilan).depasse, false);
-  assert.equal(ScheduleUI_bilan({ id: "b" }, bilan).depasse, false);
+  assert.equal(UI.bilanEmploye({ id: "a", heures_max: 0 }, jours).depasse, false);
+  assert.equal(UI.bilanEmploye({ id: "a" }, jours).depasse, false);
   // Sous le plafond, jamais.
-  assert.equal(ScheduleUI_bilan({ id: "d", heures_max: 40 }, bilan).depasse, false);
+  assert.equal(UI.bilanEmploye({ id: "d", heures_max: 20 }, jours).depasse, false);
+});
+
+test("les heures de l'AUTRE bord comptent dans le plafond", () => {
+  // LE cas du visa étudiant. Avant, la grille de cuisine ne voyait que ses propres quarts :
+  // quelqu'un à 15 h de cuisine et 16 h de salle s'affichait « 15 h / 20 h », en vert, alors
+  // qu'il était à 31 h. Le chiffre sur lequel on décide d'ajouter un quart était faux.
+  const jours = avecQuarts(
+    [quart("mixte", SEMAINE[0], "05:30", "10:30"), quart("mixte", SEMAINE[1], "05:30", "10:30")], // 10 h de cuisine
+    [{ employee_id: "mixte", date: SEMAINE[2], heures: 16 }] // 16 h de salle
+  );
+  const b = UI.bilanEmploye({ id: "mixte", heures_max: 20 }, jours);
+  assert.equal(b.heures, 26);
+  assert.equal(b.depasse, true, "26 h sur un plafond de 20 h doit rougir");
+});
+
+test("les heures d'une autre semaine ne comptent pas", () => {
+  const jours = avecQuarts(
+    [quart("a", "2026-10-15", "08:00", "18:00")],
+    [{ employee_id: "a", date: "2026-10-15", heures: 30 }]
+  );
+  assert.equal(UI.bilanEmploye({ id: "a", heures_max: 20 }, jours).heures, 0);
 });
 
 test("un employé jamais cédulé compte zéro heure plutôt que de faire planter la rangée", () => {
-  const r = ScheduleUI_bilan({ id: "inconnu", heures_max: 40 }, { parEmploye: {} });
+  const jours = avecQuarts([]);
+  const r = UI.bilanEmploye({ id: "inconnu", heures_max: 40 }, jours);
   assert.equal(r.heures, 0);
   assert.equal(r.depasse, false);
 });
 
-test("sans bilan — une grille qui ne montre pas les montants — aucune rangée n'est jugée", () => {
-  assert.equal(ScheduleUI_bilan({ id: "a", heures_max: 1 }, null), null);
+test("un host sans heuresAilleurs() ne fait rien planter", () => {
+  // Le tableau de bord a déjà tous les quarts : il ne fournit pas ce raccourci, et il ne
+  // doit surtout pas compter les mêmes heures deux fois.
+  UI.init({
+    t: (c) => c, icon: () => "", lang: () => "fr", restaurants: () => [],
+    shifts: () => [quart("a", SEMAINE[0], "08:00", "18:00")],
+    setShifts: () => {}, reloadShifts: async () => [], absences: () => [],
+    setAbsences: () => {}, reloadAbsences: async () => [], shiftApi: async () => ({}),
+    pdfRequest: () => ({ url: "", options: {} }), rerender: () => {},
+  });
+  assert.equal(UI.bilanEmploye({ id: "a", heures_max: 20 }, new Set(SEMAINE)).heures, 10);
 });
 
-function ScheduleUI_bilan(emp, bilan) {
-  return UI.bilanEmploye(emp, bilan);
-}
+test("sans jours — une grille qui ne montre pas les heures — aucune rangée n'est jugée", () => {
+  assert.equal(UI.bilanEmploye({ id: "a", heures_max: 1 }, null), null);
+});
+

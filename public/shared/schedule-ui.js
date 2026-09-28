@@ -16,6 +16,11 @@
 //   lang()                 "fr" | "en"
 //   restaurants()          [{ id, name, employees: [{ id, name }] }]
 //   shifts()               tableau des quarts actuellement chargés
+//   heuresAilleurs()       [{ employee_id, date, heures }] — les heures faites dans L'AUTRE
+//                          secteur, pour les employés qui travaillent des deux bords.
+//                          Facultatif : le tableau de bord a déjà tous les quarts, seules
+//                          les portes par code en ont besoin (elles ne reçoivent que les
+//                          quarts de leur secteur, et ne pourraient donc pas compter le reste).
 //   setShifts(tableau)     remplace ce tableau
 //   reloadShifts()         recharge les quarts depuis le serveur (async)
 //   absences()             congés et vacances chargés
@@ -320,6 +325,10 @@ window.ScheduleUI = (function () {
     const secteur = options.secteur === "cuisine" ? "cuisine" : "salle";
     const peutModifier = options.peutModifier !== false;
     const voitMontants = !!options.voitMontants;
+    // Les heures suivent les montants par défaut — c'était le comportement d'avant — mais
+    // peuvent s'ouvrir seules : le tableau de bord montre les heures de la salle sans jamais
+    // lui inventer de masse salariale.
+    const avecHeures = options.avecHeures === undefined ? voitMontants : !!options.avecHeures;
     const chargesPct = options.chargesPct || 0;
     contextes[cle(restaurantId, secteur)] = { secteur, employees, peutModifier, voitMontants, chargesPct };
     for (const emp of employees) secteurParEmploye[emp.id] = secteur;
@@ -332,11 +341,17 @@ window.ScheduleUI = (function () {
     const shifts = quartsDe(secteur);
     const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
 
-    // Le bilan de la semaine sert deux fois : à la barre du haut, et à chaque rangée pour
-    // savoir si la personne dépasse son plafond d'heures. On ne le calcule qu'une fois.
+    // Le bilan sert à la barre de masse salariale : de l'argent, donc la cuisine seulement.
     const bilan = voitMontants
       ? window.CoutMainOeuvre.coutSurPeriode(employees, shifts, dates.map(isoDate), chargesPct)
       : null;
+
+    // Les HEURES sont une autre affaire que l'argent, et elles se donnent à des portes
+    // différentes. Un plafond de visa étudiant ou une limite d'overtime se lit en salle
+    // comme en cuisine — mais il ne se montre pas à une porte partagée à toute l'équipe :
+    // « 15 h / 20 h » sur la rangée de quelqu'un dit à ses collègues qu'il est limité, et
+    // pourquoi. D'où une permission séparée de celle des montants.
+    const joursHeures = avecHeures ? new Set(dates.map(isoDate)) : null;
 
     const absences = absencesDuSecteur(employees);
 
@@ -398,9 +413,9 @@ window.ScheduleUI = (function () {
         .map((emp) => {
           // Une personne qui dépasse son plafond d'heures fait rougir TOUTE sa rangée, pas
           // seulement son nom : c'est en parcourant la semaine du regard qu'on doit le voir.
-          const depasse = (bilanEmploye(emp, bilan) || {}).depasse ? "depasse" : "";
+          const depasse = (bilanEmploye(emp, joursHeures) || {}).depasse ? "depasse" : "";
           return `
-        ${empNameCellHTML(emp, bilan)}
+        ${empNameCellHTML(emp, joursHeures)}
         ${dates
           .map((d) => {
             const dateStr = isoDate(d);
@@ -462,22 +477,51 @@ window.ScheduleUI = (function () {
   `;
   }
 
+  /**
+   * Les heures d'une personne sur les jours affichés — TOUS ses quarts, les deux bords.
+   *
+   * Pourquoi le total et pas seulement les heures de cette grille-ci, dans les mots du
+   * propriétaire : « si un employé dit qu'il peut faire 20 h, c'est 20 h total, c'est
+   * souvent des restrictions de visa étudiant, et le reste est indiqué à 40 h vu que je
+   * veux pas payer de overtime ». Un plafond porte sur la PERSONNE, pas sur un poste : une
+   * limite de visa ne se divise pas entre la cuisine et la salle, et l'overtime non plus.
+   *
+   * Le piège qu'on ferme : la grille de cuisine ne reçoit que les quarts de cuisine. Sans
+   * heuresAilleurs(), quelqu'un à 15 h de cuisine et 16 h de salle s'affichait « 15 h / 20 h »
+   * — sous son plafond, en vert, alors qu'il était à 31 h.
+   */
+  function heuresSemaine(empId, quartsGrille, jours) {
+    const C = window.CoutMainOeuvre;
+    let total = quartsGrille
+      .filter((q) => q.employee_id === empId && jours.has(q.date))
+      .reduce((somme, q) => somme + C.heuresDuQuart(q), 0);
+
+    // Le tableau de bord voit déjà tous les quarts : lui ajouter heuresAilleurs() compterait
+    // les mêmes heures deux fois. Seules les portes par code en fournissent.
+    for (const h of (host.heuresAilleurs ? host.heuresAilleurs() : [])) {
+      if (h.employee_id === empId && jours.has(h.date)) total += Number(h.heures) || 0;
+    }
+    return total;
+  }
+
   // Heures cédulées de la semaine, et plafond quand il y en a un. Le plafond n'est pas
   // affiché pour tout le monde : la plupart des employés n'en ont pas, et écrire « / 0 h »
   // partout ne dirait rien. La ligne, elle, s'affiche pour toute la grille — sinon les
   // rangées n'auraient pas toutes la même hauteur.
-  function bilanEmploye(emp, bilan) {
-    if (!bilan) return null;
-    const heures = (bilan.parEmploye[emp.id] || { heures: 0 }).heures;
+  function bilanEmploye(emp, jours) {
+    if (!jours) return null;
+    // TOUTES les heures de la personne, les deux bords confondus : un plafond de visa ou une
+    // limite d'overtime porte sur elle, pas sur un poste.
+    const heures = heuresSemaine(emp.id, host.shifts(), jours);
     const plafond = Number(emp.heures_max) || 0;
     return { heures, plafond, depasse: plafond > 0 && heures > plafond + 1e-9 };
   }
 
   // Prénom sur une ligne, nom de famille en dessous. Deux employées prénommées Marie
   // donnaient auparavant deux lignes rigoureusement identiques dans la grille.
-  function empNameCellHTML(emp, bilan) {
+  function empNameCellHTML(emp, jours) {
     const { first, last } = window.Noms.splitName(emp.name);
-    const b = bilanEmploye(emp, bilan);
+    const b = bilanEmploye(emp, jours);
     const lang = host.lang();
     const C = window.CoutMainOeuvre;
     const heuresTexte = b
