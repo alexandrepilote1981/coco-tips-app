@@ -196,6 +196,34 @@ Un poste inconnu compte comme **salle**, jamais comme cuisine : se tromper vers 
 apparaître un quart au mauvais endroit, se tromper vers la cuisine le ferait entrer dans un
 calcul d'argent.
 
+### Deux façons d'être des deux bords, et pourquoi les deux existent
+
+`les_deux` sur **une seule fiche** est la façon la plus propre : un code, un lien, un
+plafond, rien à rapprocher.
+
+Mais le propriétaire travaille autrement, et c'est sa demande explicite : « il faut en créer
+2, sinon la cuisine voit pas son nom dispo pour horaire… je veux que la personne soit
+indiquée dans les 2, et toi tu fais les horaires perso en fonction de la collecte d'info des
+numéros d'employé. » Une fiche par équipe, **le même matricule de paie sur les deux**.
+
+`fichesDeLaMemePersonne()` dans `server.js` réunit donc les fiches par
+`employee_number`, et `/api/employee/:code/shifts` rend les quarts de toutes. Les deux liens
+de la personne donnent alors le MÊME horaire complet, et sa page l'écrit sous la bande —
+sans cette ligne, voir apparaître des quarts qu'on n'a jamais reçus par ce lien-là ressemble
+à une erreur.
+
+**Trois bornes, parce qu'un rapprochement qui se trompe montre à quelqu'un l'horaire d'un
+autre :** jamais sur un numéro vide (sinon toutes les fiches sans matricule n'en feraient
+qu'une), jamais entre deux restaurants (deux commerces numérotent à partir de 1), et sur le
+texte exact du numéro. Les quatre cas sont dans `test/portes-horaire.test.mjs`.
+
+Le plafond d'heures suit la même règle : `heuresAilleursDe()` couvre les DEUX façons — les
+quarts de l'autre équipe sur une fiche `les_deux`, et tout ce que fait la fiche jumelle.
+Sans ça, chaque fiche resterait sous son plafond pendant que la personne le double.
+
+Ce qui reste vrai avec deux fiches, et qu'il faut savoir : deux codes, deux liens, et les
+déclarations de pourboires vivent sur la fiche de SALLE.
+
 ### Ce que ça donne à l'écran
 
 Un employé `les_deux` apparaît dans les DEUX listes du tableau de bord et les DEUX grilles,

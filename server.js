@@ -746,6 +746,52 @@ app.delete("/api/schedule/by-code/:code/absences/:id", (req, res) => {
   supprimerAbsence(req, res, porte.restaurant.id, porte.secteur);
 });
 
+/**
+ * Les heures qu'une personne a faites AILLEURS que dans cette grille, jour par jour.
+ *
+ * Un plafond d'heures porte sur la personne — visa étudiant, ou éviter l'overtime — et pas
+ * sur un poste. Cette porte ne reçoit que les quarts de son secteur : sans ce complément,
+ * quelqu'un à 15 h de cuisine et 16 h de salle s'afficherait « 15 h / 20 h », en vert, alors
+ * qu'il est à 31 h. Le gérant ajouterait un quart en croyant qu'il reste de la place.
+ *
+ * « Ailleurs » couvre les DEUX façons d'être des deux bords :
+ *   - une seule fiche en « les_deux » : ses propres quarts portant un poste de l'autre équipe ;
+ *   - deux fiches réunies par le même numéro d'employé : tout ce que fait l'autre fiche.
+ *
+ * On n'envoie QUE des heures : ni poste, ni tâche, ni heure d'arrivée. La porte apprend que
+ * la personne a travaillé 8 h ailleurs ce jour-là, pas l'horaire de l'autre équipe.
+ */
+function heuresAilleursDe(restaurantId, secteur) {
+  const equipe = Secteurs.conditionEmployeSQL(secteur);
+  const visibles = db
+    .prepare(`SELECT id, employee_number FROM employees WHERE restaurant_id = ? AND ${equipe.sql}`)
+    .all(restaurantId, ...equipe.params);
+  const tous = db.prepare("SELECT id, employee_number FROM employees WHERE restaurant_id = ?").all(restaurantId);
+  const quarts = db
+    .prepare(`
+      SELECT s.employee_id, s.date, s.start_time, s.end_time, s.role FROM shifts s
+      JOIN employees e ON e.id = s.employee_id WHERE e.restaurant_id = ?
+    `)
+    .all(restaurantId);
+
+  const numero = (e) => String(e.employee_number || "").trim();
+  const sortie = [];
+
+  for (const moi of visibles) {
+    // Jamais sur un numéro vide : sinon toutes les fiches sans matricule n'en feraient qu'une.
+    const jumeaux = new Set(
+      numero(moi) ? tous.filter((a) => a.id !== moi.id && numero(a) === numero(moi)).map((a) => a.id) : []
+    );
+    for (const q of quarts) {
+      const sien = q.employee_id === moi.id && Secteurs.duRole(q.role) !== Secteurs.valide(secteur);
+      const dUnJumeau = jumeaux.has(q.employee_id);
+      if (!sien && !dUnJumeau) continue;
+      sortie.push({ employee_id: moi.id, date: q.date, heures: CoutMainOeuvre.heuresDuQuart(q) });
+    }
+  }
+  return sortie;
+}
+
 app.get("/api/schedule/by-code/:code/shifts", (req, res) => {
   const porte = porteParCode(req.params.code);
   if (!porte) return res.status(404).json({ error: "Lien invalide" });
@@ -758,28 +804,7 @@ app.get("/api/schedule/by-code/:code/shifts", (req, res) => {
     `)
     .all(porte.restaurant.id, ...Secteurs.conditionQuartSQL(porte.secteur).params);
 
-  // Les heures faites de L'AUTRE bord par les employés qui travaillent des deux.
-  //
-  // Un plafond d'heures porte sur la personne — visa étudiant, ou éviter l'overtime — et pas
-  // sur un poste. Cette porte ne reçoit que les quarts de son secteur : sans ce complément,
-  // quelqu'un à 15 h de cuisine et 16 h de salle s'afficherait « 15 h / 20 h », en vert,
-  // alors qu'il est à 31 h. Le gérant ajouterait un quart en croyant qu'il reste de la place.
-  //
-  // On n'envoie QUE des heures : ni poste, ni tâche, ni heure d'arrivée. La porte apprend
-  // qu'il a travaillé 8 h ailleurs ce jour-là, pas l'horaire de l'autre équipe. Et seulement
-  // pour les employés « les deux » — ceux d'un seul bord n'ont rien ailleurs.
-  const autre = Secteurs.conditionQuartSQL(porte.secteur === "cuisine" ? "salle" : "cuisine");
-  const heuresAilleurs = db
-    .prepare(`
-      SELECT s.employee_id, s.date, s.start_time, s.end_time FROM shifts s
-      JOIN employees e ON e.id = s.employee_id
-      WHERE e.restaurant_id = ? AND e.secteur = ? AND ${autre.sql}
-      ORDER BY s.date ASC
-    `)
-    .all(porte.restaurant.id, Secteurs.LES_DEUX, ...autre.params)
-    .map((q) => ({ employee_id: q.employee_id, date: q.date, heures: CoutMainOeuvre.heuresDuQuart(q) }));
-
-  res.json({ shifts, heuresAilleurs });
+  res.json({ shifts, heuresAilleurs: heuresAilleursDe(porte.restaurant.id, porte.secteur) });
 });
 
 app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
@@ -1050,17 +1075,54 @@ app.delete("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * Les fiches qui désignent la MÊME personne, réunies par leur numéro d'employé.
+ *
+ * Demande du propriétaire, dans ses mots : « il faut en créer 2, sinon la cuisine voit pas
+ * son nom dispo pour horaire… je veux que la personne soit indiquée dans les 2, et toi tu
+ * fais les horaires perso en fonction de la collecte d'info des numéros d'employé. »
+ *
+ * Sa manière de travailler : une fiche par équipe, le même matricule de paie sur les deux.
+ * Le numéro devient donc la pièce d'identité, et c'est lui qui recolle l'horaire personnel.
+ *
+ * Trois bornes, parce qu'un rapprochement qui se trompe montrerait à quelqu'un l'horaire
+ * d'un autre :
+ *   - jamais sur un numéro VIDE : sinon toutes les fiches sans matricule ne feraient qu'une ;
+ *   - jamais entre deux restaurants : deux commerces peuvent numéroter à partir de 1 ;
+ *   - la comparaison se fait sur le texte exact, tel qu'il a été saisi et borné.
+ *
+ * Une personne en « les_deux » n'a qu'une fiche et n'a donc rien à rapprocher : elle passe
+ * ici sans y trouver personne d'autre, et son horaire est déjà entier.
+ */
+function fichesDeLaMemePersonne(emp) {
+  const numero = String(emp.employee_number || "").trim();
+  if (!numero) return [emp];
+  return db
+    .prepare("SELECT * FROM employees WHERE restaurant_id = ? AND employee_number = ? ORDER BY created_at ASC")
+    .all(emp.restaurant_id, numero);
+}
+
 app.get("/api/employee/:code/shifts", (req, res) => {
   const emp = db
     .prepare("SELECT * FROM employees WHERE access_code = ?")
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
 
+  // Toutes ses fiches, pas seulement celle du lien ouvert : c'est ce qui met ses quarts de
+  // cuisine et de salle dans le même horaire, quel que soit le lien qu'elle utilise.
+  const fiches = fichesDeLaMemePersonne(emp);
+  const ids = fiches.map((f) => f.id);
+  const trous = ids.map(() => "?").join(", ");
+
   // Les quarts à venir (à partir d'aujourd'hui, heure locale approximative), les plus proches en premier
   const shifts = db
-    .prepare("SELECT * FROM shifts WHERE employee_id = ? AND date >= date('now', '-1 day') ORDER BY date ASC, start_time ASC")
-    .all(emp.id);
-  res.json({ shifts });
+    .prepare(`SELECT * FROM shifts WHERE employee_id IN (${trous}) AND date >= date('now', '-1 day') ORDER BY date ASC, start_time ASC`)
+    .all(...ids);
+
+  // La page a besoin de savoir que l'horaire vient de plusieurs fiches : elle l'écrit sous
+  // la bande. Sans ça, voir apparaître des quarts qu'on n'a jamais reçus par ce lien-là
+  // ressemble à une erreur.
+  res.json({ shifts, fichesJumelees: fiches.length });
 });
 
 app.post("/api/admin/restaurants", requireAdmin, (req, res) => {

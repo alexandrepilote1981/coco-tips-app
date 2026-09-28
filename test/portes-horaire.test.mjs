@@ -649,6 +649,110 @@ test("les trois portes de l'horaire", async (t) => {
     }
   });
 
+  // ---------------------------------------------- deux fiches, une seule personne
+  //
+  // La façon de travailler du propriétaire : « il faut en créer 2, sinon la cuisine voit pas
+  // son nom dispo pour horaire… je veux que la personne soit indiquée dans les 2, et toi tu
+  // fais les horaires perso en fonction de la collecte d'info des numéros d'employé. »
+  //
+  // Une fiche par équipe, le même matricule sur les deux. Le numéro devient la pièce
+  // d'identité, et c'est lui qui recolle l'horaire personnel. Ce qui se vérifie ici tient en
+  // deux moitiés : que le rapprochement SE FASSE, et surtout qu'il ne se fasse JAMAIS à
+  // tort — montrer à quelqu'un l'horaire d'un autre serait pire que de ne rien recoller.
+
+  const demain2 = dansNJours(6);
+  const surlendemain2 = dansNJours(7);
+
+  const meSalle = await (await admin("/api/admin/employees", {
+    method: "POST",
+    body: JSON.stringify({ restaurant_id: resto.id, name: "Marie-Eve Mainville", employee_number: "120", secteur: "salle" }),
+  })).json();
+  const meCuisine = await (await admin("/api/admin/employees", {
+    method: "POST",
+    body: JSON.stringify({ restaurant_id: resto.id, name: "Marie-Eve Mainville", employee_number: "120", secteur: "cuisine", taux_horaire: 18 }),
+  })).json();
+  const sansNumeroA = await (await admin("/api/admin/employees", {
+    method: "POST",
+    body: JSON.stringify({ restaurant_id: resto.id, name: "Sans Numero A", secteur: "salle" }),
+  })).json();
+  const sansNumeroB = await (await admin("/api/admin/employees", {
+    method: "POST",
+    body: JSON.stringify({ restaurant_id: resto.id, name: "Sans Numero B", secteur: "cuisine" }),
+  })).json();
+
+  await admin("/api/admin/shifts", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: meCuisine.id, date: demain2, start_time: "05:30", end_time: "15:00", role: "cuisinier", note: "Prép" }),
+  });
+  await admin("/api/admin/shifts", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: meSalle.id, date: surlendemain2, start_time: "16:00", end_time: "23:00", role: "server" }),
+  });
+  await admin("/api/admin/shifts", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: sansNumeroB.id, date: demain2, start_time: "08:00", end_time: "12:00", role: "plongeur" }),
+  });
+
+  const horaireDe = async (code) => (await (await fetch(`${base}/api/employee/${code}/shifts`)).json());
+
+  await t.test("les deux liens d'une même personne donnent le MÊME horaire complet", async () => {
+    for (const [quoi, code] of [["salle", meSalle.access_code], ["cuisine", meCuisine.access_code]]) {
+      const d = await horaireDe(code);
+      assert.equal(d.fichesJumelees, 2, `${quoi} : la page doit savoir qu'il y a deux fiches`);
+      assert.deepEqual(
+        d.shifts.map((q) => q.role).sort(),
+        ["cuisinier", "server"],
+        `par le lien ${quoi}, elle doit voir ses quarts des DEUX bords`
+      );
+    }
+  });
+
+  await t.test("un numéro VIDE ne rapproche jamais deux personnes", async () => {
+    // Le pire cas : sans ce garde, toutes les fiches sans matricule n'en feraient qu'une, et
+    // chacune verrait l'horaire de toutes les autres.
+    const d = await horaireDe(sansNumeroA.access_code);
+    assert.equal(d.fichesJumelees, 1);
+    assert.equal(d.shifts.length, 0, "elle n'a aucun quart, et surtout pas celui du plongeur");
+  });
+
+  await t.test("un numéro différent ne rapproche rien", async () => {
+    const d = await horaireDe(serveuse.access_code);
+    assert.ok(
+      d.shifts.every((q) => q.employee_id === serveuse.id),
+      "elle ne doit voir que ses propres quarts"
+    );
+  });
+
+  await t.test("le même numéro dans un AUTRE restaurant ne rapproche rien", async () => {
+    // Deux commerces peuvent numéroter à partir de 1 : le rapprochement s'arrête à la porte.
+    const autreResto = await (await admin("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Chez Voisin" }),
+    })).json();
+    const homonyme = await (await admin("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: autreResto.id, name: "Un Voisin", employee_number: "120", secteur: "salle" }),
+    })).json();
+    await admin("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: homonyme.id, date: demain2, start_time: "10:00", end_time: "18:00", role: "server" }),
+    });
+
+    const d = await horaireDe(meSalle.access_code);
+    assert.equal(d.fichesJumelees, 2, "toujours ses deux fiches à elle, pas trois");
+    assert.equal(d.shifts.length, 2, "et pas le quart du restaurant d'à côté");
+  });
+
+  await t.test("le plafond d'heures voit ce que fait l'AUTRE fiche", async () => {
+    // Sinon le 20 h de visa se recasse exactement comme avant : chaque fiche sous son
+    // plafond, la personne bien au-dessus.
+    const d = await (await parCode(CODE_CUISINE, "/shifts")).json();
+    const siennes = (d.heuresAilleurs || []).filter((h) => h.employee_id === meCuisine.id);
+    assert.deepEqual(siennes.map((h) => h.date), [surlendemain2]);
+    assert.equal(siennes[0].heures, 7, "16:00 → 23:00 de son autre fiche");
+    // Et toujours des heures seulement, jamais un horaire.
+    assert.deepEqual(Object.keys(siennes[0]).sort(), ["date", "employee_id", "heures"]);
+  });
+
   await t.test("un numéro d'employé se pose, se corrige, et ne change pas le code", async () => {
     // Corriger une faute de frappe ne doit jamais coûter son lien à quelqu'un : avant, il
     // fallait retirer la personne et la recréer, ce qui lui donnait un nouveau code.

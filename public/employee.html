@@ -291,6 +291,7 @@ const I18N = {
     relacherPourActualiser: "Relâche pour actualiser",
     actualisationEnCours: "Actualisation…",
     glisseIndication: "← glisse pour voir plus de journées →",
+    horaireJumele: "← glisse — cuisine et salle réunies →",
     aucunQuartSemaine: "Aucun quart prévu cette semaine.",
     prochain: "Prochain",
     hotesseTodayLabel: "Aujourd'hui je suis hôtesse",
@@ -371,6 +372,7 @@ const I18N = {
     relacherPourActualiser: "Release to refresh",
     actualisationEnCours: "Refreshing…",
     glisseIndication: "← swipe to see more days →",
+    horaireJumele: "← swipe — kitchen and dining room combined →",
     aucunQuartSemaine: "No shifts scheduled this week.",
     prochain: "Next",
     hotesseTodayLabel: "Today I am the hostess",
@@ -573,6 +575,9 @@ function recomputeEntry(entry) {
 
 let conversation = [];
 let myShifts = [];
+// Combien de fiches composent cet horaire. Plus d'une veut dire que la personne est inscrite
+// des deux bords sous le même numéro d'employé, et que l'app a recollé ses quarts.
+let fichesJumelees = 1;
 
 async function load() {
   // Sans code du tout — un lien tronqué jusqu'à « /e/ » — inutile d'aller demander au
@@ -589,8 +594,10 @@ async function load() {
     try {
       const resShifts = await api(`/api/employee/${CODE}/shifts`);
       myShifts = resShifts.shifts;
+      fichesJumelees = resShifts.fichesJumelees || 1;
     } catch (e) {
       myShifts = [];
+      fichesJumelees = 1;
     }
     try {
       const resDispo = await api(`/api/employee/${CODE}/disponibilites`);
@@ -1084,7 +1091,7 @@ function render() {
             }).join("");
           })()}
         </div>
-        <div class="swipe-hint">${t("glisseIndication")}</div>
+        <div class="swipe-hint">${fichesJumelees > 1 ? t("horaireJumele") : t("glisseIndication")}</div>
       </div>` : ""}
 
       ${dispoCardHTML()}
