@@ -372,6 +372,17 @@
   .cout-val.cout-egal { color: #8993A4; }
   .cout-notes { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; color: #8993A4; margin-bottom: 12px; }
   .cout-notes .cout-manque { color: #D4A857; }
+  .edition-form {
+    margin-top: 10px; padding: 10px; border-radius: 12px;
+    background: rgba(212,168,87,0.08); border: 1px solid rgba(212,168,87,0.25);
+  }
+  .edition-champs { display: grid; grid-template-columns: 1fr 120px; gap: 10px; }
+  .edition-form input {
+    width: 100%; border: none; border-radius: 10px; padding: 9px 10px;
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    background: rgba(255,255,255,0.08); color: #F1EFEA; outline: none;
+  }
+  .edition-actions { display: flex; gap: 8px; margin-top: 10px; }
   .plafond-form { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.07); }
   .secteur-select {
     background: rgba(255,255,255,0.06); color: #F1EFEA; border: 1px solid rgba(255,255,255,0.12);
@@ -683,6 +694,11 @@ function ecrireStockage(zone, cle, valeur) {
 // Quel onglet du tableau de bord est ouvert. Gardé dans localStorage parce qu'un gérant qui
 // monte son horaire de cuisine rafraîchit la page vingt fois : le renvoyer aux déclarations
 // à chaque fois lui coûterait le trajet à refaire.
+// Quelles fiches sont ouvertes en modification. Vit au niveau du module et pas dans le HTML :
+// render() reconstruit toute la page, un attribut posé sur un nœud ne survivrait pas au
+// premier rafraîchissement — et on perdrait la saisie en cours.
+const fichesEnEdition = new Set();
+
 const ONGLETS = ["declarations", "salle", "cuisine"];
 let onglet = ONGLETS.includes(lireStockage("localStorage", "coco-onglet-admin"))
   ? lireStockage("localStorage", "coco-onglet-admin")
@@ -702,6 +718,31 @@ const cuisinesOuvertes = new Set();
 // Le secteur d'une personne : un seul choix à trois, et non deux boutons « → Cuisine » et
 // « → Salle » qu'il aurait fallu multiplier pour ajouter « les deux ». Un menu dit d'un coup
 // d'œil où la personne est ET ce qu'elle peut devenir.
+// Corriger un nom ou un numéro d'employé. Il n'y avait aucun moyen de le faire : le numéro
+// se saisissait à la création et plus jamais, et le nom pas du tout — une faute de frappe
+// restait à l'écran pour toujours, ou obligeait à retirer la personne et à la recréer, ce
+// qui lui aurait donné un nouveau code et cassé son lien.
+function formEditionHTML(e) {
+  if (!fichesEnEdition.has(e.id)) return "";
+  return `
+    <div class="edition-form" data-emp="${e.id}">
+      <div class="edition-champs">
+        <div>
+          <label class="employee-stat-label" for="edit-nom-${e.id}">${t("nomEmploye")}</label>
+          <input type="text" id="edit-nom-${e.id}" class="editNom" value="${(e.name || "").replace(/"/g, "&quot;")}" />
+        </div>
+        <div>
+          <label class="employee-stat-label" for="edit-num-${e.id}">${t("numEmploye")}</label>
+          <input type="text" id="edit-num-${e.id}" class="editNum" maxlength="20" value="${(e.employee_number || "").replace(/"/g, "&quot;")}" placeholder="—" />
+        </div>
+      </div>
+      <div class="edition-actions">
+        <button class="copy-btn" data-action="saveEdition" data-emp="${e.id}">${t("enregistrer")}</button>
+        <button class="secondary-btn" data-action="annulerEdition" data-emp="${e.id}">${t("annuler")}</button>
+      </div>
+    </div>`;
+}
+
 function choixSecteurHTML(e) {
   const actuel = Secteurs.valide(e.secteur);
   return `
@@ -934,6 +975,11 @@ const I18N = {
     confirmerBtn: "Confirmer",
     annulerBtn: "Annuler",
     nomEmployePlaceholder: "Nom employé",
+    nomEmploye: "Nom",
+    numEmploye: "# employé",
+    modifier: "Modifier",
+    annuler: "Annuler",
+    nomObligatoire: "Le nom ne peut pas être vide.",
     roleHotesse: "Hôtesse",
     numEmployePlaceholder: "# employé",
     ajouterEmploye: "+ Employé",
@@ -1136,6 +1182,11 @@ const I18N = {
     confirmerBtn: "Confirm",
     annulerBtn: "Cancel",
     nomEmployePlaceholder: "Employee name",
+    nomEmploye: "Name",
+    numEmploye: "# employee",
+    modifier: "Edit",
+    annuler: "Cancel",
+    nomObligatoire: "The name cannot be empty.",
     roleHotesse: "Hostess",
     numEmployePlaceholder: "# employee",
     ajouterEmploye: "+ Employee",
@@ -1591,13 +1642,16 @@ function render() {
             </div>
             <div class="employee-row-actions">
               ${choixSecteurHTML(e)}
+              <button class="secondary-btn" data-action="modifierEmploye" data-emp="${e.id}">${icon("edit", 12)} ${t("modifier")}</button>
               <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
             </div>
           </div>
+          ${formEditionHTML(e)}
         `).join("")}
 
         <div class="add-form">
           <input type="text" placeholder="${t("nomEmployePlaceholder")}" data-restaurant="${r.id}" class="cuisName" />
+          <input type="text" maxlength="20" placeholder="${t("numEmployePlaceholder")}" data-restaurant="${r.id}" class="cuisNumber" style="max-width:100px;" />
           <input type="number" step="0.05" min="0" placeholder="${t("tauxHoraire")}" data-restaurant="${r.id}" class="cuisTaux" style="max-width:120px;" />
           <button data-action="addCuisine" data-id="${r.id}">${t("ajouterEmploye")}</button>
         </div>
@@ -1669,9 +1723,11 @@ function render() {
             <div class="employee-row-actions">
               <button class="secondary-btn" data-action="messageEmployee" data-id="${e.id}" data-name="${e.name}" data-resto="${r.name}">${icon("mail", 12)} ${t("messageTab")}</button>
               ${choixSecteurHTML(e)}
+              <button class="secondary-btn" data-action="modifierEmploye" data-emp="${e.id}">${icon("edit", 12)} ${t("modifier")}</button>
               <button class="danger" data-action="delEmployee" data-id="${e.id}" style="font-size:10px; padding:3px 8px; height:fit-content;">${t("retirer")}</button>
             </div>
           </div>
+          ${formEditionHTML(e)}
           <div class="plafond-form">
             <label class="employee-stat-label" for="hmax-salle-${e.id}">${t("heuresMax")}</label>
             <div class="taux-champ">
@@ -1885,12 +1941,13 @@ function render() {
     btn.addEventListener("click", async () => {
       const rid = btn.dataset.id;
       const nom = document.querySelector(`.cuisName[data-restaurant="${rid}"]`).value.trim();
+      const numero = document.querySelector(`.cuisNumber[data-restaurant="${rid}"]`).value.trim();
       const taux = document.querySelector(`.cuisTaux[data-restaurant="${rid}"]`).value;
       if (!nom) return;
       cuisinesOuvertes.add(rid); // la section reste ouverte : on vient d'y ajouter quelqu'un
       await api("/api/admin/employees", {
         method: "POST",
-        body: JSON.stringify({ restaurant_id: rid, name: nom, secteur: "cuisine", taux_horaire: taux }),
+        body: JSON.stringify({ restaurant_id: rid, name: nom, employee_number: numero, secteur: "cuisine", taux_horaire: taux }),
       });
       await load();
     });
@@ -1951,6 +2008,46 @@ function render() {
         await load();
       } catch (err) {
         menu.value = avant;
+        alert(t("erreurEnregistrement"));
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-action="modifierEmploye"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      fichesEnEdition.add(btn.dataset.emp);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="annulerEdition"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      fichesEnEdition.delete(btn.dataset.emp);
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="saveEdition"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.emp;
+      const nom = document.getElementById(`edit-nom-${id}`).value.trim();
+      const numero = document.getElementById(`edit-num-${id}`).value.trim();
+      // Un nom vide effacerait la personne de toutes les listes sans rien dire. Le serveur
+      // garde l'ancien nom dans ce cas, mais autant ne pas laisser croire que c'est passé.
+      if (!nom) {
+        alert(t("nomObligatoire"));
+        return;
+      }
+      try {
+        await api(`/api/admin/employees/${id}`, {
+          method: "POST",
+          body: JSON.stringify({ name: nom, employee_number: numero }),
+        });
+        // On ne referme la fiche qu'après un succès : sinon une coupure réseau la fermerait
+        // en laissant croire que la correction est enregistrée.
+        fichesEnEdition.delete(id);
+        await load();
+      } catch (err) {
         alert(t("erreurEnregistrement"));
       }
     });

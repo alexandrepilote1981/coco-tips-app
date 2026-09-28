@@ -769,6 +769,69 @@ test("interface", optionsDuTest, async (t) => {
     assert.deepEqual(sesQuarts, ["cuisinier", "server"]);
   });
 
+  await t.test("corriger une faute de frappe garde le code et le lien de la personne", async () => {
+    // « Je vais-tu pouvoir ajouter les numéros d'employé en cuisine et en salle, genre onglet
+    // modifier, des fois que je fais une erreur. »
+    //
+    // Avant : le numéro se saisissait à la création et plus jamais, le nom pas du tout. Une
+    // faute de frappe obligeait à retirer la personne et à la recréer — ce qui lui donnait un
+    // NOUVEAU code d'accès et cassait le lien qu'elle avait déjà reçu. C'est ça que ce test
+    // protège, plus que le champ lui-même.
+    const { employe } = await creerEmploye("Noemi jean");
+    const codeAvant = employe.access_code;
+
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="modifierEmploye"][data-emp="${employe.id}"]')`), {
+      quoi: "le bouton Modifier",
+    });
+    await onglet.ev(`document.querySelector('[data-action="modifierEmploye"][data-emp="${employe.id}"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.getElementById("edit-nom-${employe.id}")`), { quoi: "le formulaire" });
+
+    await onglet.ev(`(() => {
+      document.getElementById("edit-nom-${employe.id}").value = "Noémie Jean";
+      document.getElementById("edit-num-${employe.id}").value = "304";
+      document.querySelector('[data-action="saveEdition"][data-emp="${employe.id}"]').click();
+      return true;
+    })()`);
+    await jusqua(() => onglet.ev(`document.body.innerText.includes("Noémie Jean")`), { quoi: "le nom corrigé" });
+
+    const fiche = await onglet.ev(`(() => {
+      const c = document.getElementById("emp-card-${employe.id}");
+      return { titre: c.querySelector(".employee-name").innerText, texte: c.innerText };
+    })()`);
+    assert.match(fiche.titre, /Noémie Jean/);
+    assert.match(fiche.titre, /#\s*304/, "le numéro doit s'afficher");
+
+    // LE point du test : le code n'a pas bougé, donc le lien déjà envoyé marche encore.
+    assert.ok(fiche.texte.includes(codeAvant), "le code d'accès ne doit pas changer");
+    const apres = await (await api(`/api/employee/${codeAvant}`)).json();
+    assert.equal(apres.employee.name, "Noémie Jean");
+    assert.equal(apres.employee.employee_number, "304");
+
+    // Et le formulaire s'est bien refermé.
+    assert.equal(await onglet.ev(`!!document.getElementById("edit-nom-${employe.id}")`), false);
+  });
+
+  await t.test("un nom vidé par erreur est refusé plutôt qu'enregistré", async () => {
+    // Un nom vide effacerait la personne de toutes les listes sans rien dire.
+    const { employe } = await creerEmploye("Samuel Roy");
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="modifierEmploye"][data-emp="${employe.id}"]')`), {
+      quoi: "le bouton Modifier",
+    });
+    await onglet.ev(`(() => { window.__alertes = []; window.alert = (m) => window.__alertes.push(m); return true; })()`);
+    await onglet.ev(`document.querySelector('[data-action="modifierEmploye"][data-emp="${employe.id}"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.getElementById("edit-nom-${employe.id}")`), { quoi: "le formulaire" });
+    await onglet.ev(`(() => {
+      document.getElementById("edit-nom-${employe.id}").value = "   ";
+      document.querySelector('[data-action="saveEdition"][data-emp="${employe.id}"]').click();
+      return true;
+    })()`);
+    await jusqua(() => onglet.ev(`(window.__alertes || []).length > 0`), { quoi: "le refus" });
+    const apres = await (await api(`/api/employee/${employe.access_code}`)).json();
+    assert.equal(apres.employee.name, "Samuel Roy", "le nom ne doit pas avoir bougé");
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

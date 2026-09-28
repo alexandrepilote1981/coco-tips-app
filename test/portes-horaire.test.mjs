@@ -649,6 +649,38 @@ test("les trois portes de l'horaire", async (t) => {
     }
   });
 
+  await t.test("un numéro d'employé se pose, se corrige, et ne change pas le code", async () => {
+    // Corriger une faute de frappe ne doit jamais coûter son lien à quelqu'un : avant, il
+    // fallait retirer la personne et la recréer, ce qui lui donnait un nouveau code.
+    const avecNumero = await (await admin("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Noemi jean", employee_number: "304", secteur: "cuisine" }),
+    })).json();
+    assert.equal(avecNumero.employee_number, "304");
+
+    const corrige = await (await admin(`/api/admin/employees/${avecNumero.id}`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Noémie Jean", employee_number: "3041" }),
+    })).json();
+    assert.equal(corrige.name, "Noémie Jean");
+    assert.equal(corrige.employee_number, "3041");
+    assert.equal(corrige.secteur, "cuisine", "corriger un nom ne déplace personne d'équipe");
+
+    const parSonLien = await (await fetch(`${base}/api/employee/${avecNumero.access_code}`)).json();
+    assert.equal(parSonLien.employee.name, "Noémie Jean", "son lien marche toujours");
+  });
+
+  await t.test("un numéro d'employé est borné plutôt que gardé tel quel", async () => {
+    // Un matricule de paie, pas un texte libre : un copier-coller malheureux ferait déborder
+    // la fiche et la grille.
+    const e = await (await admin("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Test Borne", employee_number: "  " + "9".repeat(80) + "  " }),
+    })).json();
+    assert.equal(e.employee_number.length, 20);
+    assert.equal(e.employee_number, "9".repeat(20), "et les espaces autour sont retirées");
+  });
+
   await t.test("la porte cuisine reçoit ses HEURES de salle, et rien de plus", async () => {
     // Un plafond d'heures porte sur la personne — visa étudiant, ou éviter l'overtime — pas
     // sur un poste. Sans ce complément, quelqu'un à 15 h de cuisine et 16 h de salle
