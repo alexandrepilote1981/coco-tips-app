@@ -1093,6 +1093,11 @@ function tacheValide(valeur) {
 }
 
 const secteurValide = Secteurs.valide;
+// Un numéro d'employé est un matricule de paie, pas un texte libre : borné pour qu'un
+// copier-coller malheureux ne fasse pas déborder la fiche et la grille.
+function numeroValide(valeur) {
+  return String(valeur == null ? "" : valeur).trim().slice(0, 20);
+}
 function tauxValide(valeur) {
   const n = typeof valeur === "number" ? valeur : parseFloat(valeur);
   if (!Number.isFinite(n) || n < 0) return 0;
@@ -1123,9 +1128,9 @@ app.post("/api/admin/employees", requireAdmin, (req, res) => {
   db.prepare(`
     INSERT INTO employees (id, restaurant_id, name, employee_number, access_code, secteur, taux_horaire, heures_max)
     VALUES (?,?,?,?,?,?,?,?)
-  `).run(id, restaurant_id, name, employee_number || "", code, secteur, taux, heuresMax);
+  `).run(id, restaurant_id, name, numeroValide(employee_number), code, secteur, taux, heuresMax);
 
-  res.json({ id, name, employee_number, access_code: code, secteur, taux_horaire: taux, heures_max: heuresMax });
+  res.json({ id, name, employee_number: numeroValide(employee_number), access_code: code, secteur, taux_horaire: taux, heures_max: heuresMax });
 });
 
 // Modifier un employé : c'est par ici qu'on entre un taux horaire, qu'on corrige un nom, ou
@@ -1135,7 +1140,7 @@ app.post("/api/admin/employees/:id", requireAdmin, (req, res) => {
   if (!emp) return res.status(404).json({ error: "Employé introuvable" });
 
   const name = typeof req.body.name === "string" && req.body.name.trim() ? req.body.name.trim() : emp.name;
-  const numero = req.body.employee_number === undefined ? emp.employee_number : String(req.body.employee_number || "");
+  const numero = req.body.employee_number === undefined ? emp.employee_number : numeroValide(req.body.employee_number);
   const secteur = req.body.secteur === undefined ? emp.secteur : secteurValide(req.body.secteur);
   const taux = req.body.taux_horaire === undefined ? emp.taux_horaire : tauxValide(req.body.taux_horaire);
   const heuresMax = req.body.heures_max === undefined ? emp.heures_max : heuresMaxValide(req.body.heures_max);

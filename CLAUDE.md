@@ -362,6 +362,27 @@ Une journée envoyée ou modifiée pendant la visite **ne saute pas** d'une sect
 sous le doigt : le déplacement se fait au prochain rendu. Une carte qui disparaît à l'instant
 où on tape « Envoyer » est désorientante.
 
+### Corriger un nom ou un numéro
+
+Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
+d'employé. Ça n'existait nulle part — le numéro se saisissait à la création et plus jamais,
+le nom pas du tout, et la cuisine n'avait même pas de champ numéro.
+
+Ce que ça évite vaut plus que le champ lui-même : pour corriger une faute de frappe, il
+fallait **retirer la personne et la recréer**, ce qui lui donnait un nouveau `access_code` et
+cassait le lien qu'elle avait déjà reçu. `test/ui-smoke.test.mjs` vérifie donc surtout que le
+code ne bouge pas.
+
+Un nom vidé est refusé à l'écran : le serveur garderait l'ancien, mais laisser croire que
+c'est passé est pire que de le dire. Le numéro est borné à 20 caractères (`numeroValide()`),
+parce que c'est un matricule de paie et qu'un copier-coller malheureux ferait déborder la
+fiche et la grille.
+
+L'état des fiches ouvertes vit dans `fichesEnEdition` au niveau du module : `render()`
+reconstruit toute la page, et un attribut posé sur un nœud ne survivrait pas au premier
+rafraîchissement — la saisie en cours serait perdue. La fiche ne se referme qu'après un
+enregistrement réussi, sinon une coupure réseau ferait croire que la correction est passée.
+
 ### La page d'un cuisinier
 
 `employee.html` connaît maintenant le secteur : un cuisinier n'y voit ni ventes, ni
