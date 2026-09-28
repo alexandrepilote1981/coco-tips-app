@@ -797,7 +797,7 @@ test("interface", optionsDuTest, async (t) => {
 
     const fiche = await onglet.ev(`(() => {
       const c = document.getElementById("emp-card-${employe.id}");
-      return { titre: c.querySelector(".employee-name").innerText, texte: c.innerText };
+      return { titre: c.querySelector(".fiche-nom").innerText, texte: c.innerText };
     })()`);
     assert.match(fiche.titre, /Noémie Jean/);
     assert.match(fiche.titre, /#\s*304/, "le numéro doit s'afficher");
@@ -830,6 +830,68 @@ test("interface", optionsDuTest, async (t) => {
     await jusqua(() => onglet.ev(`(window.__alertes || []).length > 0`), { quoi: "le refus" });
     const apres = await (await api(`/api/employee/${employe.access_code}`)).json();
     assert.equal(apres.employee.name, "Samuel Roy", "le nom ne doit pas avoir bougé");
+  });
+
+  await t.test("les fiches sont repliées, et l'alerte d'argent ouvre la bonne", async () => {
+    // « J'imagine que quand je reçois une alerte d'argent, ça m'amène direct à la bonne
+    // place ? » — c'est précisément ce que le repli risquait de casser. Un clic qui amène
+    // sur une ligne fermée se lit comme un bouton qui ne fait rien.
+    const { employe, restoId, lien } = await creerEmploye("Rosalie Hébert");
+
+    // Une journée qui laisse un virement dû : c'est ce qui fait apparaître le bandeau.
+    const hier = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    await onglet.aller(lien, "#addBtn");
+    const entree = await (await api(`/api/employee/${employe.access_code}/entries`, {
+      method: "POST",
+      // Le virement dû est posé explicitement : sans lui, le bandeau d'argent n'apparaîtrait
+      // pas et le test passerait en ne vérifiant rien.
+      body: JSON.stringify({ date: hier, ventes: 900, clients: 30, pct: 15, remis: 0, remit_direction: "employer_owes", remit_amount: 120 }),
+    })).json();
+    assert.ok(entree.id, "la journée doit être créée");
+
+    await ouvrirAdmin();
+    await jusqua(() => onglet.ev(`!!document.querySelector(".fiche-entete")`), { quoi: "les fiches repliées" });
+
+    // Repliée par défaut : le corps est caché, mais le nom et l'argent restent lisibles.
+    const etat = await onglet.ev(`(() => {
+      const c = document.getElementById("emp-card-${employe.id}");
+      return {
+        corpsCache: getComputedStyle(c.querySelector(".fiche-corps")).display === "none",
+        nom: c.querySelector(".fiche-nom").innerText,
+        resume: c.querySelector(".fiche-resume").innerText.trim(),
+      };
+    })()`);
+    assert.equal(etat.corpsCache, true, "la fiche doit être repliée par défaut");
+    assert.match(etat.nom, /Rosalie Hébert/, "le nom reste visible replié");
+    assert.ok(etat.resume.length > 0, "et le montant aussi — c'est ce qu'on vient chercher");
+
+    // LE test : la pastille du bandeau d'argent ouvre la fiche.
+    await jusqua(
+      () => onglet.ev(`!!document.querySelector('[data-action="jumpToEmployee"][data-emp="${employe.id}"]')`),
+      { quoi: "la pastille du bandeau d'argent" }
+    );
+    await onglet.ev(`document.querySelector('[data-action="jumpToEmployee"][data-emp="${employe.id}"]').click()`);
+    await jusqua(
+      () => onglet.ev(`getComputedStyle(document.querySelector("#emp-card-${employe.id} .fiche-corps")).display !== "none"`),
+      { quoi: "la fiche ouverte par l'alerte" }
+    );
+    // Et le détail par jour est déplié du même coup : l'alerte parle d'une journée précise.
+    assert.equal(
+      await onglet.ev(`getComputedStyle(document.getElementById("report-${employe.id}")).display !== "none"`),
+      true,
+      "le tableau du détail doit être ouvert"
+    );
+
+    // Le repli se manœuvre aussi à la main, dans les deux sens.
+    const estOuverte = () =>
+      onglet.ev(`getComputedStyle(document.querySelector("#emp-card-${employe.id} .fiche-corps")).display !== "none"`);
+    const basculer = () =>
+      onglet.ev(`document.querySelector('[data-action="toggleFiche"][data-emp="${employe.id}"]').click()`);
+
+    await basculer();
+    await jusqua(async () => (await estOuverte()) === false, { quoi: "la fiche refermée" });
+    await basculer();
+    await jusqua(estOuverte, { quoi: "la fiche rouverte" });
   });
 
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
