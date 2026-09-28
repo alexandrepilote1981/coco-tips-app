@@ -178,6 +178,12 @@ dans `renderWeekGrid`). Le tableau de bord montre les heures de la salle sans lu
 masse salariale ; le lien de salle, partagé à toute l'équipe, n'en montre aucune — « 15 h /
 20 h » sur la rangée de quelqu'un dirait à ses collègues qu'il est limité, et pourquoi.
 
+La page d'un EMPLOYÉ n'en reçoit pas non plus (`ficheEmploye()`), et ce n'est pas pour le
+protéger de lui-même : c'est sa fiche, ouverte avec son code, et personne n'y voit le taux
+d'un collègue. Mais sa page ne les a jamais affichés — ils partaient parce que la requête
+fait `SELECT *`, donc chaque colonne ajoutée à la table se mettait à voyager toute seule.
+Un lien personnel se fait suivre plus souvent qu'on pense.
+
 Les taux horaires et les plafonds ne sont jamais envoyés aux portes qui n'y ont pas droit — ils ne sont pas
 seulement cachés à l'écran. Voir `porteParCode()` dans `server.js`, couvert par
 `test/portes-horaire.test.mjs`.
