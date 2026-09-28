@@ -540,7 +540,10 @@ test("les trois portes de l'horaire", async (t) => {
     assert.ok(codes.includes(cuisinier.access_code) && codes.includes(plongeur.access_code));
     // Compter les employés serait fragile — d'autres sous-tests en ajoutent. Ce qui compte,
     // c'est que tout ce qui sort par cette porte soit de la cuisine.
-    assert.ok(gerant.employees.every((e) => e.secteur === "cuisine"), "sa cuisine, et rien d'autre");
+    assert.ok(
+      gerant.employees.every((e) => e.secteur === "cuisine" || e.secteur === "les_deux"),
+      "sa cuisine, et rien d'autre — « les deux » EN FAIT partie"
+    );
   });
 
   await t.test("les codes ne traînent pas dans le texte brut des mauvaises portes", async () => {
@@ -562,5 +565,110 @@ test("les trois portes de l'horaire", async (t) => {
     for (const pdf of [pdfCuisine, pdfSalle]) {
       assert.doesNotMatch(pdf.toString("latin1"), /18\.5|taux_horaire/, "aucun salaire dans un PDF");
     }
+  });
+  // ------------------------------------------------------------ quelqu'un des deux bords
+  //
+  // « J'ai besoin que tu joignes les horaires, si un employé est ouvert en cuisine et en
+  // salle. » C'est ici que se vérifie la promesse, et surtout qu'elle n'ouvre aucune porte :
+  // la personne est des deux équipes, mais chacun de ses QUARTS reste d'un seul côté.
+
+  // Des dates À VENIR, calculées : la page d'un employé ne montre que ses quarts à venir,
+  // et des dates écrites en dur finiraient par tomber dans le passé — le test se mettrait à
+  // échouer un beau matin pour une raison qui n'a rien à voir avec ce qu'il vérifie.
+  const dansNJours = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const J_CUISINE = dansNJours(3);
+  const J_SALLE = dansNJours(4);
+
+  const mixte = await creer("Trycia Dufour", "les_deux", 17);
+  await admin("/api/admin/shifts", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: mixte.id, date: J_CUISINE, start_time: "05:30", end_time: "15:00", role: "cuisinier", note: "Prép" }),
+  });
+  await admin("/api/admin/shifts", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: mixte.id, date: J_SALLE, start_time: "16:00", end_time: "23:00", role: "server" }),
+  });
+
+  await t.test("un employé des deux bords est dans les deux équipes", async () => {
+    for (const code of [CODE_CUISINE, CODE_SALLE]) {
+      const d = await (await parCode(code)).json();
+      assert.ok(d.employees.some((e) => e.name === "Trycia Dufour"), `absent de la porte ${code}`);
+    }
+  });
+
+  await t.test("chacun de ses quarts ne sort que par la porte de SON secteur", async () => {
+    // Le vrai risque du mélange : un quart de salle qui fuirait vers la cuisine. Ce n'est
+    // plus le secteur de la personne qui filtre, c'est le poste du quart.
+    const cuisine = await (await parCode(CODE_CUISINE, "/shifts")).json();
+    const siens = cuisine.shifts.filter((q) => q.employee_id === mixte.id);
+    assert.deepEqual(siens.map((q) => q.date), [J_CUISINE], "seulement son quart de cuisine");
+
+    const salle = await (await parCode(CODE_SALLE, "/shifts")).json();
+    const autres = salle.shifts.filter((q) => q.employee_id === mixte.id);
+    assert.deepEqual(autres.map((q) => q.date), [J_SALLE], "seulement son quart de salle");
+  });
+
+  await t.test("sur SA page à lui, les deux quarts sont ensemble", async () => {
+    // C'est la demande, mot pour mot : « dans son horaire à lui il voit une horaire avec
+    // toutes ses chiffres cuisine et salle dans le même ».
+    const d = await (await fetch(`${base}/api/employee/${mixte.access_code}/shifts`)).json();
+    assert.deepEqual(d.shifts.map((q) => q.date).sort(), [J_CUISINE, J_SALLE].sort());
+    assert.deepEqual(d.shifts.map((q) => q.role).sort(), ["cuisinier", "server"]);
+  });
+
+  await t.test("il garde son droit de déclarer ses pourboires", async () => {
+    const d = await (await fetch(`${base}/api/employee/${mixte.access_code}`)).json();
+    assert.equal(d.employee.secteur, "les_deux");
+    const reponse = await fetch(`${base}/api/employee/${mixte.access_code}/entries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: J_SALLE, ventes: 900, clients: 34, tips_declared: 130 }),
+    });
+    assert.equal(reponse.status, 200, "un employé mixte doit pouvoir déclarer sa journée");
+  });
+
+  await t.test("le gérant de cuisine reçoit son lien perso — c'est voulu", async () => {
+    // Décision explicite du propriétaire : « je veux que les gérants soient en mesure de
+    // distribuer les liens perso des employés ».
+    const gerant = await (await parCode(CODE_CUISINE)).json();
+    const sien = gerant.employees.find((e) => e.name === "Trycia Dufour");
+    assert.equal(sien.access_code, mixte.access_code);
+  });
+
+  await t.test("mais son lien ne fuit toujours pas par les deux autres portes", async () => {
+    // Le lien ouvre sa page, où il y a ses pourboires déclarés. Le lien de LECTURE des
+    // cuisiniers et celui de la salle sont partagés à toute une équipe.
+    for (const code of [CODE_LECTURE, CODE_SALLE]) {
+      const texte = await (await parCode(code)).text();
+      assert.ok(!texte.includes(mixte.access_code), `son code ne doit pas sortir par ${code}`);
+      assert.doesNotMatch(texte, /\b17\b.*taux|taux_horaire/, "ni son taux");
+    }
+  });
+
+  await t.test("effacer la semaine en cuisine n'efface pas ses quarts de salle", async () => {
+    // LE piège de tout ce chantier. L'effacement en lot n'a aucune annulation possible :
+    // s'il filtrait sur le secteur de la PERSONNE, il emporterait les quarts de salle d'un
+    // employé mixte, et personne ne s'en apercevrait avant le service.
+    const avant = await (await parCode(CODE_SALLE, "/shifts")).json();
+    const salleAvant = avant.shifts.filter((q) => q.employee_id === mixte.id).length;
+    assert.equal(salleAvant, 1);
+
+    const r = await parCode(CODE_CUISINE, `/shifts?from=${dansNJours(2)}&to=${dansNJours(5)}`, { method: "DELETE" });
+    assert.equal(r.status, 200);
+
+    const apres = await (await parCode(CODE_SALLE, "/shifts")).json();
+    const restants = apres.shifts.filter((q) => q.employee_id === mixte.id);
+    assert.deepEqual(restants.map((q) => q.date), [J_SALLE], "son quart de salle a survécu");
+
+    const cuisine = await (await parCode(CODE_CUISINE, "/shifts")).json();
+    assert.equal(
+      cuisine.shifts.filter((q) => q.employee_id === mixte.id).length,
+      0,
+      "son quart de cuisine, lui, est bien parti"
+    );
   });
 });
