@@ -387,6 +387,22 @@ L'état vit dans `fichesOuvertes` au niveau du module, comme `fichesEnEdition` �
 en cours de modification est forcément dépliée (`ficheOuverte()`). La replier referme aussi
 son édition : faire disparaître une saisie sans rien dire serait pire.
 
+### Qui apparaît dans la liste des déclarations
+
+`equipeSalle` ramasse les gens de salle, les mixtes — **et quiconque a déjà déclaré une
+journée**, quel que soit son secteur actuel. Ce dernier cas est de l'argent, pas une
+coquetterie.
+
+Déplacer une serveuse vers la cuisine la sortait de la liste, mais ses déclarations restent
+en base — donc sa pastille aussi, dans le bandeau des virements dus. La pastille pointait
+alors vers une fiche qui n'existait plus : le clic ne faisait rien, et le montant dû ne
+pouvait **plus jamais** être marqué comme viré. Un bandeau qui réclame de l'argent doit
+toujours mener quelque part.
+
+Les bandeaux eux-mêmes se construisent à partir de `e.entries`. Un cuisinier ne déclare rien,
+n'a donc aucune entrée, et ne peut donc produire aucune pastille — remplir la cuisine n'en
+crée pas une seule.
+
 ### Corriger un nom ou un numéro
 
 Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
