@@ -852,6 +852,8 @@ const I18N = {
       `${n} personne${n > 1 ? "s n'ont" : " n'a"} pas rempli ses disponibilités : ${noms}`,
     confirmMalgreConge: (nom, type, periode) =>
       `${nom} est en « ${type} » (${periode}).\n\nL'ajouter quand même ?`,
+    confirmDejaCeduleAilleurs: (nom, date, heures) =>
+      `${nom} a déjà un quart dans l'autre équipe le ${date} (${heures}).\n\nL'ajouter quand même ?`,
     // Tournure sans pronom : « il » serait faux pour la moitié de l'équipe, et deviner le
     // genre à partir d'un prénom se trompe forcément un jour.
     confirmMalgreDispoAbsent: (nom, jour) =>
@@ -1055,6 +1057,8 @@ const I18N = {
       `${n} ${n > 1 ? "people have" : "person has"} not filled in their availability: ${noms}`,
     confirmMalgreConge: (nom, type, periode) =>
       `${nom} is on "${type}" (${periode}).\n\nAdd them anyway?`,
+    confirmDejaCeduleAilleurs: (nom, date, heures) =>
+      `${nom} is already scheduled on the other team on ${date} (${heures}).\n\nAdd them anyway?`,
     confirmMalgreDispoAbsent: (nom, jour) => `${nom} said they are not available on ${jour}.\n\nAdd them anyway?`,
     confirmMalgreDispoHeures: (nom, jour, dispo, heure) =>
       `${nom} is available on ${jour}: ${dispo.toLowerCase()}.\nYou are adding them at ${heure}.\n\nAdd them anyway?`,
