@@ -1605,7 +1605,16 @@ function render() {
     // Quelqu'un qui travaille des deux bords apparaît dans les DEUX listes et les DEUX
     // grilles — c'est ce que veut dire « les deux ». Sa fiche porte une marque, sinon le
     // voir deux fois dans la page se lirait comme un doublon.
-    const equipeSalle = r.employees.filter((e) => Secteurs.travailleEn(e.secteur, "salle"));
+    // « ou a déjà déclaré des journées » n'est pas une coquetterie : c'est de l'argent.
+    //
+    // Déplacer une serveuse vers la cuisine la sortait de cette liste, mais ses déclarations
+    // restent — donc sa pastille aussi, dans le bandeau des virements dus. La pastille
+    // pointait alors vers une fiche qui n'existait plus : le clic ne faisait rien, et le
+    // montant dû ne pouvait PLUS JAMAIS être marqué comme viré. Tant qu'il reste une
+    // journée déclarée, la personne garde sa fiche ici, quel que soit son secteur.
+    const equipeSalle = r.employees.filter(
+      (e) => Secteurs.travailleEn(e.secteur, "salle") || (e.entries && e.entries.length > 0)
+    );
     const equipeCuisine = r.employees.filter((e) => Secteurs.travailleEn(e.secteur, "cuisine"));
 
     // L'équipe de cuisine — ses liens, ses taux, ses plafonds, les charges — vit dans

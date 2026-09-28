@@ -894,6 +894,46 @@ test("interface", optionsDuTest, async (t) => {
     await jusqua(estOuverte, { quoi: "la fiche rouverte" });
   });
 
+  await t.test("un virement dû reste atteignable même après un changement d'équipe", async () => {
+    // Trouvé en répondant à « il y en a côté salle ? » : déplacer une serveuse vers la
+    // cuisine la sortait de la liste des déclarations, mais ses journées déclarées restent —
+    // donc sa pastille aussi, dans le bandeau des virements dus. Elle pointait alors vers
+    // une fiche qui n'existait plus : le clic ne faisait rien, et les 175 $ dus ne pouvaient
+    // PLUS JAMAIS être marqués comme virés. Un bandeau qui réclame de l'argent doit toujours
+    // mener quelque part.
+    const { employe } = await creerEmploye("Ex Serveuse");
+    const hier = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    await api(`/api/employee/${employe.access_code}/entries`, {
+      method: "POST",
+      body: JSON.stringify({ date: hier, ventes: 900, clients: 30, pct: 15, remis: 0, remit_direction: "employer_owes", remit_amount: 175 }),
+    });
+    await api(`/api/admin/employees/${employe.id}`, { method: "POST", body: JSON.stringify({ secteur: "cuisine" }) });
+
+    await ouvrirAdmin();
+    await jusqua(
+      () => onglet.ev(`!!document.querySelector('[data-action="jumpToEmployee"][data-emp="${employe.id}"]')`),
+      { quoi: "la pastille du virement dû" }
+    );
+    assert.equal(
+      await onglet.ev(`!!document.getElementById("emp-card-${employe.id}")`),
+      true,
+      "sa fiche doit rester tant qu'il lui reste une journée déclarée"
+    );
+
+    // Et la pastille mène bien quelque part.
+    await onglet.ev(`document.querySelector('[data-action="jumpToEmployee"][data-emp="${employe.id}"]').click()`);
+    await jusqua(
+      () => onglet.ev(`getComputedStyle(document.querySelector("#emp-card-${employe.id} .fiche-corps")).display !== "none"`),
+      { quoi: "la fiche ouverte par la pastille" }
+    );
+    // Le bouton qui solde le virement est là : c'est la seule chose qui compte vraiment.
+    assert.equal(
+      await onglet.ev(`!!document.querySelector('[data-action="markTransferred"]')`),
+      true,
+      "le virement doit pouvoir être marqué comme viré"
+    );
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
