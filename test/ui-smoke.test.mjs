@@ -983,6 +983,64 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.taille(1000);
   });
 
+  await t.test("deux fiches sous le même numéro : un seul horaire sur sa page", async () => {
+    // La façon de travailler du propriétaire. Ce que ce test regarde, c'est ce que la
+    // personne voit : un seul horaire, ses deux sortes de quarts dedans, et une ligne qui
+    // dit pourquoi — sans elle, voir apparaître des quarts qu'on n'a jamais reçus par ce
+    // lien-là ressemble à une erreur.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Jumelage" }),
+    })).json();
+    const creer = (nom, secteur) =>
+      api("/api/admin/employees", {
+        method: "POST",
+        body: JSON.stringify({ restaurant_id: resto.id, name: nom, employee_number: "120", secteur }),
+      }).then((r) => r.json());
+    const cotéSalle = await creer("Marie-Eve Mainville", "salle");
+    const cotéCuisine = await creer("Marie-Eve Mainville", "cuisine");
+
+    const jour = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: cotéCuisine.id, date: jour(1), start_time: "05:30", end_time: "15:00", role: "cuisinier", note: "Prép" }),
+    });
+    await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: cotéSalle.id, date: jour(2), start_time: "16:00", end_time: "23:00", role: "server" }),
+    });
+
+    // Par son lien de SALLE — celui où elle déclare ses pourboires.
+    await onglet.aller(`${serveur.base}/e/${cotéSalle.access_code}`, ".dispo-card");
+    assert.equal(await onglet.ev(`!!document.querySelector(".error-box")`), false);
+
+    const bande = await onglet.ev(`[...document.querySelectorAll(".day-pill.worked")].map(n => n.innerText).join(" | ")`);
+    assert.match(bande, /05:30/, "son quart de cuisine, venu de l'AUTRE fiche");
+    assert.match(bande, /15:00/, "avec son heure de fin");
+    assert.match(bande, /Cuisinier/);
+    assert.match(bande, /Prép/);
+    assert.match(bande, /16:00/, "et son quart de salle, dans la même bande");
+    assert.match(bande, /Serveur/);
+    assert.doesNotMatch(bande, /23:00/, "un quart de salle ne montre jamais son heure de fin");
+
+    // La ligne qui explique d'où vient l'horaire.
+    assert.match(
+      await onglet.ev(`(document.querySelector(".swipe-hint") || {}).textContent || ""`),
+      /cuisine et salle/i,
+      "la page doit dire que l'horaire réunit les deux"
+    );
+
+    // Elle garde son formulaire de déclaration : sa fiche de salle est celle qui déclare.
+    assert.equal(await onglet.ev(`!!document.getElementById("addBtn")`), true);
+
+    // Et par son lien de CUISINE, le même horaire complet.
+    await onglet.aller(`${serveur.base}/e/${cotéCuisine.access_code}`, ".dispo-card");
+    const bandeCuisine = await onglet.ev(`[...document.querySelectorAll(".day-pill.worked")].map(n => n.innerText).join(" | ")`);
+    assert.match(bandeCuisine, /05:30/);
+    assert.match(bandeCuisine, /16:00/, "son quart de salle apparaît aussi par le lien cuisine");
+    // Celle-là est une fiche de cuisine : pas de formulaire de pourboires.
+    assert.equal(await onglet.ev(`!!document.getElementById("addBtn")`), false);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
