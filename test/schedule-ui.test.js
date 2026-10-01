@@ -323,3 +323,59 @@ test("tous les postes proposés par la grille ont leur couleur", () => {
   }
 });
 
+// ------------------------------------------- l'heure de fin proposée
+//
+// « Mets l'heure de fin de quart à 14h30 par défaut, et si c'est différemment je le ferai
+// manuellement — même mieux, 14h30 ou 8h max. » Deux règles, et la PLUS COURTE gagne.
+
+test("c'est 14h30 quand les 8 h iraient plus loin", () => {
+  assert.equal(UI.finParDefaut("09:00"), "14:30"); // 8 h donnerait 17:00
+  assert.equal(UI.finParDefaut("08:00"), "14:30"); // 8 h donnerait 16:00
+  assert.equal(UI.finParDefaut("07:00"), "14:30"); // 8 h donnerait 15:00
+});
+
+test("ce sont les 8 h quand elles mordent avant 14h30", () => {
+  // Le vrai cas de la cuisine : on rentre à 5h30.
+  assert.equal(UI.finParDefaut("05:30"), "13:30");
+  assert.equal(UI.finParDefaut("05:00"), "13:00");
+  assert.equal(UI.finParDefaut("06:00"), "14:00");
+});
+
+test("à 6h30 les deux règles tombent sur la même heure", () => {
+  assert.equal(UI.finParDefaut("06:30"), "14:30");
+});
+
+test("un quart de soir ne se voit pas proposer une fin déjà passée", () => {
+  // 14h30 est derrière lui : proposer ça donnerait un quart négatif, ou pire un quart de
+  // 23 heures une fois passé par le calcul qui traverse minuit.
+  assert.equal(UI.finParDefaut("16:00"), "00:00");
+  assert.equal(UI.finParDefaut("18:00"), "02:00");
+  assert.equal(UI.finParDefaut("14:30"), "22:30");
+});
+
+test("la fin proposée existe vraiment dans la liste d'heures", () => {
+  // La liste va par tranches de 15 min : une fin qui n'y serait pas ferait retomber le
+  // sélecteur sur 00:00 en silence, et le quart repartirait avec la mauvaise heure.
+  const choix = new Set(valeurs(UI.timeOptionsHTML("")));
+  for (const h of ["05:00", "05:30", "06:45", "09:00", "11:15", "16:00", "23:45"]) {
+    assert.ok(choix.has(UI.finParDefaut(h)), `${h} -> ${UI.finParDefaut(h)} doit être dans la liste`);
+  }
+});
+
+test("une heure de début illisible ne fait pas planter la fenêtre", () => {
+  for (const mauvais of [undefined, null, "", "midi", "99:99"]) {
+    assert.equal(UI.finParDefaut(mauvais), "14:30", JSON.stringify(mauvais));
+  }
+});
+
+test("la fin proposée ne dépasse jamais 8 h", () => {
+  const C = require("../public/shared/cout-main-oeuvre.js");
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 15, 30, 45]) {
+      const debut = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      const heures = C.heuresDuQuart({ start_time: debut, end_time: UI.finParDefaut(debut) });
+      assert.ok(heures > 0 && heures <= 8 + 1e-9, `${debut} donne ${heures} h`);
+    }
+  }
+});
+
