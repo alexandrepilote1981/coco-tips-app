@@ -116,13 +116,31 @@ Chaque poste a sa teinte, et les quatre se rangent en deux familles — la coule
 | Serveur | vert `#6FBF93` | froide → salle |
 | Hôtesse | bleu `#6F9FDE` | froide → salle |
 | Cuisinier | or `#D4A857` | chaude → cuisine |
-| Plongeur | cuivre `#C8804A` | chaude → cuisine |
+| Plongeur | magenta `#CE6FA8` | — |
 
 Il n'y en avait que deux avant — « poste principal » en vert, « second » en or — et le
 propriétaire a mis le doigt sur ce que ça cachait : « quand un employé de la cuisine a un
 chiffre cuisinier c'est vert, s'il fait un chiffre serveuse c'est aussi vert ». Pour
 quelqu'un qui travaille des deux bords, ses deux sortes de quarts se ressemblaient
 exactement.
+
+**Le Plongeur a d'abord été cuivre `#C8804A`, et c'était une erreur** — signalée ainsi :
+« les couleurs dans la cuisine sont trop ressemblantes ». L'or et le cuivre sont deux
+oranges ; dans une barre de 4 px, c'est une seule couleur. Les candidats écartés disent
+pourquoi le magenta : le **violet** tire vers le bleu de l'Hôtesse (« le problème avec ton
+violet c'est que ça ressemble au bleu »), et le **turquoise** aurait déplacé le problème sur
+le vert du Serveur au lieu de le régler. Le magenta ne touche aucune des trois autres
+teintes, ni le rouge des alertes, qui penche vers l'orange.
+
+Du coup l'idée des deux familles (froide = salle, chaude = cuisine) ne tient plus, et c'est
+assumé : une grille ne montre jamais les quatre postes à la fois, donc la famille ne servait
+à rien là où on la regardait. Lire le poste exact, oui.
+
+`test/ui-smoke.test.mjs` mesure maintenant l'écart RVB entre les quatre barres, deux par
+deux, et refuse une paire sous 70. L'ancienne paire or/cuivre était à 44 ; la plus serrée
+aujourd'hui (vert et bleu) dépasse 80. Sans ce test, rien n'empêchait de recréer deux
+jumelles — l'ancien test ne comparait que le Serveur et l'Hôtesse, donc il passait au vert
+sur le bogue même.
 
 **Dans la grille, la couleur passe par une BARRE sur le côté, jamais par le fond.** Le fond
 appartient aux alertes, qui sont toutes rouges : colonne d'un férié, rangée d'un dépassement
@@ -162,6 +180,14 @@ librement coupait tout sur un téléphone — « 08:00 » devenait « 08:0 », �
 « Ser… ». Les 100 px de la cuisine ne sont pas un chiffre rond : c'est ce qu'il faut pour
 qu'une plage horaire tienne sur une ligne et qu'une tâche de longueur maximale s'écrive en
 entier.
+
+La feuille imprimée porte **les mêmes quatre teintes**, en version papier : un fond très
+pâle et une encre soutenue par poste (`COULEURS.posteFond` / `posteEncre` dans
+`horaire-mise-en-page.js`). Elle était restée à l'ancien système à deux couleurs bien après
+que l'écran en ait quatre — le Serveur avec le Cuisinier, l'Hôtesse avec le Plongeur — donc
+le bogue d'origine y survivait intact. Le magenta du Plongeur y est choisi franchement
+violet : le pâle d'une journée marquée (`marqueFond`) tire vers le saumon, et deux roses
+voisins sur une feuille punaisée au mur se confondraient.
 
 Sur la feuille imprimée il n'y a de place que pour deux lignes (une case fait 26 points de
 haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép ». Quand les deux
