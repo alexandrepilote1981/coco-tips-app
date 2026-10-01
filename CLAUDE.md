@@ -170,6 +170,24 @@ couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Sa longueur 
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
 réfèrent tous les deux.
 
+### L'heure de fin proposée
+
+Une fenêtre de quart neuf arrive avec une fin déjà remplie : `finParDefaut()` dans
+`schedule-ui.js`. Dans les mots du propriétaire : « mets l'heure de fin de quart à 14h30 par
+défaut, et si c'est différemment je le ferai manuellement — même mieux, 14h30 ou 8h max ».
+
+Deux règles, et c'est la **plus courte** des deux qui gagne : le service finit à **14 h 30**,
+et un quart ne dépasse pas **8 h** parce qu'au-delà ça se paie en temps supplémentaire. Un
+05:30 finit donc à 13:30, un 09:00 à 14:30, et à 06:30 les deux règles tombent sur la même
+heure. 14 h 30 n'est retenue que si elle vient APRÈS le début — pour un quart de soir elle est
+déjà passée, et la proposer donnerait un quart de 23 heures une fois passé par le calcul qui
+traverse minuit.
+
+La fin **suit le début tant qu'on n'y a pas touché**. Dès qu'on choisit une fin soi-même
+(`finTouchee`), elle cesse de bouger : c'est exactement le « je le ferai manuellement ». Et
+elle ne bouge **jamais sur un quart existant** (`estNeuf`) — déplacer en silence une fin déjà
+enregistrée changerait des heures cédulées, le plafond de la personne et la masse salariale.
+
 Chaque employé — **de cuisine comme de salle** — peut porter un **plafond d'heures par
 semaine** (`employees.heures_max`, 0 = aucun plafond). Quand la semaine cédulée le dépasse, toute la
 rangée de la personne rougit dans la grille, et ses heures s'écrivent sous son nom sous la

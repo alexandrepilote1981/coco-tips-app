@@ -658,6 +658,36 @@ window.ScheduleUI = (function () {
     return POSTES_CONNUS.indexOf(String(role || "")) === -1 ? "server" : String(role);
   }
 
+  /**
+   * L'heure de fin proposée pour un quart NEUF, d'après son heure de début.
+   *
+   * Dans les mots du propriétaire : « mets l'heure de fin de quart à 14h30 par défaut, et si
+   * c'est différemment je le ferai manuellement — même mieux, 14h30 ou 8h max ».
+   *
+   * Deux règles, et c'est la PLUS COURTE des deux qui gagne :
+   *   - le service se termine à 14 h 30 ;
+   *   - un quart ne dépasse pas 8 heures, parce qu'au-delà ça devient du temps supplémentaire.
+   *
+   * Un quart qui commence à 5 h 30 finit donc à 13 h 30 (les 8 h mordent avant 14 h 30), et
+   * un quart qui commence à 9 h finit à 14 h 30 (c'est 14 h 30 qui mord).
+   *
+   * 14 h 30 n'est retenue que si elle vient APRÈS le début : pour un quart de soir elle est
+   * déjà passée, et proposer une fin antérieure au début donnerait un quart négatif — ou,
+   * pire, un quart de 23 heures une fois passé par le calcul qui traverse minuit.
+   */
+  const FIN_CIBLE_MIN = 14 * 60 + 30;
+  const DUREE_MAX_MIN = 8 * 60;
+
+  function finParDefaut(debut) {
+    const C = window.CoutMainOeuvre;
+    const d = C.minutesDe(debut);
+    if (d === null) return "14:30";
+    const huitHeures = d + DUREE_MAX_MIN;
+    const fin = FIN_CIBLE_MIN > d ? Math.min(FIN_CIBLE_MIN, huitHeures) : huitHeures;
+    const m = fin % (24 * 60);
+    return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  }
+
   // Les 24 heures par tranches de 15 min. On construit la liste nous-mêmes parce que le
   // sélecteur natif <input type="time"> ignore parfois l'attribut step sur iOS.
   //
@@ -710,8 +740,16 @@ window.ScheduleUI = (function () {
     document.getElementById("shiftModalTitle").textContent = existing ? t("modifierQuart") : t("ajouterQuart");
     document.getElementById("shiftModalEmpName").textContent = employeeName(existing ? existing.employee_id : employeeId);
     document.getElementById("shiftDateInput").value = existing ? existing.date : date;
-    document.getElementById("shiftStartInput").innerHTML = timeOptionsHTML(existing ? existing.start_time : "09:00");
-    document.getElementById("shiftEndInput").innerHTML = timeOptionsHTML(existing ? existing.end_time : "17:00");
+    const debutInitial = existing ? existing.start_time : "09:00";
+    document.getElementById("shiftStartInput").innerHTML = timeOptionsHTML(debutInitial);
+    document.getElementById("shiftEndInput").innerHTML =
+      timeOptionsHTML(existing ? existing.end_time : finParDefaut(debutInitial));
+    // La fin suit le début tant qu'on n'y a pas touché. Dès qu'on choisit une fin soi-même,
+    // elle cesse de bouger : « si c'est différemment je le ferai manuellement ». Et on ne
+    // touche JAMAIS à un quart existant — déplacer son heure de fin sans le dire changerait
+    // des heures déjà cédulées, et le coût qui va avec.
+    overlay.dataset.finTouchee = "";
+    overlay.dataset.estNeuf = existing ? "" : "1";
     const postes = rolesDe(equipe);
     document.getElementById("shiftRoleInput").innerHTML = postes
       .map((val) => `<option value="${val}">${ROLES[val][host.lang()]}</option>`)
@@ -1251,6 +1289,16 @@ window.ScheduleUI = (function () {
     });
     document.getElementById("shiftSaveBtn").addEventListener("click", saveShiftFromModal);
     document.getElementById("shiftDeleteBtn").addEventListener("click", deleteShiftFromModal);
+
+    const overlay = document.getElementById("shiftModalOverlay");
+    const champFin = document.getElementById("shiftEndInput");
+    champFin.addEventListener("change", () => {
+      overlay.dataset.finTouchee = "1";
+    });
+    document.getElementById("shiftStartInput").addEventListener("change", (ev) => {
+      if (!overlay.dataset.estNeuf || overlay.dataset.finTouchee) return;
+      champFin.value = finParDefaut(ev.target.value);
+    });
   }
 
   return {
@@ -1264,6 +1312,7 @@ window.ScheduleUI = (function () {
     fmtTime,
     fmtWeekLabel,
     timeOptionsHTML,
+    finParDefaut,
     renderWeekGrid,
     openShiftModal,
     closeShiftModal,
