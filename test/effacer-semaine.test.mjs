@@ -192,3 +192,130 @@ test("effacement d'une semaine d'horaire", async (t) => {
     assert.equal((await tousLesQuarts()).length, avant);
   });
 });
+
+// ------------------------------------------- remettre ce qu'on vient d'effacer
+//
+// « Effacer la semaine » était la seule action de l'app qui détruisait beaucoup d'un coup
+// sans aucun retour en arrière. Le seul filet était la fenêtre de confirmation du navigateur
+// — celle où on tape OK sans lire. Ces tests tiennent les bornes de l'annulation, qui
+// comptent plus que l'annulation elle-même : elle accepte des lignes venues du NAVIGATEUR.
+
+test("annuler un effacement de semaine", async (t) => {
+  const dossier = mkdtempSync(path.join(tmpdir(), "declara-annuler-"));
+  const { proc, base } = await demarrerServeur(dossier);
+
+  const admin = (chemin, opts = {}) =>
+    fetch(`${base}${chemin}`, {
+      ...opts,
+      headers: { "Content-Type": "application/json", "X-Admin-Token": MOT_DE_PASSE, ...(opts.headers || {}) },
+    });
+
+  t.after(() => {
+    proc.kill("SIGKILL");
+    rmSync(dossier, { recursive: true, force: true });
+  });
+
+  const resto = await (await admin("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Chez Coco" }) })).json();
+  const voisin = await (await admin("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Le Voisin" }) })).json();
+  const creer = (restaurant_id, name, secteur) => admin("/api/admin/employees", {
+    method: "POST", body: JSON.stringify({ restaurant_id, name, secteur }),
+  }).then((r) => r.json());
+
+  const cuisto = await creer(resto.id, "Luc Bergeron", "cuisine");
+  const serveuse = await creer(resto.id, "Marie Tremblay", "salle");
+  const chezLeVoisin = await creer(voisin.id, "Alexandre Roy", "cuisine");
+
+  const poser = (employee_id, date, role) => admin("/api/admin/shifts", {
+    method: "POST",
+    body: JSON.stringify({ employee_id, date, start_time: "09:00", end_time: "17:00", role }),
+  }).then((r) => r.json());
+
+  const tous = async () => (await (await admin("/api/admin/shifts")).json()).shifts;
+
+  await poser(cuisto.id, "2026-09-21", "cuisinier");
+  await poser(cuisto.id, "2026-09-23", "plongeur");
+  await poser(serveuse.id, "2026-09-21", "server");
+  await poser(chezLeVoisin.id, "2026-09-21", "cuisinier");
+
+  let effaces = null;
+
+  await t.test("l'effacement rend les quarts qu'il emporte", async () => {
+    const res = await admin(`/api/admin/shifts?restaurant_id=${resto.id}&from=2026-09-21&to=2026-09-27&secteur=cuisine`, { method: "DELETE" });
+    const corps = await res.json();
+    assert.equal(corps.deleted, 2);
+    assert.equal(corps.quarts.length, 2, "les lignes effacées reviennent avec la réponse");
+    assert.ok(corps.quarts[0].id && corps.quarts[0].employee_id, "des lignes entières, pas juste un compte");
+    effaces = corps.quarts;
+    assert.equal((await tous()).length, 2, "la serveuse et le voisin restent");
+  });
+
+  await t.test("on les remet, avec leurs identifiants d'origine", async () => {
+    // Un quart remis avec un id neuf casserait les liens que la page garde en mémoire : la
+    // pastille sur laquelle on tape ne pointerait plus sur rien.
+    const res = await admin("/api/admin/shifts/restaurer", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, quarts: effaces }),
+    });
+    assert.equal((await res.json()).restaures, 2);
+    const apres = await tous();
+    assert.equal(apres.length, 4);
+    for (const q of effaces) assert.ok(apres.some((a) => a.id === q.id), `le quart ${q.id} doit être revenu`);
+  });
+
+  await t.test("remettre deux fois ne crée pas de doublon", async () => {
+    // Un double clic sur « Annuler » ne doit rien casser.
+    await admin("/api/admin/shifts/restaurer", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, quarts: effaces }),
+    });
+    assert.equal((await tous()).length, 4);
+  });
+
+  await t.test("on ne remet jamais un quart chez le voisin", async () => {
+    // La borne qui compte : la liste vient du NAVIGATEUR. Quelqu'un qui bricole la requête ne
+    // doit pas pouvoir écrire des quarts dans un autre commerce.
+    const intrus = [{ id: "intrus0001", employee_id: chezLeVoisin.id, date: "2026-10-05", start_time: "09:00", end_time: "17:00", role: "cuisinier" }];
+    const res = await admin("/api/admin/shifts/restaurer", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, quarts: intrus }),
+    });
+    assert.equal((await res.json()).restaures, 0);
+    assert.ok(!(await tous()).some((q) => q.id === "intrus0001"));
+  });
+
+  await t.test("le lien de cuisine ne peut pas remettre un quart de SALLE", async () => {
+    // Sinon le gérant de cuisine écrirait dans une grille à laquelle il n'a pas accès.
+    const quartDeSalle = [{ id: "salle00001", employee_id: serveuse.id, date: "2026-10-05", start_time: "16:00", end_time: "23:00", role: "server" }];
+    const res = await fetch(`${base}/api/schedule/by-code/${resto.schedule_code_cuisine}/shifts/restaurer`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quarts: quartDeSalle }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).restaures, 0);
+    assert.ok(!(await tous()).some((q) => q.id === "salle00001"));
+  });
+
+  await t.test("un lien en LECTURE ne remet rien du tout", async () => {
+    const res = await fetch(`${base}/api/schedule/by-code/${resto.schedule_code_cuisine_lecture}/shifts/restaurer`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quarts: effaces }),
+    });
+    assert.equal(res.status, 403);
+  });
+
+  await t.test("sans jeton admin, personne ne remet rien", async () => {
+    const res = await fetch(`${base}/api/admin/shifts/restaurer`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ restaurant_id: resto.id, quarts: effaces }),
+    });
+    assert.equal(res.status, 401);
+  });
+
+  await t.test("« restaurer » n'est pas pris pour un identifiant de quart", async () => {
+    // Le piège qui a mordu : Express prend les routes dans l'ordre, et /shifts/restaurer
+    // tombait sur /shifts/:id. La mise à jour tournait sur un quart inexistant et répondait
+    // « ok » — l'annulation disait « c'est fait » et ne remettait rien.
+    const res = await admin("/api/admin/shifts/restaurer", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, quarts: [] }),
+    });
+    const corps = await res.json();
+    assert.ok("restaures" in corps, `la réponse doit venir de la route de restauration, reçu ${JSON.stringify(corps)}`);
+  });
+});

@@ -260,6 +260,17 @@ for (const colonne of ["schedule_code", "schedule_code_cuisine", "schedule_code_
     db.prepare(`UPDATE restaurants SET ${colonne} = ? WHERE id = ?`).run(codeLibre(), r.id);
   }
 }
+// Un petit casier clé/valeur pour ce qui appartient à l'INSTALLATION et pas à un restaurant.
+// Pour l'instant il ne sert qu'à la date de la dernière sauvegarde — mais c'était ça ou une
+// colonne de plus sur `restaurants`, qui aurait menti : une sauvegarde couvre toute la base,
+// pas un commerce.
+db.exec(`
+CREATE TABLE IF NOT EXISTS reglages (
+  cle   TEXT PRIMARY KEY,
+  valeur TEXT
+);
+`);
+
 db.exec(`UPDATE restaurants SET charges_pct = 0 WHERE charges_pct IS NULL;`);
 db.exec(`UPDATE restaurants SET rappels_ferie = '' WHERE rappels_ferie IS NULL;`);
 

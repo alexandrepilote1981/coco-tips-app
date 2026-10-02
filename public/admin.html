@@ -371,6 +371,41 @@
     display: flex; align-items: center; gap: 6px;
   }
   .pdf-week-btn:disabled, .duplicate-week-btn:disabled, .clear-week-btn:disabled, .photo-week-btn:disabled { opacity: 0.55; }
+  /* « Effacer la semaine » a sa propre zone, séparée des exports. Avant, il était collé à
+     « Photo de la semaine » dans une rangée de boutons de 29 px de haut : sur un téléphone,
+     une tape à côté séparait publier son horaire de le détruire. Et il grossit : c'est une
+     action rare, pas une action serrée. */
+  /* Le rappel de sauvegarde. Volontairement sobre : il n'est ni une alerte d'argent ni un
+     retard, et il ne doit pas se battre avec les bandeaux rouges. Mais le bouton, lui, est
+     plein et atteignable du pouce. */
+  .rappel-sauvegarde {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    background: rgba(212,168,87,0.10); border: 1px solid rgba(212,168,87,0.28);
+    border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;
+    color: #D4A857; font-size: 12.5px; font-weight: 700; line-height: 1.35;
+  }
+  .rappel-sauvegarde .backup-btn { min-height: 44px; flex: 0 0 auto; }
+  .zone-dangereuse {
+    margin: 14px 0 10px; padding-top: 12px; display: flex; justify-content: flex-end;
+    border-top: 1px dashed rgba(226,104,90,0.25);
+  }
+  .zone-dangereuse .clear-week-btn { font-size: 12.5px; padding: 11px 16px; min-height: 44px; }
+  /* Le filet d'après l'effacement. Dans <body> et pas dans #app : un rerender() le ferait
+     disparaître au moment précis où il sert. Au-dessus de tout, et loin du pouce qui vient
+     de taper, pour qu'on ne l'annule pas par le même geste qui vient d'effacer. */
+  .barre-annulation {
+    position: fixed; left: 12px; right: 12px; bottom: 16px; z-index: 9000;
+    background: #1D2634; border: 1px solid rgba(226,104,90,0.45); border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; color: #F1EFEA; font-size: 13px; font-weight: 600;
+  }
+  .barre-annulation .annuler-btn {
+    background: #E2685A; color: #10151D; font-weight: 800; font-size: 13px;
+    padding: 11px 18px; border-radius: 999px; min-height: 44px; white-space: nowrap; flex: 0 0 auto;
+  }
+  .barre-annulation .annuler-btn:disabled { opacity: 0.6; }
+
   /* Masse salariale de la semaine affichée. Collée en haut : le chiffre sert pendant qu'on
      bouge un quart, pas après — et sur un téléphone, il sortirait sinon de l'écran dès qu'on
      descend dans la grille. */
@@ -982,6 +1017,15 @@ const I18N = {
     erreurPhoto: "Impossible de créer la photo. Réessaie.",
     titrePartage: "Horaire de la semaine",
     effacerSemaine: "Effacer la semaine",
+    jamaisSauvegarde: "Aucune sauvegarde n'a encore été prise. Si la base disparaissait, tout serait perdu.",
+    sauvegardeAncienne: (n) => `Dernière sauvegarde il y a ${n} jour${n > 1 ? "s" : ""}.`,
+    sauvegarderMaintenant: "Sauvegarder maintenant",
+
+    quartsEffaces: (n) => `${n} quart${n > 1 ? "s" : ""} effacé${n > 1 ? "s" : ""}`,
+    annuler: "Annuler",
+    annulationEnCours: "…",
+    erreurAnnulation: "Impossible de remettre les quarts. Vérifie ta connexion et réessaie.",
+
     aucunQuartAEffacer: "Aucun quart à effacer dans cette semaine.",
     confirmEffacerSemaine: (n, semaine) =>
       `${semaine}\n\nEffacer les ${n} quart${n > 1 ? "s" : ""} de cette semaine ?\nC'est définitif : rien ne permet de les récupérer.`,
@@ -1199,6 +1243,15 @@ const I18N = {
     erreurPhoto: "Could not create the photo. Try again.",
     titrePartage: "This week's schedule",
     effacerSemaine: "Clear the week",
+    jamaisSauvegarde: "No backup has been taken yet. If the database were lost, everything would go with it.",
+    sauvegardeAncienne: (n) => `Last backup ${n} day${n > 1 ? "s" : ""} ago.`,
+    sauvegarderMaintenant: "Back up now",
+
+    quartsEffaces: (n) => `${n} shift${n > 1 ? "s" : ""} deleted`,
+    annuler: "Undo",
+    annulationEnCours: "…",
+    erreurAnnulation: "Could not restore the shifts. Check your connection and try again.",
+
     aucunQuartAEffacer: "No shifts to clear this week.",
     confirmEffacerSemaine: (n, semaine) =>
       `${semaine}\n\nDelete the ${n} shift${n > 1 ? "s" : ""} of this week?\nThis is permanent: there is no way to get them back.`,
@@ -1482,6 +1535,37 @@ function utcToLocalDateStr(sqliteDatetime) {
 
 // Compare la date de création figée (jamais touchée par une modification) à la date déclarée,
 // pour savoir combien de jours de retard il y a eu à la déclarer.
+// Le rappel de sauvegarde.
+//
+// Ce qu'on répare : le bouton « Télécharger une sauvegarde complète » était à 4 409 px du
+// haut — cinq écrans et demi de défilement — et RIEN ne disait jamais qu'il était temps.
+// Il fallait y penser tout seul, dans un écran qu'on n'ouvre pas tous les jours.
+//
+// Sept jours, parce que c'est le cycle du restaurant : une semaine de déclarations, c'est ce
+// qu'on accepte de refaire à la main si le pire arrive. Le rappel ne sort pas avant : un
+// bandeau qui s'affiche tous les jours devient un meuble, et on ne le voit plus — c'est
+// exactement ce qu'on reproche au bandeau des retards juste en dessous.
+const JOURS_AVANT_RAPPEL = 7;
+
+function joursDepuisSauvegarde() {
+  if (!overview || !overview.derniereSauvegarde) return null; // jamais sauvegardé
+  const quand = new Date(overview.derniereSauvegarde.replace(" ", "T") + "Z");
+  if (isNaN(quand)) return null;
+  return Math.floor((Date.now() - quand.getTime()) / 86400000);
+}
+
+function rappelSauvegardeHTML() {
+  const jours = joursDepuisSauvegarde();
+  if (jours !== null && jours < JOURS_AVANT_RAPPEL) return "";
+  // Le bouton est DANS le bandeau : un rappel qui dit « va voir plus bas » fait défiler cinq
+  // écrans, et on abandonne en chemin.
+  return `
+    <div class="rappel-sauvegarde">
+      <div>${icon("shield", 15, "margin-right:6px;")}${jours === null ? t("jamaisSauvegarde") : t("sauvegardeAncienne", jours)}</div>
+      <button class="backup-btn" id="backupBtnRappel">${t("sauvegarderMaintenant")}</button>
+    </div>`;
+}
+
 function computeDelayDays(entry) {
   if (!entry.created_at || !entry.date) return 0;
   const createdLocalDate = utcToLocalDateStr(entry.created_at);
@@ -1591,6 +1675,7 @@ function render() {
   // restaurant avec son équipe. Les deux horaires ont leur propre onglet plus bas.
   if (onglet === "declarations") {
     html += `
+      ${rappelSauvegardeHTML()}
       ${flaggedTotal > 0 ? `
       <div class="pending-banner banner-delay">
         <div>${icon("search", 15, "margin-right:6px;")}${t("journeesRetardModif", lateCount, modifiedCount)}</div>
@@ -2006,6 +2091,9 @@ function render() {
 
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
   document.getElementById("backupBtn").addEventListener("click", (ev) => downloadBackup(ev.currentTarget));
+  // Le bouton du rappel n'existe que quand le rappel est là : pas de garde, pas de page.
+  const btnRappel = document.getElementById("backupBtnRappel");
+  if (btnRappel) btnRappel.addEventListener("click", (ev) => downloadBackup(ev.currentTarget));
 
   document.getElementById("addRestaurantBtn").addEventListener("click", async () => {
     const name = document.getElementById("newRestaurantName").value.trim();
