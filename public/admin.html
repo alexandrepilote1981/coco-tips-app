@@ -378,6 +378,13 @@
   /* Le rappel de sauvegarde. Volontairement sobre : il n'est ni une alerte d'argent ni un
      retard, et il ne doit pas se battre avec les bandeaux rouges. Mais le bouton, lui, est
      plein et atteignable du pouce. */
+  /* Le bouton qui range tout le bandeau. Sobre et en dernier : il ne doit pas se lire comme
+     l'action principale du bandeau, qui reste « aller voir la personne ». */
+  .tout-de-cote {
+    margin-top: 10px; background: rgba(255,255,255,0.07); color: #8993A4;
+    font-size: 11.5px; font-weight: 700; padding: 10px 14px; border-radius: 999px;
+    min-height: 40px; border: none;
+  }
   .rappel-sauvegarde {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     background: rgba(212,168,87,0.10); border: 1px solid rgba(212,168,87,0.28);
@@ -1017,6 +1024,10 @@ const I18N = {
     erreurPhoto: "Impossible de créer la photo. Réessaie.",
     titrePartage: "Horaire de la semaine",
     effacerSemaine: "Effacer la semaine",
+    toutMettreDeCote: "Tout mettre de côté",
+    confirmToutMettreDeCote: "Ranger toutes les pastilles du bandeau? Les journées et leurs montants ne sont pas touchés.",
+    erreurGenerique: "Ça n'a pas passé. Vérifie ta connexion et réessaie.",
+
     jamaisSauvegarde: "Aucune sauvegarde n'a encore été prise. Si la base disparaissait, tout serait perdu.",
     sauvegardeAncienne: (n) => `Dernière sauvegarde il y a ${n} jour${n > 1 ? "s" : ""}.`,
     sauvegarderMaintenant: "Sauvegarder maintenant",
@@ -1243,6 +1254,10 @@ const I18N = {
     erreurPhoto: "Could not create the photo. Try again.",
     titrePartage: "This week's schedule",
     effacerSemaine: "Clear the week",
+    toutMettreDeCote: "Dismiss all",
+    confirmToutMettreDeCote: "Dismiss every badge in this banner? The days and their amounts are untouched.",
+    erreurGenerique: "That didn't go through. Check your connection and try again.",
+
     jamaisSauvegarde: "No backup has been taken yet. If the database were lost, everything would go with it.",
     sauvegardeAncienne: (n) => `Last backup ${n} day${n > 1 ? "s" : ""} ago.`,
     sauvegarderMaintenant: "Back up now",
@@ -1566,6 +1581,45 @@ function rappelSauvegardeHTML() {
     </div>`;
 }
 
+// Combien de jours de retard avant qu'une journée mérite une pastille.
+//
+// C'était 1 — donc « déclaré le lendemain » comptait comme un retard. C'est ce que l'équipe
+// fait NORMALEMENT : une serveuse ferme à 23 h et déclare le lendemain matin en prenant son
+// café. Le bandeau se remplissait donc du comportement normal, et un bandeau qui crie tout
+// le temps, on arrête de le lire — c'est là que la vraie journée oubliée passe.
+//
+// Trois jours : après trois jours, c'est un oubli, pas une habitude.
+const JOURS_AVANT_RETARD = 3;
+
+/**
+ * Une pastille par PERSONNE plutôt qu'une par journée.
+ *
+ * Mesuré sur une équipe de douze : le bandeau faisait 3 486 px — quatre écrans de téléphone,
+ * 57 % de l'onglet — avec 104 pastilles et 104 petites croix. Regroupé, il fait 360 px.
+ *
+ * Ce n'est pas une invention : le bandeau des VIREMENTS, juste en dessous, regroupe déjà par
+ * personne depuis toujours (`pendingByEmployee`). Celui des retards était le seul à ne pas
+ * le faire.
+ *
+ * Les deux sortes restent comptées à part — « en retard » et « modifiée après coup » sont
+ * deux faits différents, et les additionner ne voudrait rien dire. Une personne qui a les
+ * deux porte les deux chiffres sur sa pastille.
+ */
+function regrouperParPersonne(flags) {
+  const par = new Map();
+  for (const f of flags) {
+    if (!par.has(f.empId)) {
+      par.set(f.empId, { empId: f.empId, name: f.name, retards: 0, modifiees: 0, entryIds: [] });
+    }
+    const g = par.get(f.empId);
+    if (f.type === "late") g.retards++;
+    else g.modifiees++;
+    g.entryIds.push({ id: f.entryId, type: f.type });
+  }
+  // Le plus gros en premier : c'est la personne à relancer d'abord.
+  return [...par.values()].sort((a, b) => (b.retards + b.modifiees) - (a.retards + a.modifiees));
+}
+
 function computeDelayDays(entry) {
   if (!entry.created_at || !entry.date) return 0;
   const createdLocalDate = utcToLocalDateStr(entry.created_at);
@@ -1637,7 +1691,7 @@ function render() {
     r.employees.forEach((e) => {
       e.entries.forEach((d) => {
         const delay = computeDelayDays(d);
-        if (delay > 0 && !d.delay_dismissed) {
+        if (delay >= JOURS_AVANT_RETARD && !d.delay_dismissed) {
           lateCount++;
           flaggedEntries.push({ empId: e.id, name: e.name, entryId: d.id, date: d.date, type: "late", delay });
         }
@@ -1649,6 +1703,7 @@ function render() {
     });
   });
   const flaggedTotal = lateCount + modifiedCount;
+  const flaggedByEmployee = regrouperParPersonne(flaggedEntries);
 
   let html = `
     <div class="header">
@@ -1680,15 +1735,19 @@ function render() {
       <div class="pending-banner banner-delay">
         <div>${icon("search", 15, "margin-right:6px;")}${t("journeesRetardModif", lateCount, modifiedCount)}</div>
         <div class="pending-chips">
-          ${flaggedEntries.map(f => `
+          ${flaggedByEmployee.map(g => `
             <span class="pending-chip-wrap">
-              <button class="pending-chip ${f.type === "late" ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEntry" data-emp="${f.empId}" data-entry="${f.entryId}">
-                ${f.name} · ${fmtDateShort(f.date)} ${f.type === "late" ? icon("clock", 12) : icon("edit", 12)}
+              <button class="pending-chip ${g.retards ? "chip-owed-employee" : "chip-owed-employer"}" data-action="jumpToEmployee" data-emp="${g.empId}">
+                ${g.name} · ${[
+                  g.retards ? `${g.retards} ${icon("clock", 11)}` : "",
+                  g.modifiees ? `${g.modifiees} ${icon("edit", 11)}` : "",
+                ].filter(Boolean).join(" · ")}
               </button>
-              <button class="chip-dismiss-x" data-action="dismissFlag" data-entry="${f.entryId}" data-type="${f.type}" title="${t("mettreDeCote")}">✕</button>
+              <button class="chip-dismiss-x" data-action="dismissPersonne" data-emp="${g.empId}" title="${t("mettreDeCote")}">✕</button>
             </span>
           `).join("")}
         </div>
+        <button class="tout-de-cote" data-action="dismissTout">${t("toutMettreDeCote")}</button>
       </div>` : ""}
       ${pendingCount > 0 ? `
       <div class="pending-banner">
@@ -2328,29 +2387,55 @@ function render() {
     });
   });
 
-  document.querySelectorAll('[data-action="dismissFlag"]').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const entryId = btn.dataset.entry;
-      const flagType = btn.dataset.type;
-      const wrap = btn.closest(".pending-chip-wrap");
-      btn.disabled = true;
-      try {
-        await api(`/api/admin/entries/${entryId}/dismiss-flag`, { method: "POST", body: JSON.stringify({ type: flagType }) });
-        // met à jour la copie locale pour que le compteur/bandeau restent justes sans tout recharger
-        overview.restaurants.forEach((r) => r.employees.forEach((e) => e.entries.forEach((d) => {
-          if (d.id === entryId) {
-            if (flagType === "late") d.delay_dismissed = 1;
-            if (flagType === "modified") d.modified_dismissed = 1;
-          }
-        })));
-        if (wrap) wrap.remove();
-        // si c'était la dernière puce du bandeau, on relance un render() pour le faire disparaître au complet
-        if (!document.querySelector(".pending-chip-wrap")) render();
-      } catch (err) {
-        btn.disabled = false;
-      }
-    });
+  // Mettre de côté : la croix d'une personne range toutes SES journées, le bouton du bas
+  // range tout le bandeau. Un seul aller-retour dans les deux cas — avec une pastille par
+  // journée, vider un bandeau faisait cent tapes et cent requêtes.
+  async function mettreDeCote(flags, btn) {
+    if (!flags.length) return;
+    btn.disabled = true;
+    try {
+      await api("/api/admin/entries/dismiss-flags", { method: "POST", body: JSON.stringify({ flags }) });
+      // On met à jour la copie locale plutôt que de tout recharger : le bandeau et la
+      // pastille rouge de l'onglet restent justes, et la page ne saute pas sous le doigt.
+      const parId = new Map(flags.map((f) => [f.entryId, f.type]));
+      overview.restaurants.forEach((r) => r.employees.forEach((e) => e.entries.forEach((d) => {
+        const type = parId.get(d.id);
+        if (type === "late") d.delay_dismissed = 1;
+        if (type === "modified") d.modified_dismissed = 1;
+      })));
+      render();
+    } catch (err) {
+      btn.disabled = false;
+      alert(t("erreurGenerique"));
+    }
+  }
+
+  // Les identifiants ne vivent pas dans le HTML : une personne peut porter vingt journées, et
+  // les écrire toutes dans un attribut gonflerait la page pour rien. On les retrouve ici.
+  const flagsDe = (empId) => {
+    const out = [];
+    overview.restaurants.forEach((r) => r.employees.forEach((e) => {
+      if (empId && e.id !== empId) return;
+      e.entries.forEach((d) => {
+        if (computeDelayDays(d) >= JOURS_AVANT_RETARD && !d.delay_dismissed) out.push({ entryId: d.id, type: "late" });
+        if (wasModified(d) && !d.modified_dismissed) out.push({ entryId: d.id, type: "modified" });
+      });
+    }));
+    return out;
+  };
+
+  document.querySelectorAll('[data-action="dismissPersonne"]').forEach((btn) => {
+    btn.addEventListener("click", () => mettreDeCote(flagsDe(btn.dataset.emp), btn));
   });
+
+  const btnTout = document.querySelector('[data-action="dismissTout"]');
+  if (btnTout) {
+    btnTout.addEventListener("click", () => {
+      // Celui-là range TOUT le bandeau d'un coup : on demande, comme pour n'importe quel lot.
+      if (!confirm(t("confirmToutMettreDeCote"))) return;
+      mettreDeCote(flagsDe(null), btnTout);
+    });
+  }
 
   document.querySelectorAll('[data-action="markTransferred"]').forEach((btn) => {
     btn.addEventListener("click", () => {

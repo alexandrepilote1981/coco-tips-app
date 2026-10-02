@@ -1,4 +1,5 @@
-// Effacer une journée déclarée depuis le tableau de bord, testé sur le vrai serveur HTTP.
+// Ce que le GÉRANT peut faire à une journée déclarée, testé sur le vrai serveur HTTP :
+// l'effacer, et ranger ses pastilles d'alerte.
 //
 // Pourquoi ce fichier existe : jusqu'ici, seule l'employée pouvait effacer une de ses
 // journées, depuis son lien à elle. Corriger une saisie croche obligeait donc à la rejoindre
@@ -168,5 +169,100 @@ test("effacer une journée déclarée depuis le tableau de bord", async (t) => {
     assert.equal(compter("absences"), 0, "aucune absence ne doit survivre au restaurant");
     assert.equal(compter("disponibilites"), 0, "aucune disponibilité ne doit survivre au restaurant");
     base2.close();
+  });
+});
+
+// ------------------------------------------- ranger les pastilles en lot
+//
+// Le bandeau des retards portait une pastille PAR JOURNÉE, avec sa croix : vider un bandeau
+// de cent journées demandait cent tapes et cent requêtes. Il regroupe maintenant par
+// personne, et les deux boutons — la croix d'une personne, « tout mettre de côté » — ont
+// besoin d'une route qui en range plusieurs d'un coup.
+
+test("mettre des pastilles de côté en lot", async (t) => {
+  const dossier = mkdtempSync(path.join(tmpdir(), "declara-pastilles-"));
+  const { proc, base } = await demarrerServeur(dossier);
+
+  const admin = (chemin, opts = {}) =>
+    fetch(`${base}${chemin}`, {
+      ...opts,
+      headers: { "Content-Type": "application/json", "X-Admin-Token": MOT_DE_PASSE, ...(opts.headers || {}) },
+    });
+
+  t.after(() => {
+    proc.kill("SIGKILL");
+    rmSync(dossier, { recursive: true, force: true });
+  });
+
+  const resto = await (await admin("/api/admin/restaurants", {
+    method: "POST", body: JSON.stringify({ name: "Chez Coco" }),
+  })).json();
+  const marie = await (await admin("/api/admin/employees", {
+    method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: "Marie Tremblay" }),
+  })).json();
+
+  const declarer = (date) => fetch(`${base}/api/employee/${marie.access_code}/entries`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date, ventes: 400, clients: 20, pct: 10, remis: 0 }),
+  }).then((r) => r.json());
+
+  const journees = async () =>
+    (await (await fetch(`${base}/api/employee/${marie.access_code}`)).json()).entries;
+
+  const a = await declarer("2026-09-21");
+  const b = await declarer("2026-09-22");
+  await declarer("2026-09-23");
+
+  await t.test("on range exactement celles qu'on nomme", async () => {
+    const res = await admin("/api/admin/entries/dismiss-flags", {
+      method: "POST",
+      body: JSON.stringify({ flags: [{ entryId: a.id, type: "late" }, { entryId: b.id, type: "late" }] }),
+    });
+    assert.equal((await res.json()).misDeCote, 2);
+
+    const toutes = await journees();
+    const rangee = (id) => toutes.find((j) => j.id === id).delay_dismissed;
+    assert.equal(rangee(a.id), 1);
+    assert.equal(rangee(b.id), 1);
+    assert.ok(!toutes.find((j) => j.id !== a.id && j.id !== b.id).delay_dismissed, "la troisième ne bouge pas");
+  });
+
+  await t.test("les deux sortes de pastilles ne se mélangent pas", async () => {
+    // « En retard » et « modifiée après coup » sont deux faits différents : ranger l'un ne
+    // doit pas ranger l'autre, sinon une modification passerait inaperçue.
+    const c = (await journees()).find((j) => !j.delay_dismissed);
+    await admin("/api/admin/entries/dismiss-flags", {
+      method: "POST", body: JSON.stringify({ flags: [{ entryId: c.id, type: "modified" }] }),
+    });
+    const apres = (await journees()).find((j) => j.id === c.id);
+    assert.equal(apres.modified_dismissed, 1);
+    assert.ok(!apres.delay_dismissed, "ranger « modifiée » ne doit pas ranger « en retard »");
+  });
+
+  await t.test("ranger une pastille ne compte pas comme une modification", async () => {
+    // Le piège que la route une-par-une évitait déjà : toucher updated_at redéclencherait la
+    // détection « modifiée après coup », et la pastille ne se fermerait jamais.
+    const avant = (await journees()).find((j) => j.id === a.id);
+    await admin("/api/admin/entries/dismiss-flags", {
+      method: "POST", body: JSON.stringify({ flags: [{ entryId: a.id, type: "late" }] }),
+    });
+    const apres = (await journees()).find((j) => j.id === a.id);
+    assert.equal(apres.data_updated_at, avant.data_updated_at);
+  });
+
+  await t.test("une liste vide ou bancale ne fait rien, et ne plante pas", async () => {
+    for (const corps of [{ flags: [] }, { flags: null }, {}, { flags: [{ type: "late" }, { entryId: "zzz", type: "n'importe quoi" }] }]) {
+      const res = await admin("/api/admin/entries/dismiss-flags", { method: "POST", body: JSON.stringify(corps) });
+      assert.equal(res.status, 200, JSON.stringify(corps));
+      assert.equal((await res.json()).misDeCote, 0);
+    }
+  });
+
+  await t.test("sans jeton admin, personne ne range rien", async () => {
+    const res = await fetch(`${base}/api/admin/entries/dismiss-flags`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flags: [{ entryId: a.id, type: "late" }] }),
+    });
+    assert.equal(res.status, 401);
   });
 });
