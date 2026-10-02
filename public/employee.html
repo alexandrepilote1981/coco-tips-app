@@ -119,6 +119,14 @@
   .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #8993A4; margin: 22px 0 10px; display:flex; justify-content:space-between; align-items:center;}
   .add-btn { background:#6FBF93; color:#10151D; border:none; border-radius:999px; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; }
   .day-card { margin-bottom: 12px; }
+  /* Une journée que le serveur n'a pas reçue. Le rouge ne quitte la carte qu'au prochain
+     enregistrement réussi : une alerte qu'on tape « OK » disparaît, et deux minutes plus
+     tard on ne sait plus laquelle des journées n'est pas rendue. */
+  .day-card.pas-enregistree { outline: 2px solid #E2685A; outline-offset: 3px; border-radius: 14px; }
+  .avis-non-enregistre {
+    background: rgba(226,104,90,0.16); color: #E2685A; font-size: 12px; font-weight: 700;
+    padding: 8px 10px; border-radius: 10px; margin-bottom: 10px; line-height: 1.35;
+  }
   .day-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .day-head input[type=date] { border: none; background: transparent; font-weight: 700; color: #6FBF93; font-size: 14px; }
   .del-btn { background: none; border: none; color: #6B7280; font-size: 16px; cursor: pointer; padding: 4px; }
@@ -347,6 +355,7 @@ const I18N = {
     gerant: "Gérant",
     moi: "Toi",
     confirmDelete: "Supprimer cette journée? Cette action ne peut pas être annulée.",
+    pasEnregistre: "⚠ Pas enregistré. Ce que tu vois ici n'est pas encore rendu — vérifie ta connexion et retouche un champ pour réessayer.",
     codeInvalideTitle: "Code invalide",
     codeInvalideMsg: "Vérifie le lien reçu, ou contacte ton gérant.",
     tropDeTentativesTitre: "Trop de tentatives",
@@ -428,6 +437,7 @@ const I18N = {
     gerant: "Manager",
     moi: "You",
     confirmDelete: "Delete this day? This cannot be undone.",
+    pasEnregistre: "⚠ Not saved. What you see here hasn't gone through — check your connection and edit a field to try again.",
     codeInvalideTitle: "Invalid code",
     codeInvalideMsg: "Check the link you received, or contact your manager.",
     tropDeTentativesTitre: "Too many attempts",
@@ -748,6 +758,53 @@ function submitRowHtml(entry) {
 
 // Redessine le seul bloc d'envoi d'une carte, sans toucher aux champs que la serveuse est
 // peut-être en train de remplir.
+// Enregistrer une journée, et DIRE si ça n'a pas marché.
+//
+// Ce qu'on répare : les quatre endroits qui enregistraient faisaient chacun leur propre
+// « sauve, montre le ✓ » — et trois des quatre avaient oublié d'attraper l'erreur. Ces
+// trois-là sont le choix « l'employeur me doit », le MONTANT dû, et la case hôtesse. Donc
+// précisément les champs qui parlent d'argent.
+//
+// Mesuré en coupant le réseau : l'écran affichait « 75 $ dus », la base avait 0 $, et rien
+// à l'écran ne le disait. L'employée fermait sa page convaincue d'avoir déclaré ; le gérant
+// ne voyait jamais le montant. Dans la cuisine d'un restaurant, le wifi coupe — ce n'est pas
+// un cas de laboratoire.
+//
+// On ne REMET PAS la valeur d'avant : elle vient de taper son chiffre, l'effacer serait pire
+// que de la laisser. On garde donc ce qu'elle a écrit ET on marque la carte, jusqu'au
+// prochain enregistrement réussi. Elle voit ce qu'elle a tapé, et elle voit que ce n'est pas
+// rendu.
+async function enregistrer(entry, card) {
+  try {
+    await saveEntry(entry);
+    marquerNonEnregistree(card, false);
+    flashSaved();
+    if (card) refreshSubmitRow(card, entry);
+    return true;
+  } catch (err) {
+    marquerNonEnregistree(card, true);
+    alert(t("erreurSauvegarde"));
+    return false;
+  }
+}
+
+// Le bandeau rouge sur la carte. Il reste là tant que ça n'a pas passé : une alerte qu'on
+// tape « OK » disparaît, et deux minutes plus tard on ne sait plus laquelle des journées
+// n'est pas rendue.
+function marquerNonEnregistree(card, oui) {
+  if (!card) return;
+  card.classList.toggle("pas-enregistree", !!oui);
+  let avis = card.querySelector(".avis-non-enregistre");
+  if (oui && !avis) {
+    avis = document.createElement("div");
+    avis.className = "avis-non-enregistre";
+    avis.textContent = t("pasEnregistre");
+    card.insertBefore(avis, card.firstChild);
+  } else if (!oui && avis) {
+    avis.remove();
+  }
+}
+
 function refreshSubmitRow(card, entry) {
   const row = card.querySelector(".submit-row");
   if (!row) return;
@@ -890,13 +947,7 @@ function attachCardListeners(card, e) {
       recomputeEntry(e);
       refreshCardSummary(e);
       refreshTotals();
-      try {
-        await saveEntry(e);
-        flashSaved();
-        refreshSubmitRow(card, e);
-      } catch (err) {
-        alert(t("erreurSauvegarde"));
-      }
+      await enregistrer(e, card);
     });
   });
 
@@ -913,9 +964,7 @@ function attachCardListeners(card, e) {
     const newCard = buildCardElement(e); // la mise en page du formulaire change, donc on reconstruit CETTE carte seulement
     card.replaceWith(newCard);
     refreshTotals();
-    await saveEntry(e);
-    flashSaved();
-    refreshSubmitRow(newCard, e);
+    await enregistrer(e, newCard);
   });
 
   card.querySelector('[data-action="del"]').addEventListener("click", async () => {
@@ -956,9 +1005,7 @@ function attachCardListeners(card, e) {
       e.remit_direction = btn.dataset.remit || null;
       const newCard = buildCardElement(e); // affiche/cache le champ montant selon la direction choisie
       card.replaceWith(newCard);
-      await saveEntry(e);
-      flashSaved();
-      refreshSubmitRow(newCard, e);
+      await enregistrer(e, newCard);
     });
   });
 
@@ -966,9 +1013,7 @@ function attachCardListeners(card, e) {
   if (remitAmountInput) {
     remitAmountInput.addEventListener("change", async (ev) => {
       e.remit_amount = parseFloat(ev.target.value) || 0;
-      await saveEntry(e);
-      flashSaved();
-      refreshSubmitRow(card, e);
+      await enregistrer(e, card);
     });
   }
 }

@@ -506,6 +506,26 @@ Une journée envoyée ou modifiée pendant la visite **ne saute pas** d'une sect
 sous le doigt : le déplacement se fait au prochain rendu. Une carte qui disparaît à l'instant
 où on tape « Envoyer » est désorientante.
 
+### Un enregistrement qui rate doit se voir
+
+Tout ce qui enregistre une journée passe par `enregistrer()` dans `employee.html`. Un seul
+chemin, parce que c'est la multiplication des chemins qui a créé le bogue : les quatre
+endroits faisaient chacun leur « sauve, montre le ✓ », et **trois des quatre avaient oublié
+d'attraper l'erreur** — le choix du sens du virement, le MONTANT dû, et la case hôtesse.
+Précisément les champs qui parlent d'argent.
+
+Mesuré en faisant échouer l'enregistrement : l'écran affichait « 75 $ dus », la base avait
+0 $, et rien à l'écran ne le disait. L'employée fermait sa page convaincue d'avoir déclaré ;
+le gérant ne voyait jamais le montant. Dans la cuisine d'un restaurant, le wifi coupe.
+
+Deux décisions dans la réparation :
+
+- **On ne remet PAS la valeur d'avant.** Elle vient de taper son chiffre ; l'effacer serait
+  pire que de le laisser. On garde ce qu'elle a écrit.
+- **Le marquage reste jusqu'au prochain enregistrement réussi** (`pas-enregistree` +
+  `.avis-non-enregistre`). Une alerte qu'on tape « OK » disparaît, et deux minutes plus tard
+  on ne sait plus laquelle des journées n'est pas rendue.
+
 ### Les fiches d'employé sont repliées
 
 Chaque fiche ne montre d'abord qu'une ligne : le **nom** à gauche, l'**argent** à droite — le
