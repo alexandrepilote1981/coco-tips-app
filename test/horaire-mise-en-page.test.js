@@ -342,3 +342,43 @@ test("une semaine de Pâques tient encore sur une seule page", () => {
     assert.ok(basAtteint(surface.ordres) <= mise.PAGE.hauteur, `${n} employés : ${basAtteint(surface.ordres).toFixed(1)}`);
   }
 });
+
+// ------------------------------------------- une teinte par poste, sur la feuille aussi
+//
+// La feuille était restée à l'ancien système à deux couleurs : Serveur avec Cuisinier,
+// Hôtesse avec Plongeur. C'est le problème que le propriétaire avait signalé à l'écran,
+// resté intact sur le papier.
+
+test("chaque poste a son propre fond sur la feuille", () => {
+  const employees = ["server", "hostess", "cuisinier", "plongeur"].map((role, i) => ({
+    id: `e${i}`, name: `Prenom${i} Famille${i}`, role,
+  }));
+  const surface = surfaceTemoin();
+  mise.dessinerHoraire(surface, {
+    restaurantName: "Chez Coco",
+    employees: employees.map(({ id, name }) => ({ id, name })),
+    shifts: employees.map((e) => ({
+      employee_id: e.id, date: "2026-09-21", start_time: "09:00", end_time: "14:30", role: e.role,
+    })),
+    weekStartISO: "2026-09-21",
+    lang: "fr",
+  });
+
+  const fonds = ["server", "hostess", "cuisinier", "plongeur"].map((r) => mise.COULEURS.posteFond[r]);
+  assert.equal(new Set(fonds).size, 4, "les quatre postes doivent avoir quatre fonds différents");
+  assert.equal(new Set(["server", "hostess", "cuisinier", "plongeur"]
+    .map((r) => mise.COULEURS.posteEncre[r])).size, 4, "et quatre encres différentes");
+
+  // Et ces quatre fonds-là sont bien ceux qui se retrouvent dessinés.
+  const dessines = new Set(surface.ordres.filter((o) => o.type === "rectArrondi").map((o) => o.args[5]));
+  for (const fond of fonds) assert.ok(dessines.has(fond), `${fond} devrait être dessiné`);
+});
+
+test("aucune teinte de poste ne se confond avec celle d'une journée marquée", () => {
+  // Sur une feuille punaisée au mur, un fond de pastille et la colonne rouge d'un férié
+  // doivent rester deux choses distinctes : c'est l'alerte qui doit gagner.
+  const marque = mise.COULEURS.marqueFond;
+  for (const role of ["server", "hostess", "cuisinier", "plongeur"]) {
+    assert.notEqual(mise.COULEURS.posteFond[role], marque);
+  }
+});

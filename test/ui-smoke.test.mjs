@@ -1114,8 +1114,11 @@ test("interface", optionsDuTest, async (t) => {
         .then((r) => r.json());
     const serveuse = await creer("Une Serveuse", "salle");
     const hotesse = await creer("Une Hotesse", "salle");
+    const cuisinier = await creer("Un Cuisinier", "cuisine");
+    const plongeur = await creer("Un Plongeur", "cuisine");
     const demain = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
-    for (const [emp, role] of [[serveuse, "server"], [hotesse, "hostess"]]) {
+    for (const [emp, role] of [[serveuse, "server"], [hotesse, "hostess"],
+                               [cuisinier, "cuisinier"], [plongeur, "plongeur"]]) {
       await api("/api/admin/shifts", {
         method: "POST",
         body: JSON.stringify({ employee_id: emp.id, date: demain, start_time: "09:00", end_time: "17:00", role }),
@@ -1128,25 +1131,49 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`document.querySelector('[data-onglet="salle"]').click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector(".shift-chip")`), { quoi: "la grille de salle" });
 
-    const vu = await onglet.ev(`(() => {
+    const lireLesBarres = (classes) => onglet.ev(`(() => {
       const chips = [...document.querySelectorAll(".shift-chip")];
       const lire = (cls) => {
         const c = chips.find((n) => n.classList.contains(cls));
         if (!c) return null;
-        const barre = getComputedStyle(c, "::before").backgroundColor;
-        return { barre, fond: getComputedStyle(c).backgroundColor };
+        return { barre: getComputedStyle(c, "::before").backgroundColor, fond: getComputedStyle(c).backgroundColor };
       };
-      return { serveur: lire("poste-server"), hotesse: lire("poste-hostess") };
+      return Object.fromEntries(${JSON.stringify(classes)}.map((c) => [c, lire("poste-" + c)]));
     })()`);
 
-    assert.ok(vu.serveur, "un quart de Serveur doit porter sa classe");
-    assert.ok(vu.hotesse, "un quart d'Hôtesse doit porter sa classe");
-    assert.notEqual(vu.serveur.barre, vu.hotesse.barre, "les deux postes doivent avoir des barres de couleurs différentes");
-    assert.equal(vu.serveur.fond, vu.hotesse.fond, "le fond, lui, reste le même — il appartient aux alertes");
+    const vu = await lireLesBarres(["server", "hostess"]);
+    assert.ok(vu.server, "un quart de Serveur doit porter sa classe");
+    assert.ok(vu.hostess, "un quart d'Hôtesse doit porter sa classe");
+    assert.equal(vu.server.fond, vu.hostess.fond, "le fond, lui, reste le même — il appartient aux alertes");
 
     // Le fond doit être neutre, donc sans dominante : aucune composante ne se détache.
-    const [r, v, b] = vu.serveur.fond.match(/\d+/g).map(Number);
+    const [r, v, b] = vu.server.fond.match(/\d+/g).map(Number);
     assert.ok(Math.max(r, v, b) - Math.min(r, v, b) < 12, `le fond d'une case doit rester neutre, il est rgb(${r},${v},${b})`);
+
+    // L'autre moitié vit dans la grille de CUISINE : une grille ne montre jamais les quatre
+    // postes à la fois, donc il faut aller chercher les deux autres là où ils s'affichent.
+    await onglet.ev(`document.querySelector('[data-onglet="cuisine"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".shift-chip.poste-plongeur")`), {
+      quoi: "la grille de cuisine",
+    });
+    Object.assign(vu, await lireLesBarres(["cuisinier", "plongeur"]));
+    assert.ok(vu.cuisinier && vu.plongeur, "les deux postes de cuisine doivent porter leur classe");
+
+    // Et surtout : aucune PAIRE de postes ne doit se ressembler. C'est ce que le
+    // propriétaire a vu avant nous — « les couleurs dans la cuisine sont trop
+    // ressemblantes » : le Cuisinier en or et le Plongeur en cuivre étaient deux oranges,
+    // et dans une barre de 4 px ça fait une seule couleur. Une simple distance RVB suffit
+    // à attraper deux jumelles ; l'ancienne paire était à 44, la plus serrée aujourd'hui
+    // (vert et bleu) est à plus de 80.
+    const rvb = (s) => s.match(/\d+/g).map(Number);
+    const ecart = (a, b) => Math.hypot(...rvb(a).slice(0, 3).map((n, i) => n - rvb(b)[i]));
+    const postes = ["server", "hostess", "cuisinier", "plongeur"];
+    for (let i = 0; i < postes.length; i++) {
+      for (let j = i + 1; j < postes.length; j++) {
+        const d = ecart(vu[postes[i]].barre, vu[postes[j]].barre);
+        assert.ok(d >= 70, `${postes[i]} et ${postes[j]} se ressemblent trop (écart ${Math.round(d)})`);
+      }
+    }
 
     await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
   });

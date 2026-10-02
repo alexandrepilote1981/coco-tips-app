@@ -78,10 +78,29 @@
     vert: "#6FBF93",
     noir: "#10151D",
     tiret: "#C3CAD3",
-    serveurFond: "#E7F4EC",
-    serveurEncre: "#2E7A56",
-    hotesseFond: "#FBF2DC",
-    hotesseEncre: "#8A6516",
+    // Une teinte par POSTE, les mêmes quatre qu'à l'écran, mais en version papier : un fond
+    // très pâle pour que l'heure écrite par-dessus reste lisible, et une encre soutenue.
+    //
+    // Il n'y en avait que deux avant — « principal » en vert, « second » en or — et ça
+    // mettait le Serveur avec le Cuisinier, l'Hôtesse avec le Plongeur. C'est exactement ce
+    // que le propriétaire avait signalé à l'écran : « quand un employé de la cuisine a un
+    // chiffre cuisinier c'est vert, s'il fait un chiffre serveuse c'est aussi vert ».
+    //
+    // Le magenta du Plongeur est choisi franchement violet, pas rosé : le pâle d'une
+    // journée marquée (`marqueFond`) tire vers le saumon, et deux roses voisins sur une
+    // feuille punaisée au mur se confondraient.
+    posteFond: {
+      server: "#E7F4EC",
+      hostess: "#E6EEFA",
+      cuisinier: "#FBF2DC",
+      plongeur: "#F4E6F2",
+    },
+    posteEncre: {
+      server: "#2E7A56",
+      hostess: "#2F5D96",
+      cuisinier: "#8A6516",
+      plongeur: "#86397A",
+    },
     // Jours fériés et grosses journées — une seule teinte pour toutes. Assez soutenue pour
     // se voir de loin sur une feuille punaisée au mur, mais pas plus : au-delà, une
     // imprimante noir et blanc en fait une colonne grise qui cache les heures au lieu de
@@ -331,14 +350,12 @@
 
         tranches.forEach((quarts, k) => {
           // Une pastille qui rassemble deux rôles différents n'en annonce aucun : neutre.
-          // Deux teintes seulement, pour que la feuille reste lisible d'un coup d'œil :
-          // le poste « principal » (serveur, cuisinier) en vert, le second (hôtesse,
-          // plongeur) en or. Une pastille qui mélange deux postes reste neutre.
+          // Sinon, chaque poste a sa teinte — les mêmes quatre qu'à l'écran, pour qu'une
+          // feuille et la grille se lisent de la même façon.
           const roles = new Set(quarts.map((q) => (LIBELLES_ROLE[L][q.role] ? q.role : "server")));
           const role = roles.size === 1 ? [...roles][0] : null;
-          const secondaire = role === "hostess" || role === "plongeur";
-          const fond = role === null ? COULEURS.fondEntete : secondaire ? COULEURS.hotesseFond : COULEURS.serveurFond;
-          const encre = role === null ? COULEURS.encre : secondaire ? COULEURS.hotesseEncre : COULEURS.serveurEncre;
+          const fond = role === null ? COULEURS.fondEntete : COULEURS.posteFond[role];
+          const encre = role === null ? COULEURS.encre : COULEURS.posteEncre[role];
           const pastilleY = y + marge + k * (pastilleH + ecart);
 
           surface.rectArrondi(x + 3, pastilleY, JOUR_L - 6, pastilleH, Math.min(4, pastilleH / 3), fond);

@@ -116,13 +116,31 @@ Chaque poste a sa teinte, et les quatre se rangent en deux familles — la coule
 | Serveur | vert `#6FBF93` | froide → salle |
 | Hôtesse | bleu `#6F9FDE` | froide → salle |
 | Cuisinier | or `#D4A857` | chaude → cuisine |
-| Plongeur | cuivre `#C8804A` | chaude → cuisine |
+| Plongeur | magenta `#CE6FA8` | — |
 
 Il n'y en avait que deux avant — « poste principal » en vert, « second » en or — et le
 propriétaire a mis le doigt sur ce que ça cachait : « quand un employé de la cuisine a un
 chiffre cuisinier c'est vert, s'il fait un chiffre serveuse c'est aussi vert ». Pour
 quelqu'un qui travaille des deux bords, ses deux sortes de quarts se ressemblaient
 exactement.
+
+**Le Plongeur a d'abord été cuivre `#C8804A`, et c'était une erreur** — signalée ainsi :
+« les couleurs dans la cuisine sont trop ressemblantes ». L'or et le cuivre sont deux
+oranges ; dans une barre de 4 px, c'est une seule couleur. Les candidats écartés disent
+pourquoi le magenta : le **violet** tire vers le bleu de l'Hôtesse (« le problème avec ton
+violet c'est que ça ressemble au bleu »), et le **turquoise** aurait déplacé le problème sur
+le vert du Serveur au lieu de le régler. Le magenta ne touche aucune des trois autres
+teintes, ni le rouge des alertes, qui penche vers l'orange.
+
+Du coup l'idée des deux familles (froide = salle, chaude = cuisine) ne tient plus, et c'est
+assumé : une grille ne montre jamais les quatre postes à la fois, donc la famille ne servait
+à rien là où on la regardait. Lire le poste exact, oui.
+
+`test/ui-smoke.test.mjs` mesure maintenant l'écart RVB entre les quatre barres, deux par
+deux, et refuse une paire sous 70. L'ancienne paire or/cuivre était à 44 ; la plus serrée
+aujourd'hui (vert et bleu) dépasse 80. Sans ce test, rien n'empêchait de recréer deux
+jumelles — l'ancien test ne comparait que le Serveur et l'Hôtesse, donc il passait au vert
+sur le bogue même.
 
 **Dans la grille, la couleur passe par une BARRE sur le côté, jamais par le fond.** Le fond
 appartient aux alertes, qui sont toutes rouges : colonne d'un férié, rangée d'un dépassement
@@ -162,6 +180,14 @@ librement coupait tout sur un téléphone — « 08:00 » devenait « 08:0 », �
 « Ser… ». Les 100 px de la cuisine ne sont pas un chiffre rond : c'est ce qu'il faut pour
 qu'une plage horaire tienne sur une ligne et qu'une tâche de longueur maximale s'écrive en
 entier.
+
+La feuille imprimée porte **les mêmes quatre teintes**, en version papier : un fond très
+pâle et une encre soutenue par poste (`COULEURS.posteFond` / `posteEncre` dans
+`horaire-mise-en-page.js`). Elle était restée à l'ancien système à deux couleurs bien après
+que l'écran en ait quatre — le Serveur avec le Cuisinier, l'Hôtesse avec le Plongeur — donc
+le bogue d'origine y survivait intact. Le magenta du Plongeur y est choisi franchement
+violet : le pâle d'une journée marquée (`marqueFond`) tire vers le saumon, et deux roses
+voisins sur une feuille punaisée au mur se confondraient.
 
 Sur la feuille imprimée il n'y a de place que pour deux lignes (une case fait 26 points de
 haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép ». Quand les deux
@@ -521,6 +547,35 @@ Les bandeaux eux-mêmes se construisent à partir de `e.entries`. Un cuisinier n
 n'a donc aucune entrée, et ne peut donc produire aucune pastille — remplir la cuisine n'en
 crée pas une seule.
 
+### Effacer une journée déclarée
+
+Chaque ligne du détail par jour porte une **poubelle**, dans le tableau de bord. Avant, seule
+l'employée pouvait effacer une de ses journées, depuis son lien à elle : corriger une saisie
+croche obligeait à la rejoindre et à lui expliquer où taper. Demandé à la veille d'une
+reprise de commerce — « je suis pas encore propriétaire, dimanche je veux effacer ça pour
+repartir à zéro ».
+
+La poubelle reste **grise au repos** et ne rougit qu'au survol : dans un tableau où chaque
+rangée en porte une, une colonne de rouge se lirait comme une alerte.
+
+La confirmation **nomme la journée**, et une journée dont le virement est déjà marqué réglé
+en pose une autre, qui nomme le montant. On ne pose jamais les deux questions d'affilée :
+enchaîner deux « OK » apprend surtout à taper vite. Et on ne BLOQUE pas un virement réglé —
+c'est son commerce — on dit seulement que la trace part aussi.
+
+Côté serveur, `DELETE /api/admin/entries/:id` répond **404 si la journée n'existe plus** :
+un double clic ne doit pas se lire comme deux journées effacées. La photo part avec la
+journée, sinon un justificatif sans sa journée resterait sur le volume pour rien.
+`test/effacer-journee.test.mjs` couvre les quatre bornes, dont celle qui compte le plus :
+la journée du MÊME JOUR d'un collègue ne bouge pas.
+
+**Effacer un restaurant laissait des orphelins** — les absences et les disponibilités de son
+monde survivaient, rattachées à des employés disparus. La route qui efface UN employé les
+effaçait depuis toujours ; celle du restaurant ne les avait jamais reprises. Le test de cette
+borne doit regarder **dans la base**, pas par l'API : la liste des absences passe par une
+jointure sur les employés, donc une ligne orpheline n'y paraît déjà plus et le test passerait
+au vert avec ou sans le correctif. Vérifié dans les deux sens.
+
 ### Corriger un nom ou un numéro
 
 Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
@@ -814,6 +869,9 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
   est bon, et qu'il la ferme quand même à qui essaie de deviner.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
+- `test/effacer-journee.test.mjs` — effacer une journée déclarée depuis le tableau de bord :
+  la bonne journée et elle seule, un second effacement qui répond 404, la porte fermée sans
+  mot de passe, et le restaurant qui ne laisse plus d'orphelins derrière lui.
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
   aucun Chrome/Chromium n'est installé.
