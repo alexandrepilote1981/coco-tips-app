@@ -1402,6 +1402,31 @@ app.post("/api/admin/entries/:entryId/transferred", requireAdmin, (req, res) => 
   res.json({ ok: true });
 });
 
+// Mettre de côté PLUSIEURS pastilles d'un coup.
+//
+// Avant, il n'y avait que la route une-par-une, et le bandeau portait une pastille par
+// journée : vider un bandeau de cent journées, c'était cent tapes et cent requêtes. Le
+// bandeau regroupe maintenant par personne, et ces deux boutons — la croix d'une personne,
+// et « tout mettre de côté » — ont besoin d'un seul aller-retour.
+//
+// On ne touche jamais `updated_at` ici, pour la même raison que la route une-par-une : ça
+// redéclencherait la détection « modifiée après coup » et la pastille ne se fermerait jamais.
+app.post("/api/admin/entries/dismiss-flags", requireAdmin, (req, res) => {
+  const liste = Array.isArray(req.body.flags) ? req.body.flags.slice(0, 2000) : [];
+  const retard = db.prepare("UPDATE entries SET delay_dismissed=1 WHERE id=?");
+  const modif = db.prepare("UPDATE entries SET modified_dismissed=1 WHERE id=?");
+  let n = 0;
+  const lot = db.transaction((f) => {
+    for (const { entryId, type } of f) {
+      if (!entryId) continue;
+      if (type === "late") n += retard.run(entryId).changes;
+      else if (type === "modified") n += modif.run(entryId).changes;
+    }
+  });
+  lot(liste);
+  res.json({ misDeCote: n });
+});
+
 app.post("/api/admin/entries/:entryId/dismiss-flag", requireAdmin, (req, res) => {
   const type = req.body.type;
   // IMPORTANT : on ne touche jamais updated_at ici, sinon ça redéclencherait

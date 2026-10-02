@@ -647,6 +647,41 @@ borne doit regarder **dans la base**, pas par l'API : la liste des absences pass
 jointure sur les employés, donc une ligne orpheline n'y paraît déjà plus et le test passerait
 au vert avec ou sans le correctif. Vérifié dans les deux sens.
 
+### Le bandeau des retards
+
+**Une pastille par PERSONNE, pas par journée** — `regrouperParPersonne()` dans `admin.html`.
+Mesuré sur une équipe de douze : le bandeau faisait **3 486 px**, quatre écrans de téléphone,
+57 % de l'onglet, avec 104 pastilles et 104 petites croix. Regroupé : **325 px**, 12
+pastilles, et l'onglet passe de 6 106 à 3 083 px.
+
+Ce n'était pas une invention : le bandeau des VIREMENTS, juste en dessous, regroupe par
+personne depuis toujours (`pendingByEmployee`). Celui des retards était le seul à ne pas le
+faire, et il se lit maintenant comme son voisin.
+
+Les deux sortes restent **comptées à part** — « en retard » et « modifiée après coup » sont
+deux faits différents, et les additionner ne voudrait rien dire. Une personne qui a les deux
+porte les deux chiffres.
+
+**Le seuil est passé de 1 jour à 3** (`JOURS_AVANT_RETARD`). À 1 jour, « déclaré le
+lendemain » comptait comme un retard — or c'est ce que l'équipe fait normalement : une
+serveuse ferme à 23 h et déclare le lendemain matin en prenant son café. Le bandeau se
+remplissait du comportement NORMAL, et un bandeau qui crie tout le temps, on arrête de le
+lire. C'est là que la vraie journée oubliée passe.
+
+Conséquence assumée : la pastille rouge de l'onglet Déclarations baisse, puisqu'elle compte
+les retards.
+
+**Ranger se fait en lot.** La croix d'une personne range toutes ses journées, et un bouton
+range tout le bandeau — `POST /api/admin/entries/dismiss-flags`, un seul aller-retour. Les
+identifiants ne vivent pas dans le HTML : quelqu'un peut porter vingt journées, et les écrire
+dans un attribut gonflerait la page pour rien ; `flagsDe()` les retrouve au clic.
+
+Comme la route une-par-une, elle **ne touche jamais `updated_at`** : ça redéclencherait la
+détection « modifiée après coup » et la pastille ne se fermerait jamais.
+
+Ranger **n'efface rien** — la journée et ses montants restent intacts. Seule la pastille
+disparaît.
+
 ### Corriger un nom ou un numéro
 
 Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
@@ -942,9 +977,10 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
 - `test/sauvegarde.test.mjs` — la date de la dernière sauvegarde : absente au départ, écrite
   seulement quand l'archive a vraiment été produite, et qui survit à un redémarrage.
-- `test/effacer-journee.test.mjs` — effacer une journée déclarée depuis le tableau de bord :
-  la bonne journée et elle seule, un second effacement qui répond 404, la porte fermée sans
-  mot de passe, et le restaurant qui ne laisse plus d'orphelins derrière lui.
+- `test/effacer-journee.test.mjs` — ce que le gérant peut faire à une journée déclarée :
+  l'effacer (la bonne et elle seule, un second effacement qui répond 404, la porte fermée
+  sans mot de passe, le restaurant qui ne laisse plus d'orphelins), et ranger ses pastilles
+  en lot sans mélanger les deux sortes ni toucher à `updated_at`.
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
   aucun Chrome/Chromium n'est installé.
