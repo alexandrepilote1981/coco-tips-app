@@ -611,6 +611,64 @@ function isISODate(value) {
 // semaine ne peut pas rester à moitié vidée — et il n'y a aucune annulation possible après
 // coup. Le sous-select enferme l'effacement dans un seul restaurant : un code d'horaire ne
 // peut pas vider la semaine du restaurant d'à côté.
+// Les quarts qu'un effacement en lot VA emporter, lus avant de les détruire.
+//
+// C'est ce qui rend « Annuler » possible. Jusqu'ici l'effacement d'une semaine n'avait aucun
+// retour en arrière : une tape à côté sur un téléphone, et l'horaire était parti pour de bon.
+// On garde les lignes entières, id compris, pour pouvoir les remettre telles quelles — un
+// quart remis avec un id neuf casserait les liens que la page garde en mémoire.
+function shiftsEntre(restaurantId, from, to, secteur) {
+  if (secteur) {
+    const quart = Secteurs.conditionQuartSQL(secteur, "role");
+    return db
+      .prepare(`
+        SELECT * FROM shifts
+        WHERE date >= ? AND date <= ? AND ${quart.sql}
+          AND employee_id IN (SELECT id FROM employees WHERE restaurant_id = ?)
+      `)
+      .all(from, to, ...quart.params, restaurantId);
+  }
+  return db
+    .prepare(`
+      SELECT * FROM shifts
+      WHERE date >= ? AND date <= ?
+        AND employee_id IN (SELECT id FROM employees WHERE restaurant_id = ?)
+    `)
+    .all(from, to, restaurantId);
+}
+
+/**
+ * Remet en place des quarts qu'on vient d'effacer.
+ *
+ * Deux bornes, parce que cette route accepte des lignes venues du navigateur : on ne remet
+ * qu'un quart dont l'employé appartient VRAIMENT à ce restaurant, et — pour une porte par
+ * code — dont le poste appartient à son secteur. Sans ça, le lien du gérant de cuisine
+ * pourrait écrire des quarts de salle, ou chez le voisin.
+ *
+ * `INSERT OR IGNORE` : remettre deux fois ne crée pas de doublon, et un double clic sur
+ * « Annuler » ne doit rien casser.
+ */
+function restaurerShifts(restaurantId, quarts, secteur) {
+  if (!Array.isArray(quarts)) return 0;
+  const sien = db.prepare("SELECT id FROM employees WHERE id = ? AND restaurant_id = ?");
+  const insere = db.prepare(`
+    INSERT OR IGNORE INTO shifts (id, employee_id, date, start_time, end_time, role, note)
+    VALUES (?,?,?,?,?,?,?)
+  `);
+  let n = 0;
+  const lot = db.transaction((liste) => {
+    for (const q of liste) {
+      if (!q || !q.id || !q.employee_id || !isISODate(q.date) || !q.start_time) continue;
+      if (!sien.get(q.employee_id, restaurantId)) continue;
+      const role = q.role || "server";
+      if (secteur && Secteurs.duRole(role) !== Secteurs.valide(secteur)) continue;
+      n += insere.run(q.id, q.employee_id, q.date, q.start_time, q.end_time || null, role, tacheValide(q.note)).changes;
+    }
+  });
+  lot(quarts.slice(0, 500)); // une semaine d'un gros restaurant tient largement là-dedans
+  return n;
+}
+
 function deleteShiftsBetween(restaurantId, from, to, secteur) {
   // Sans secteur, on efface toute la semaine du restaurant — c'est ce que fait le tableau de
   // bord. Avec, on reste dans son équipe : le gérant de cuisine ne vide pas la salle.
@@ -847,6 +905,15 @@ app.post("/api/schedule/by-code/:code/shifts", (req, res) => {
   res.json({ id, ok: true });
 });
 
+// Avant /shifts/:id, pour la même raison que du côté admin : « restaurer » se ferait lire
+// comme un identifiant de quart.
+app.post("/api/schedule/by-code/:code/shifts/restaurer", (req, res) => {
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
+  res.json({ restaures: restaurerShifts(porte.restaurant.id, req.body.quarts, porte.secteur) });
+});
+
 app.post("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
   const porte = porteParCode(req.params.code);
   if (!porte) return res.status(404).json({ error: "Lien invalide" });
@@ -873,8 +940,12 @@ app.delete("/api/schedule/by-code/:code/shifts", (req, res) => {
   if (!isISODate(from) || !isISODate(to)) {
     return res.status(400).json({ error: "from et to (AAAA-MM-JJ) requis" });
   }
-  res.json({ deleted: deleteShiftsBetween(porte.restaurant.id, from, to, porte.secteur).changes });
+  // Les quarts voyagent avec la réponse : c'est la page qui les garde le temps d'un
+  // « Annuler », pas le serveur. Rien à expirer, rien à nettoyer.
+  const quarts = shiftsEntre(porte.restaurant.id, from, to, porte.secteur);
+  res.json({ deleted: deleteShiftsBetween(porte.restaurant.id, from, to, porte.secteur).changes, quarts });
 });
+
 
 app.delete("/api/schedule/by-code/:code/shifts/:id", (req, res) => {
   const porte = porteParCode(req.params.code);
@@ -987,9 +1058,23 @@ app.get("/api/admin/schedule/pdf", requireScheduleAccess, async (req, res) => {
 
 // Sauvegarde complète téléchargeable. Réservée à l'admin : le fichier contient tout,
 // y compris les codes d'accès des employés.
+// La date de la dernière sauvegarde. Elle vit en base et pas dans le navigateur : le gérant
+// change de téléphone, ouvre /admin de l'ordinateur du bureau, et un rappel qui repartirait
+// à zéro à chaque appareil ne vaudrait rien.
+function derniereSauvegarde() {
+  const l = db.prepare("SELECT valeur FROM reglages WHERE cle = 'derniere_sauvegarde'").get();
+  return l ? l.valeur : null;
+}
+
 app.get("/api/admin/backup", requireAdmin, async (req, res) => {
   try {
     const { buffer, filename, resume } = await buildBackupZip({ db, photosDir: PHOTOS_DIR });
+    // On note APRÈS avoir construit l'archive : une sauvegarde qui a planté n'en est pas une,
+    // et dire « c'est fait » effacerait le rappel sans que rien ne soit sauvé.
+    db.prepare(`
+      INSERT INTO reglages (cle, valeur) VALUES ('derniere_sauvegarde', datetime('now'))
+      ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur
+    `).run();
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Length", buffer.length);
@@ -1038,7 +1123,7 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
       });
     return { ...r, employees };
   });
-  res.json({ restaurants: data });
+  res.json({ restaurants: data, derniereSauvegarde: derniereSauvegarde() });
 });
 
 // ---------- Horaire (quarts de travail) ----------
@@ -1070,6 +1155,16 @@ app.post("/api/admin/shifts", requireScheduleAccess, (req, res) => {
   res.json({ id, ok: true });
 });
 
+// AVANT la route /shifts/:id, et ce n'est pas un détail de style : Express prend les routes
+// dans l'ordre, donc « restaurer » se ferait lire comme un identifiant de quart. La mise à
+// jour tournerait alors sur un quart qui n'existe pas et répondrait « ok » — l'annulation
+// disait « c'est fait » et ne remettait rien. Vu en vrai, pas deviné.
+app.post("/api/admin/shifts/restaurer", requireScheduleAccess, (req, res) => {
+  const { restaurant_id, quarts } = req.body;
+  if (!restaurant_id) return res.status(400).json({ error: "restaurant_id requis" });
+  res.json({ restaures: restaurerShifts(restaurant_id, quarts, null) });
+});
+
 app.post("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
   const { date, start_time, end_time, role, note } = req.body;
   db.prepare(
@@ -1084,8 +1179,10 @@ app.delete("/api/admin/shifts", requireScheduleAccess, (req, res) => {
     return res.status(400).json({ error: "restaurant_id, from et to (AAAA-MM-JJ) requis" });
   }
   const secteur = req.query.secteur === "cuisine" ? "cuisine" : req.query.secteur === "salle" ? "salle" : null;
-  res.json({ deleted: deleteShiftsBetween(restaurant_id, from, to, secteur).changes });
+  const quarts = shiftsEntre(restaurant_id, from, to, secteur);
+  res.json({ deleted: deleteShiftsBetween(restaurant_id, from, to, secteur).changes, quarts });
 });
+
 
 app.delete("/api/admin/shifts/:id", requireScheduleAccess, (req, res) => {
   db.prepare("DELETE FROM shifts WHERE id=?").run(req.params.id);

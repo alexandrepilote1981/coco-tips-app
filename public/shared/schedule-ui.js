@@ -380,8 +380,17 @@ window.ScheduleUI = (function () {
       ${peutModifier ? `<button class="duplicate-week-btn" data-action="duplicateWeek" ${marque}>${icon("copy", 13)} ${t("copierSemaineSuivante")}</button>` : ""}
       <button class="pdf-week-btn" data-action="pdfWeek" ${marque}>${icon("download", 13)} ${t("telechargerPdf")}</button>
       <button class="photo-week-btn" data-action="photoWeek" ${marque}>${icon("image", 13)} ${t("photoSemaine")}</button>
-      ${peutModifier ? `<button class="clear-week-btn" data-action="clearWeek" ${marque}>${icon("trash2", 13)} ${t("effacerSemaine")}</button>` : ""}
     </div>
+    ${
+      // « Effacer la semaine » sort de la rangée des autres. Il y était collé à « Photo de la
+      // semaine », qui est inoffensif, dans des boutons de 29 px de haut : sur un téléphone,
+      // c'est une tape à côté qui sépare publier son horaire de le détruire.
+      peutModifier
+        ? `<div class="zone-dangereuse">
+             <button class="clear-week-btn" data-action="clearWeek" ${marque}>${icon("trash2", 13)} ${t("effacerSemaine")}</button>
+           </div>`
+        : ""
+    }
     <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(${COLONNE_MIN[secteur]}px, 1fr));">
       <div></div>
       ${dates
@@ -1011,6 +1020,61 @@ window.ScheduleUI = (function () {
   // tombait au milieu, et rien ne permet de revenir en arrière ensuite. La confirmation
   // nomme la semaine ET le nombre de quarts, parce qu'on efface souvent en ayant la mauvaise
   // semaine sous les yeux.
+  // ---------- annuler un effacement de semaine ----------
+  //
+  // Pourquoi ça existe : « effacer la semaine » était la seule action de l'app qui détruisait
+  // beaucoup d'un coup sans aucun retour en arrière. Le seul filet était la fenêtre de
+  // confirmation du navigateur — celle où on tape OK sans lire. Sur un téléphone, une tape à
+  // côté et l'horaire de quatorze personnes était parti.
+  //
+  // Le bandeau vit dans <body> et pas dans #app : un rerender() reconstruit toute la page, et
+  // il disparaîtrait au moment précis où il sert.
+  //
+  // DÉLAI DE 30 SECONDES, et pas « jusqu'au prochain rafraîchissement » : au-delà, le gérant
+  // a déjà recommencé à poser des quarts, et remettre les anciens par-dessus ferait un mélange
+  // des deux semaines que personne ne saurait démêler.
+  const DELAI_ANNULATION = 30000;
+  let minuterieAnnulation = null;
+
+  function fermerAnnulation() {
+    clearTimeout(minuterieAnnulation);
+    const vieux = document.getElementById("barreAnnulation");
+    if (vieux) vieux.remove();
+  }
+
+  function offrirAnnulation(restaurantId, quarts) {
+    fermerAnnulation();
+    const barre = document.createElement("div");
+    barre.id = "barreAnnulation";
+    barre.className = "barre-annulation";
+    const texte = document.createElement("span");
+    texte.textContent = host.t("quartsEffaces", quarts.length);
+    const bouton = document.createElement("button");
+    bouton.className = "annuler-btn";
+    bouton.textContent = host.t("annuler");
+    bouton.addEventListener("click", async () => {
+      bouton.disabled = true;
+      bouton.textContent = host.t("annulationEnCours");
+      try {
+        await host.shiftApi("/shifts/restaurer", {
+          method: "POST",
+          body: JSON.stringify({ restaurant_id: restaurantId, quarts }),
+        });
+        host.setShifts(await host.reloadShifts());
+        fermerAnnulation();
+        host.rerender();
+      } catch (err) {
+        bouton.disabled = false;
+        bouton.textContent = host.t("annuler");
+        alert(host.t("erreurAnnulation"));
+      }
+    });
+    barre.appendChild(texte);
+    barre.appendChild(bouton);
+    document.body.appendChild(barre);
+    minuterieAnnulation = setTimeout(fermerAnnulation, DELAI_ANNULATION);
+  }
+
   async function clearWeekShifts(restaurantId, btn, secteur) {
     const ctx = contexteDe(restaurantId, secteur);
     const empIds = ctx.employees.map((e) => e.id);
@@ -1027,9 +1091,12 @@ window.ScheduleUI = (function () {
     btn.textContent = host.t("effacementEnCours");
     try {
       const params = `restaurant_id=${encodeURIComponent(restaurantId)}&from=${dates[0]}&to=${dates[6]}&secteur=${ctx.secteur}`;
-      await host.shiftApi(`/shifts?${params}`, { method: "DELETE" });
+      const res = await host.shiftApi(`/shifts?${params}`, { method: "DELETE" });
       host.setShifts(await host.reloadShifts());
       host.rerender();
+      // Le filet. Le serveur renvoie les quarts qu'il vient d'effacer ; on les garde ici, le
+      // temps d'un « Annuler ». Rien n'est gardé côté serveur, donc rien à expirer.
+      if (res && res.quarts && res.quarts.length) offrirAnnulation(restaurantId, res.quarts);
     } catch (err) {
       // On recharge quand même avant de redessiner : si l'effacement est passé côté serveur
       // mais que la réponse s'est perdue, l'écran doit montrer l'état réel, pas l'ancien.
@@ -1320,6 +1387,8 @@ window.ScheduleUI = (function () {
     deleteShiftFromModal,
     duplicateWeekToNext,
     clearWeekShifts,
+    offrirAnnulation,
+    fermerAnnulation,
     bilanEmploye,
     classePoste,
     quartsAilleursLeMemeJour,

@@ -356,6 +356,57 @@ Y mettre les codes donnerait à chaque serveuse la page de ses collègues, pourb
 compris. Le propriétaire a tranché : « le code gérant salle doit pouvoir juste gérer
 l'horaire, je vais gérer par mon code admin perso ».
 
+## Ce qui se détruit, et le filet
+
+**« Effacer la semaine » s'annule.** Le serveur renvoie les quarts qu'il vient d'effacer, la
+page les garde en mémoire, et un bandeau offre « Annuler » pendant **30 secondes**. Rien
+n'est gardé côté serveur : pas de corbeille à vider, pas de ligne à expirer.
+
+Trente secondes, et pas « jusqu'au prochain rafraîchissement » : au-delà, le gérant a déjà
+recommencé à poser des quarts, et remettre les anciens par-dessus ferait un mélange des deux
+semaines que personne ne saurait démêler.
+
+Les quarts reviennent avec **leurs identifiants d'origine** (`INSERT OR IGNORE`). Un quart
+remis avec un id neuf casserait les liens que la page garde en mémoire, et remettre deux fois
+— un double clic sur « Annuler » — créerait des doublons.
+
+`restaurerShifts()` accepte des lignes venues du NAVIGATEUR, donc deux bornes :
+l'employé doit appartenir au restaurant visé, et — pour une porte par code — le POSTE du
+quart doit appartenir à son secteur. Sans ça, le lien du gérant de cuisine écrirait des
+quarts de salle, ou chez le voisin. Couvert par `test/effacer-semaine.test.mjs`.
+
+**Le piège d'Express, vu en vrai :** `/shifts/restaurer` tombait sur la route `/shifts/:id`,
+déclarée plus haut. La mise à jour tournait sur un quart inexistant et répondait « ok » —
+l'annulation disait « c'est fait » et ne remettait rien. Les routes de restauration doivent
+rester **avant** celles en `:id`, et un test le verrouille.
+
+Le bouton lui-même a quitté la rangée des exports pour sa propre `zone-dangereuse`. Il était
+collé à « Photo de la semaine », qui est inoffensif, dans des boutons de 29 px de haut : sur
+un téléphone, une tape à côté séparait publier son horaire de le détruire. Il fait maintenant
+44 px et vit sous un trait.
+
+## Le rappel de sauvegarde
+
+Le bouton « Télécharger une sauvegarde complète » était à **4 409 px du haut** — cinq écrans
+et demi de défilement — et rien ne disait jamais qu'il était temps. Un bandeau apparaît donc
+en haut des Déclarations au bout de **7 jours**, ou tout de suite si aucune sauvegarde n'a
+jamais été prise, **avec le bouton dedans** : un rappel qui dit « va voir plus bas » fait
+défiler cinq écrans et on abandonne en chemin.
+
+Sept jours, parce que c'est le cycle du restaurant : une semaine de déclarations, c'est ce
+qu'on accepte de refaire à la main si le pire arrive. Pas moins — un bandeau qui s'affiche
+tous les jours devient un meuble, et c'est exactement ce qu'on reproche au bandeau des
+retards.
+
+La date vit dans la table `reglages` (clé/valeur) et **pas dans le navigateur** : le gérant
+change de téléphone, ouvre `/admin` de l'ordinateur du bureau, et un rappel qui repartirait à
+zéro à chaque appareil ne vaudrait rien. Elle s'écrit **après** que l'archive soit
+construite : une sauvegarde qui a planté n'en est pas une, et effacer le rappel sans que rien
+ne soit sauvé est pire que pas de rappel du tout.
+
+`jamais` et `il y a longtemps` ne se disent pas de la même façon à l'écran — c'est « jamais »
+qui doit alarmer le plus, donc la valeur reste `null` tant que rien n'a été pris.
+
 ## Congés et absences
 
 Quatre types : `conge`, `vacances`, `maladie`, `cnesst`. Quand deux absences se chevauchent,
@@ -889,6 +940,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
   est bon, et qu'il la ferme quand même à qui essaie de deviner.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
+- `test/sauvegarde.test.mjs` — la date de la dernière sauvegarde : absente au départ, écrite
+  seulement quand l'archive a vraiment été produite, et qui survit à un redémarrage.
 - `test/effacer-journee.test.mjs` — effacer une journée déclarée depuis le tableau de bord :
   la bonne journée et elle seule, un second effacement qui répond 404, la porte fermée sans
   mot de passe, et le restaurant qui ne laisse plus d'orphelins derrière lui.
