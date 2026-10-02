@@ -547,6 +547,35 @@ Les bandeaux eux-mêmes se construisent à partir de `e.entries`. Un cuisinier n
 n'a donc aucune entrée, et ne peut donc produire aucune pastille — remplir la cuisine n'en
 crée pas une seule.
 
+### Effacer une journée déclarée
+
+Chaque ligne du détail par jour porte une **poubelle**, dans le tableau de bord. Avant, seule
+l'employée pouvait effacer une de ses journées, depuis son lien à elle : corriger une saisie
+croche obligeait à la rejoindre et à lui expliquer où taper. Demandé à la veille d'une
+reprise de commerce — « je suis pas encore propriétaire, dimanche je veux effacer ça pour
+repartir à zéro ».
+
+La poubelle reste **grise au repos** et ne rougit qu'au survol : dans un tableau où chaque
+rangée en porte une, une colonne de rouge se lirait comme une alerte.
+
+La confirmation **nomme la journée**, et une journée dont le virement est déjà marqué réglé
+en pose une autre, qui nomme le montant. On ne pose jamais les deux questions d'affilée :
+enchaîner deux « OK » apprend surtout à taper vite. Et on ne BLOQUE pas un virement réglé —
+c'est son commerce — on dit seulement que la trace part aussi.
+
+Côté serveur, `DELETE /api/admin/entries/:id` répond **404 si la journée n'existe plus** :
+un double clic ne doit pas se lire comme deux journées effacées. La photo part avec la
+journée, sinon un justificatif sans sa journée resterait sur le volume pour rien.
+`test/effacer-journee.test.mjs` couvre les quatre bornes, dont celle qui compte le plus :
+la journée du MÊME JOUR d'un collègue ne bouge pas.
+
+**Effacer un restaurant laissait des orphelins** — les absences et les disponibilités de son
+monde survivaient, rattachées à des employés disparus. La route qui efface UN employé les
+effaçait depuis toujours ; celle du restaurant ne les avait jamais reprises. Le test de cette
+borne doit regarder **dans la base**, pas par l'API : la liste des absences passe par une
+jointure sur les employés, donc une ligne orpheline n'y paraît déjà plus et le test passerait
+au vert avec ou sans le correctif. Vérifié dans les deux sens.
+
 ### Corriger un nom ou un numéro
 
 Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
@@ -840,6 +869,9 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
   est bon, et qu'il la ferme quand même à qui essaie de deviner.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
+- `test/effacer-journee.test.mjs` — effacer une journée déclarée depuis le tableau de bord :
+  la bonne journée et elle seule, un second effacement qui répond 404, la porte fermée sans
+  mot de passe, et le restaurant qui ne laisse plus d'orphelins derrière lui.
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
   aucun Chrome/Chromium n'est installé.

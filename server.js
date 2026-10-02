@@ -1275,6 +1275,28 @@ app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// Effacer une journée déclarée, depuis le tableau de bord.
+//
+// Jusqu'ici seule l'employée pouvait le faire, depuis son lien à elle : corriger une saisie
+// croche obligeait donc à la rejoindre et à lui expliquer où taper. Demandé ainsi, à la
+// veille d'une reprise de commerce : « je suis pas encore propriétaire, dimanche je veux
+// effacer ça pour repartir à zéro ».
+//
+// On renvoie la date de ce qu'on vient d'effacer : la page s'en sert pour dire quelle
+// journée est partie, et un 404 distingue « effacé » de « n'existait déjà plus » — deux
+// clics sur le même bouton ne doivent pas se lire comme deux journées effacées.
+app.delete("/api/admin/entries/:entryId", requireAdmin, (req, res) => {
+  const entry = db
+    .prepare("SELECT id, date, photo_filename FROM entries WHERE id = ?")
+    .get(req.params.entryId);
+  if (!entry) return res.status(404).json({ error: "Journée introuvable" });
+  db.prepare("DELETE FROM entries WHERE id = ?").run(entry.id);
+  // La photo part avec la journée : un justificatif sans la journée qu'il justifie ne sert
+  // plus à rien et continuerait d'occuper le volume.
+  deletePhotoFiles([entry]);
+  res.json({ ok: true, date: entry.date });
+});
+
 app.post("/api/admin/entries/:entryId/transferred", requireAdmin, (req, res) => {
   const value = req.body.transferred ? 1 : 0;
   const transferDate = req.body.transfer_date || null;
@@ -1304,6 +1326,11 @@ app.delete("/api/admin/restaurants/:id", requireAdmin, (req, res) => {
     db.prepare("DELETE FROM entries WHERE employee_id = ?").run(e.id);
     db.prepare("DELETE FROM shifts WHERE employee_id = ?").run(e.id);
     db.prepare("DELETE FROM messages WHERE employee_id = ?").run(e.id);
+    // Les deux lignes qui manquaient : effacer un restaurant laissait derrière lui les
+    // absences et les disponibilités de son monde, rattachées à des employés disparus.
+    // La route qui efface UN employé, elle, les a toujours effacées.
+    db.prepare("DELETE FROM absences WHERE employee_id = ?").run(e.id);
+    db.prepare("DELETE FROM disponibilites WHERE employee_id = ?").run(e.id);
   }
   db.prepare("DELETE FROM employees WHERE restaurant_id = ?").run(req.params.id);
   db.prepare("DELETE FROM restaurants WHERE id = ?").run(req.params.id);
