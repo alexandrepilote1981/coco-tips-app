@@ -1256,6 +1256,103 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`document.getElementById("customClear").click()`);
   });
 
+  await t.test("le résumé : une ligne par personne, et l'argent enfin totalisé", async () => {
+    // « C'est trop lourd toutes les journées » — sur une semaine normale, le détaillé fait
+    // 84 lignes. Et les colonnes d'argent n'étaient totalisées nulle part : il fallait
+    // additionner à la main pour savoir combien virer à qui.
+    //
+    // L'autre moitié du test porte sur les hôtesses : « les hôtes n'ont pas de client ».
+    // Sur une journée d'hôtesse, `ventes` contient le MONTANT REÇU DES SERVEUSES, pas des
+    // ventes — et ça se faisait additionner aux ventes du restaurant.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Resume" }),
+    })).json();
+    const creer = (nom, numero) => api("/api/admin/employees", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: nom, employee_number: numero, secteur: "salle" }),
+    }).then((r) => r.json());
+
+    const serveuse = await creer("Sara Serveuse", "41");
+    const hotesse = await creer("Hugo Hotesse", "42");
+
+    const declarer = (emp, corps) =>
+      fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps),
+      }).then((r) => r.json());
+
+    // Deux journées de service : 1 000 $ sur 50 clients, 10 % de pourboire, 40 $ remis.
+    await declarer(serveuse, { date: "2026-09-21", ventes: 600, clients: 30, pct: 10, remis: 40 });
+    const avecDette = await declarer(serveuse, {
+      date: "2026-09-22", ventes: 400, clients: 20, pct: 10, remis: 0,
+      remit_direction: "employer_owes", remit_amount: 90,
+    });
+    // Une journée d'hôtesse : 40 $ reçus, aucun client, et un montant qu'ELLE me doit.
+    await declarer(hotesse, {
+      date: "2026-09-21", ventes: 40, clients: 0, pct: 100, remis: 0, is_hotesse: 1,
+      remit_direction: "employee_owes", remit_amount: 15,
+    });
+    // Et un dû déjà réglé : il ne doit plus paraître dans « reste à virer ».
+    const regle = await declarer(hotesse, {
+      date: "2026-09-22", ventes: 25, clients: 0, pct: 100, remis: 0, is_hotesse: 1,
+      remit_direction: "employer_owes", remit_amount: 30,
+    });
+    await api(`/api/admin/entries/${regle.id}/transferred`, {
+      method: "POST", body: JSON.stringify({ transferred: true, transfer_date: "2026-09-28" }),
+    });
+
+    await ouvrirAdmin();
+    await saisirDates("2026-09-01", "2026-09-30");
+    await onglet.ev(`document.getElementById("customApply").click()`);
+    await jusqua(() => onglet.ev(`!!document.getElementById("customClear")`), { quoi: "la période" });
+
+    const csv = await onglet.ev(`(async () => {
+      let b = null; const u = URL.createObjectURL, c = HTMLAnchorElement.prototype.click;
+      URL.createObjectURL = (x) => { b = x; return "blob:faux"; };
+      HTMLAnchorElement.prototype.click = function () {};
+      try { exportResumeCSV(); return b ? await b.text() : null; }
+      finally { URL.createObjectURL = u; HTMLAnchorElement.prototype.click = c; }
+    })()`);
+
+    // Les tests précédents ont créé d'autres restaurants, qui ont eux aussi leur ligne
+    // « TOTAL RESTAURANT » : on cherche toujours DANS les lignes de celui-ci.
+    const champs = (motif) => {
+      const ligne = csv.split("\r\n").find((l) => l.includes("Resto Resume") && l.includes(motif));
+      assert.ok(ligne, `ligne « ${motif} » introuvable dans :\n${csv}`);
+      return ligne.split(",").map((c) => c.replace(/^"|"$/g, ""));
+    };
+
+    // Une seule ligne par personne : pas de ligne par journée.
+    assert.equal(csv.split("\r\n").filter((l) => l.includes("Sara Serveuse")).length, 1);
+
+    const sara = champs("Sara Serveuse");
+    assert.equal(sara[3], "2", "deux journées");
+    assert.equal(sara[4], "1000.00", "ses ventes");
+    assert.equal(sara[5], "50", "ses clients");
+    assert.equal(sara[11], "20.00", "1 000 $ sur 50 clients");
+    assert.equal(sara[12], "90.00", "je lui dois");
+    assert.equal(sara[13], "0.00", "rien de viré");
+    assert.equal(sara[14], "90.00", "il reste 90 $ à virer");
+
+    const hugo = champs("Hugo Hotesse");
+    assert.equal(hugo[4], "—", "une hôtesse n'a pas de ventes");
+    assert.equal(hugo[5], "—", "ni de clients — c'est le point soulevé");
+    assert.equal(hugo[11], "—", "donc pas de moyenne par client non plus");
+    assert.equal(hugo[8], "65.00", "ce qu'elle a reçu vit dans SA colonne : 40 + 25");
+    assert.equal(hugo[10], "65.00", "et c'est bien son pourboire net");
+    assert.equal(hugo[13], "30.00", "les 30 $ déjà virés");
+    assert.equal(hugo[14], "0.00", "donc plus rien à virer");
+    assert.equal(hugo[15], "15.00", "et elle me doit 15 $");
+
+    // Le total du restaurant : les montants d'hôtesse NE sont PAS des ventes.
+    const total = champs("TOTAL RESTAURANT");
+    assert.equal(total[4], "1000.00", "les 65 $ reçus par l'hôtesse ne sont pas des ventes");
+    assert.equal(total[5], "50", "et elle n'ajoute aucun client");
+    assert.equal(total[6], "10.0", "le % moyen reste celui du service, pas 100 % gonflé par l'hôtesse");
+    assert.equal(total[14], "90.00", "90 à virer en tout");
+    assert.equal(total[15], "15.00", "15 qu'on me doit");
+
+    await onglet.ev(`document.getElementById("customClear").click()`);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
