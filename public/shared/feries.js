@@ -23,9 +23,18 @@
 //               la Fête nationale). « occasion » = la loi n'a rien à dire sur cette journée.
 //   affluence   la salle va se remplir, donc il faut plus de monde au plancher.
 //
-// La fête des Mères remplit la salle sans être un férié. Le Vendredi saint est un férié sans
-// être une grosse journée. L'Action de grâce est les DEUX. Seul `type` se voit encore, et
-// seulement en mots : l'infobulle d'un férié ajoute « · férié ».
+// Les deux ne se recouvrent pas : la fête des Mères remplit la salle sans être un férié, et
+// la Saint-Valentin non plus. Dans l'autre sens, par contre, ça se recouvre presque partout —
+// « les jours fériés augmentent l'achalandage », dit le propriétaire, et c'est lui qui tient
+// la salle. Un férié, le monde est en congé et sort manger. Toutes les journées marquées sont
+// donc des journées d'affluence, SAUF le 25 décembre, où le restaurant est fermé : une salle
+// fermée ne se remplit pas.
+//
+// `affluence` n'a donc presque plus qu'une valeur, et c'est tant mieux — le champ reste parce
+// que le jour où une journée s'avère tranquille, c'est un mot à changer ici, et parce que
+// `ferme` et `affluence` sont deux faits qui ne se déduisent pas l'un de l'autre.
+//
+// Seul `type` se voit encore, et seulement en mots : l'infobulle d'un férié ajoute « · férié ».
 
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -180,28 +189,28 @@
     const p = paques(an);
 
     const liste = [
-      { date: iso(an, 1, 1), cle: "jourDeLAn", type: "ferie", affluence: false, ferme: false },
+      { date: iso(an, 1, 1), cle: "jourDeLAn", type: "ferie", affluence: true, ferme: false },
       { date: iso(an, 2, 14), cle: "saintValentin", type: "occasion", affluence: true, ferme: false },
       // La loi laisse l'employeur choisir entre Vendredi saint et lundi de Pâques ; la
       // grille montre les deux et le gérant sait lequel son restaurant observe. En cacher un
       // ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
       // c'est lui qui remplit la salle — d'où les trois journées d'affilée.
-      { date: isoDe(decaler(p, -2)), cle: "vendrediSaint", type: "ferie", affluence: false, ferme: false },
+      { date: isoDe(decaler(p, -2)), cle: "vendrediSaint", type: "ferie", affluence: true, ferme: false },
       { date: isoDe(p), cle: "dimanchePaques", type: "occasion", affluence: true, ferme: false },
-      { date: isoDe(decaler(p, 1)), cle: "lundiPaques", type: "ferie", affluence: false, ferme: false },
-      { date: isoDe(lundiPrecedant(an, 5, 25)), cle: "patriotes", type: "ferie", affluence: false, ferme: false },
+      { date: isoDe(decaler(p, 1)), cle: "lundiPaques", type: "ferie", affluence: true, ferme: false },
+      { date: isoDe(lundiPrecedant(an, 5, 25)), cle: "patriotes", type: "ferie", affluence: true, ferme: false },
       { date: isoDe(nieme(an, 5, 0, 2)), cle: "feteDesMeres", type: "occasion", affluence: true, ferme: false },
       { date: isoDe(nieme(an, 6, 0, 3)), cle: "feteDesPeres", type: "occasion", affluence: true, ferme: false },
-      { date: iso(an, 6, 24), cle: "feteNationale", type: "ferie", affluence: false, ferme: false },
-      { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie", affluence: false, ferme: false },
-      { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie", affluence: false, ferme: false },
-      // La seule journée du lot qui est les deux à la fois : la paie change ET la salle se
-      // remplit.
+      { date: iso(an, 6, 24), cle: "feteNationale", type: "ferie", affluence: true, ferme: false },
+      { date: iso(an, 7, 1), cle: "feteDuCanada", type: "ferie", affluence: true, ferme: false },
+      { date: isoDe(nieme(an, 9, 1, 1)), cle: "feteDuTravail", type: "ferie", affluence: true, ferme: false },
       { date: isoDe(nieme(an, 10, 1, 2)), cle: "actionDeGrace", type: "ferie", affluence: true, ferme: false },
       // `ferme` n'est pas une propriété du férié, c'est la politique du restaurant : le 25
       // décembre est la SEULE journée de l'année où il n'ouvre pas. Ça vit ici parce que
       // c'est ici qu'on décide quoi dire d'une journée ; si un jour vous ouvrez, c'est cette
-      // ligne qu'on change.
+      // ligne qu'on change — et son `affluence` passerait à `true` avec, comme tout le reste.
+      // La seule journée marquée qui ne remplit pas la salle, c'est celle où il n'y a
+      // personne dedans.
       { date: iso(an, 12, 25), cle: "noel", type: "ferie", affluence: false, ferme: true },
     ];
 

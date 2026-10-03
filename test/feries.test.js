@@ -178,17 +178,23 @@ test("le dimanche de Pâques tombe entre Vendredi saint et lundi de Pâques", ()
   }
 });
 
-test("un férié tranquille n'est pas une grosse journée", () => {
-  for (const cle of ["jourDeLAn", "vendrediSaint", "lundiPaques", "patriotes", "feteNationale", "feteDuCanada", "feteDuTravail", "noel"]) {
+test("un férié remplit la salle, lui aussi", () => {
+  // « Les jours fériés augmentent l'achalandage » — le monde est en congé et sort manger.
+  // C'est le propriétaire qui le dit, et c'est lui qui tient la salle. Avant, ces huit-là
+  // étaient marquées tranquilles, ce qui donnait le conseil inverse du bon.
+  for (const cle of ["jourDeLAn", "vendrediSaint", "lundiPaques", "patriotes", "feteNationale", "feteDuCanada", "feteDuTravail", "actionDeGrace"]) {
     const f = F.feriesDeLAnnee(2027).find((x) => x.cle === cle);
-    assert.equal(f.affluence, false, `${cle} ne devrait pas être marqué « salle pleine »`);
+    assert.equal(f.type, "ferie", `${cle} est bien un férié`);
+    assert.equal(f.affluence, true, `${cle} devrait remplir la salle`);
   }
 });
 
-test("l'Action de grâce est les deux à la fois", () => {
-  const f = F.ferieDuJour("2027-10-11");
-  assert.equal(f.type, "ferie", "la paie change");
-  assert.equal(f.affluence, true, "et la salle se remplit");
+test("la seule journée qui ne remplit pas la salle est celle où elle est fermée", () => {
+  // Une salle fermée ne se remplit pas. C'est la seule exception, et elle se tient toute
+  // seule : si le restaurant ouvrait un 25 décembre, les deux champs changeraient ensemble.
+  const tranquilles = F.feriesDeLAnnee(2027).filter((f) => !f.affluence);
+  assert.deepEqual(tranquilles.map((f) => f.cle), ["noel"]);
+  assert.equal(tranquilles[0].ferme, true);
 });
 
 test("« férié » se dit en mots, jamais par la couleur", () => {
@@ -340,19 +346,23 @@ test("le 25 décembre est la seule journée où le restaurant ferme", () => {
 // le restaurant est fermé. `alertes()` n'a plus qu'un paramètre, et ces tests sont là pour
 // qu'un filtre ne revienne pas par la porte de derrière.
 
-test("une journée marquée sort, qu'elle remplisse la salle ou non", () => {
-  // Fête du Travail 2026 (lundi 7 septembre) : un férié que la salle ne remplit pas. Avant,
-  // c'est exactement celle-là qui ne sortait jamais sur un lien d'horaire.
+test("une journée marquée sort, férié ou pas, salle pleine ou pas", () => {
+  // Fête du Travail 2026 (lundi 7 septembre) : un férié. Avant, c'est exactement celle-là qui
+  // ne sortait jamais sur un lien d'horaire, parce qu'elle était marquée tranquille.
   const travail = F.alertes("2026-09-01");
   assert.equal(travail.length, 1);
   assert.deepEqual(travail[0].journees.map((j) => j.cle), ["feteDuTravail"]);
-  assert.equal(travail[0].journees[0].affluence, false, "elle ne remplit pas la salle");
 
-  // Fête des Mères 2026 (dimanche 10 mai) : l'inverse, elle remplit la salle sans être un
-  // férié. Elle sortait déjà, et elle sort encore.
+  // Fête des Mères 2026 (dimanche 10 mai) : remplit la salle sans être un férié.
   const mai = F.alertes("2026-05-02");
   assert.equal(mai.length, 1);
   assert.deepEqual(mai[0].journees.map((j) => j.cle), ["feteDesMeres"]);
+
+  // Noël : la seule journée qui ne remplit pas la salle, puisqu'elle est fermée. Elle sort
+  // quand même, et c'est elle qui compte le plus.
+  const noel = F.alertes("2026-12-12");
+  assert.deepEqual(noel[0].journees.map((j) => j.cle), ["noel"]);
+  assert.equal(noel[0].journees[0].affluence, false);
 });
 
 test("une semaine mêlée garde ses journées ensemble", () => {
@@ -407,6 +417,9 @@ test("le mode avis parle de paie et de monde, jamais de fournisseurs", () => {
   assert.match(avis, /Fête à venir/);
   assert.match(avis, /Fête du Travail/);
   assert.match(avis, /la paie n'est pas la même/);
+  // Et, depuis que les fériés sont marqués comme des journées d'affluence, la ligne qui
+  // compte pour qui monte l'horaire : « les jours fériés augmentent l'achalandage ».
+  assert.match(avis, /La salle va être pleine.+monde au plancher/);
   assert.doesNotMatch(avis, /fournisseur/i, "ces portes-là ne commandent rien");
   assert.doesNotMatch(avis, /épicerie/i);
   // Pas de liste de rappels, ni du texte ni du bouton qui l'ouvre.

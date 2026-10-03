@@ -798,10 +798,23 @@ se déduisent pas l'un de l'autre :
 | `type`      | `ferie` = la paie n'est pas la même ; `occasion` = la loi n'a rien à dire |
 | `affluence` | la salle va se remplir, donc il faut plus de monde au plancher |
 
-La fête des Mères remplit la salle sans être un férié. Le Vendredi saint est un férié sans
-être une grosse journée. L'**Action de grâce est les deux**. Seul `type` se voit encore, et
-seulement en mots : l'infobulle d'un férié ajoute « · férié » (`Feries.estFerie()`), là où ça
-ne coûte pas un pixel dans une colonne déjà étroite.
+La fête des Mères et la Saint-Valentin remplissent la salle sans être des fériés. Dans
+l'autre sens, par contre, ça se recouvre presque partout : **« les jours fériés augmentent
+l'achalandage »** — le monde est en congé et sort manger. C'est le propriétaire qui le dit, et
+c'est lui qui tient la salle.
+
+Toutes les journées marquées sont donc des journées d'affluence, **sauf le 25 décembre**, où
+le restaurant est fermé : une salle fermée ne se remplit pas. `affluence` n'a presque plus
+qu'une valeur, et c'est tant mieux — le champ reste parce que le jour où une journée s'avère
+tranquille, c'est un mot à changer, et parce que `ferme` et `affluence` ne se déduisent pas
+l'un de l'autre.
+
+Les huit fériés étaient marqués tranquilles au départ, et ça donnait le conseil **inverse** du
+bon à qui montait son horaire. Verrouillé par `test/feries.test.js` dans les deux sens : les
+huit remplissent la salle, et la seule qui ne la remplit pas est celle où elle est fermée.
+
+Seul `type` se voit encore, et seulement en mots : l'infobulle d'un férié ajoute « · férié »
+(`Feries.estFerie()`), là où ça ne coûte pas un pixel dans une colonne déjà étroite.
 
 Vendredi saint ET lundi de Pâques sont affichés : la loi laisse l'employeur choisir, en
 cacher un ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
@@ -863,7 +876,9 @@ le lundi de Pâques a la sienne une semaine plus tard, parce qu'il relève d'une
 Trois messages, composés à partir des faits de la journée (`type`, `affluence`, `ferme`) :
 fournisseurs peut-être fermés → commande d'avance ; salle pleine → prévois le stock ;
 restaurant fermé (le 25 décembre, seule journée de fermeture) → la commande doit couvrir
-jusqu'à la réouverture. L'Action de grâce en donne deux à la fois.
+jusqu'à la réouverture. Un férié en donne **deux à la fois**, puisqu'il remplit aussi la
+salle — et les deux phrases ne se répètent pas : l'une parle de la commande, l'autre du
+monde.
 
 ### Deux modes : la commande, et le monde au plancher
 
@@ -880,8 +895,10 @@ phrase.
 Demandé d'abord ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui
 annonce le férié pour prévoir du personnel ». La première version ne retenait côté horaire que
 les journées d'`affluence` — **cinq par année**. C'était une erreur, corrigée tout de suite :
-elle taisait exactement celles qui coûtent cher à ignorer, le Vendredi saint qui change la
-paie sans remplir la salle, et le 25 décembre où le restaurant est fermé. `Feries.alertes()`
+elle taisait exactement celles qui coûtent cher à ignorer, les fériés qui changent la paie et
+le 25 décembre où le restaurant est fermé. (Les fériés sont depuis marqués comme des journées
+d'affluence, mais ça ne rend pas le filtre moins faux : il reposait sur un champ qui pouvait
+se tromper, et c'est la fête qu'on ne voit pas qui coûte cher.) `Feries.alertes()`
 a donc reperdu son second argument, et `test/feries.test.js` vérifie qu'il ne revient pas —
 un filtre silencieux rendrait des fêtes invisibles sans que rien ne le dise.
 
