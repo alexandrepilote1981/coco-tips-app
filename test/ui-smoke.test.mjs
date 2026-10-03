@@ -1178,6 +1178,84 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
   });
 
+  await t.test("l'export CSV ne sort que ceux qui ont déclaré, et un seul sens par colonne", async () => {
+    // Quatre défauts rapportés en lisant le vrai rapport dans Numbers, sur un iPad :
+    // tout l'effectif listé en lignes de zéros, le numéro d'employé perdu sur les
+    // sous-totaux, une colonne « Moy./client » qui voulait dire deux choses, et un
+    // sous-total pour quelqu'un qui n'a qu'une journée.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Export" }),
+    })).json();
+    const creer = (nom, numero, secteur) => api("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: nom, employee_number: numero, secteur }),
+    }).then((r) => r.json());
+
+    const bavarde = await creer("Bea Bavarde", "77", "salle");   // trois journées
+    const unique = await creer("Uma Unique", "88", "salle");     // une seule
+    await creer("Zoe Zero", "99", "salle");                      // aucune
+    await creer("Carl Cuisine", "66", "cuisine");                // ne déclare jamais
+
+    const declarer = (emp, date, ventes, clients) =>
+      fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, ventes, clients, pct: 10, remis: 0 }),
+      });
+    await declarer(bavarde, "2026-09-21", 400, 20);
+    await declarer(bavarde, "2026-09-22", 600, 30);
+    await declarer(bavarde, "2026-09-23", 500, 25);
+    await declarer(unique, "2026-09-21", 300, 10);
+
+    await ouvrirAdmin();
+    // La période par défaut ne couvre pas septembre 2026 : on la cadre à la main.
+    await saisirDates("2026-09-01", "2026-09-30");
+    await onglet.ev(`document.getElementById("customApply").click()`);
+    await jusqua(() => onglet.ev(`!!document.getElementById("customClear")`), { quoi: "la période appliquée" });
+
+    // On attrape le CSV au vol plutôt que de le laisser se télécharger.
+    const csv = await onglet.ev(`(async () => {
+      let attrape = null;
+      const vraiUrl = URL.createObjectURL;
+      const vraiClic = HTMLAnchorElement.prototype.click;
+      URL.createObjectURL = (blob) => { attrape = blob; return "blob:faux"; };
+      HTMLAnchorElement.prototype.click = function () {};
+      try {
+        exportCSV();
+        return attrape ? await attrape.text() : null;
+      } finally {
+        URL.createObjectURL = vraiUrl;
+        HTMLAnchorElement.prototype.click = vraiClic;
+      }
+    })()`);
+
+    assert.ok(csv, "le CSV doit avoir été produit");
+    const lignes = csv.split("\r\n").filter(Boolean);
+
+    // 1. Personne sans déclaration n'apparaît — ni la cuisine, ni la serveuse à zéro.
+    assert.ok(!/Carl Cuisine/.test(csv), "un cuisinier ne déclare rien : aucune ligne");
+    assert.ok(!/Zoe Zero/.test(csv), "une serveuse sans déclaration n'a pas de ligne non plus");
+
+    // 2. Le sous-total porte le numéro d'employé ET le restaurant.
+    const sousTotal = lignes.find((l) => l.includes("SOUS-TOTAL Bea Bavarde"));
+    assert.ok(sousTotal, "la personne à trois journées doit avoir un sous-total");
+    const champs = sousTotal.split(",");
+    assert.match(champs[0], /Resto Export/, "le restaurant suit le sous-total");
+    assert.equal(champs[2].replace(/"/g, ""), "77", "le numéro d'employé aussi");
+
+    // 3. « Moy./client » veut dire la même chose partout : ventes ÷ clients.
+    // Bea : 1 500 $ sur 75 clients = 20,00 $.
+    assert.equal(champs[10].replace(/"/g, ""), "20.00", `moyenne du sous-total, ligne reçue : ${sousTotal}`);
+    const totalResto = lignes.find((l) => l.includes("TOTAL RESTAURANT")).split(",");
+    // 1 500 + 300 = 1 800 $ sur 85 clients = 21,18 $.
+    assert.equal(totalResto[10].replace(/"/g, ""), "21.18");
+
+    // 4. Une seule journée ne produit pas de sous-total qui la répète.
+    assert.ok(!/SOUS-TOTAL Uma Unique/.test(csv), "un sous-total d'une seule ligne ne totalise rien");
+    assert.ok(/Uma Unique/.test(csv), "mais sa journée, elle, est bien là");
+
+    await onglet.ev(`document.getElementById("customClear").click()`);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

@@ -647,6 +647,30 @@ borne doit regarder **dans la base**, pas par l'API : la liste des absences pass
 jointure sur les employés, donc une ligne orpheline n'y paraît déjà plus et le test passerait
 au vert avec ou sans le correctif. Vérifié dans les deux sens.
 
+### L'export CSV
+
+`exportCSV()` dans `admin.html`. Quatre défauts rapportés en lisant le vrai rapport dans
+Numbers, sur un iPad, avec une vraie équipe — 26 lignes pour 2 personnes qui avaient déclaré.
+
+1. **Il listait tout l'effectif.** Un cuisinier ne déclare jamais, une serveuse peut n'avoir
+   rien déclaré dans la période : ils avaient quand même leur ligne de zéros. Seuls les
+   employés qui ont au moins une journée sortent maintenant, et un restaurant dont personne
+   n'a déclaré ne produit **rien** — pas même un « TOTAL RESTAURANT 0,00 », qui se lirait
+   comme un commerce sans ventes.
+2. **Les lignes SOUS-TOTAL perdaient le numéro d'employé et le nom du restaurant**, alors
+   qu'ils sont bien enregistrés. Trié ou filtré dans Numbers, un sous-total n'avait plus
+   d'identité.
+3. **« Moy./client » voulait dire deux choses.** Sur une journée, `ventes ÷ clients` — la
+   facture moyenne. Sur un sous-total, `net ÷ clients` — le pourboire moyen. Le rapport
+   affichait 17,48 $ sur la ligne et 1,73 $ sur son propre sous-total. Tout passe maintenant
+   par `moyenneParClient()`, qui reprend la définition de `tip-math.js` : avoir une deuxième
+   définition ici était l'erreur. Un chiffre faux est pire qu'un chiffre absent.
+4. **Une personne avec UNE seule journée** recevait un SOUS-TOTAL qui répétait exactement
+   cette journée. Un sous-total d'une ligne ne totalise rien.
+
+Couvert par `test/ui-smoke.test.mjs`, qui attrape le CSV au vol — `URL.createObjectURL` est
+remplacé le temps de l'appel — plutôt que de le laisser se télécharger.
+
 ### Le bandeau des retards
 
 **Une pastille par PERSONNE, pas par journée** — `regrouperParPersonne()` dans `admin.html`.
