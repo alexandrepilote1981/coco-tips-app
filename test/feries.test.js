@@ -329,62 +329,116 @@ test("le 25 décembre est la seule journée où le restaurant ferme", () => {
   for (const f of F.feriesDeLAnnee(2027)) assert.equal(typeof f.ferme, "boolean", f.cle);
 });
 
-// ------------------------------------------- deux portes, deux questions
+// ------------------------------------------- deux portes, deux propos
 //
-// La cuisine veut savoir quand COMMANDER, la salle quand il faudra PLUS DE MONDE. Ce ne sont
-// pas les mêmes journées, et c'est tout l'intérêt d'avoir gardé `type` et `affluence` comme
-// deux faits séparés.
+// « Je veux des notifications pour toutes les fêtes dans les deux horaires. » Les deux portes
+// voient donc les MÊMES journées, et c'est le texte qui change. Ces tests verrouillent les
+// deux moitiés de cette phrase : l'égalité des journées ici, le texte juste en dessous.
+//
+// Il y a eu une version où la porte d'horaire ne retenait que les journées d'`affluence` —
+// cinq par année. Elle taisait le Vendredi saint, qui change la paie, et le 25 décembre, où
+// le restaurant est fermé. `alertes()` n'a plus qu'un paramètre, et ces tests sont là pour
+// qu'un filtre ne revienne pas par la porte de derrière.
 
-test("le filtre de la salle ne retient que les journées qui la remplissent", () => {
-  const salle = (iso) => F.alertes(iso, (j) => j.affluence);
+test("une journée marquée sort, qu'elle remplisse la salle ou non", () => {
+  // Fête du Travail 2026 (lundi 7 septembre) : un férié que la salle ne remplit pas. Avant,
+  // c'est exactement celle-là qui ne sortait jamais sur un lien d'horaire.
+  const travail = F.alertes("2026-09-01");
+  assert.equal(travail.length, 1);
+  assert.deepEqual(travail[0].journees.map((j) => j.cle), ["feteDuTravail"]);
+  assert.equal(travail[0].journees[0].affluence, false, "elle ne remplit pas la salle");
 
-  // Fête des Mères 2026 : dimanche 10 mai. Elle remplit la salle sans être un férié.
-  const mai = salle("2026-05-02");
+  // Fête des Mères 2026 (dimanche 10 mai) : l'inverse, elle remplit la salle sans être un
+  // férié. Elle sortait déjà, et elle sort encore.
+  const mai = F.alertes("2026-05-02");
   assert.equal(mai.length, 1);
   assert.deepEqual(mai[0].journees.map((j) => j.cle), ["feteDesMeres"]);
+});
 
-  // Fête du Travail : un férié que la salle n'a aucune raison de préparer autrement — les
-  // fournisseurs ferment, mais la salle ne se remplit pas plus que d'habitude.
-  assert.ok(
-    F.alertes("2026-09-01").length > 0,
-    "la cuisine, elle, a bien une alerte cette semaine-là"
-  );
-  assert.equal(salle("2026-09-01").length, 0, "la salle n'en a aucune");
-
-  // Et l'inverse d'une semaine mêlée : la Saint-Jean et la fête du Canada sont des fériés,
-  // la fête des Pères remplit la salle. La salle ne garde que la troisième.
+test("une semaine mêlée garde ses journées ensemble", () => {
+  // Semaine de Pâques 2026 : Vendredi saint le 3 (férié, pas d'affluence) et le dimanche 5
+  // (affluence, pas férié). Une semaine = une alerte, et elle porte les deux.
+  //
+  // Le lundi de Pâques, lui, tombe la semaine SUIVANTE : c'est une autre commande, donc sa
+  // propre alerte — et le 3 avril les deux sont déjà ouvertes en même temps.
   assert.deepEqual(
-    salle("2026-06-20").map((a) => a.journees.map((j) => j.cle)),
-    [["feteDesPeres"]]
+    F.alertes("2026-04-03").map((a) => a.journees.map((j) => j.cle)),
+    [["vendrediSaint", "dimanchePaques"], ["lundiPaques"]]
   );
-});
-
-test("sans filtre, rien ne change pour la cuisine", () => {
-  // La signature a gagné un second paramètre ; les appels d'avant doivent se comporter
-  // exactement pareil.
+  // Celle de Pâques s'arrête au dimanche, la dernière journée marquée de SA semaine.
+  assert.equal(F.alertes("2026-04-03")[0].finISO, "2026-04-05");
   assert.deepEqual(
-    F.alertes("2026-05-02").map((a) => a.journees.map((j) => j.cle)),
-    F.alertes("2026-05-02", null).map((a) => a.journees.map((j) => j.cle))
+    F.alertes("2026-04-06").map((a) => a.journees.map((j) => j.cle)),
+    [["lundiPaques"]],
+    "le dimanche passé, il ne reste que la sienne"
   );
 });
 
-test("la fenêtre de la salle se ferme quand SA journée est passée, pas celle du férié", () => {
-  // Semaine de Pâques 2026 : Vendredi saint le 3 avril (férié, pas d'affluence) et le
-  // dimanche 5 (affluence, pas férié). Le filtre doit s'appliquer AVANT le regroupement,
-  // sinon la fenêtre de la salle resterait ouverte jusqu'au dernier férié de la semaine.
-  const paques = F.alertes("2026-04-05", (j) => j.affluence);
-  assert.equal(paques.length, 1);
-  assert.equal(paques[0].finISO, "2026-04-05", "elle s'arrête au dimanche, sa grosse journée");
-
-  // Le lundi de Pâques est un férié : la cuisine a encore une alerte, la salle non.
-  assert.ok(F.alertes("2026-04-06").length > 0);
-  assert.equal(F.alertes("2026-04-06", (j) => j.affluence).length, 0);
+test("alertes() ne prend qu'un argument", () => {
+  // Un second paramètre a existé ici. Si quelqu'un le remet, ce test tombe — et c'est le but,
+  // parce qu'un filtre silencieux rendrait des fêtes invisibles sans que rien ne le dise.
+  assert.equal(F.alertes.length, 1);
+  assert.deepEqual(
+    F.alertes("2026-09-01").map((a) => a.journees.map((j) => j.cle)),
+    F.alertes("2026-09-01", (j) => j.affluence).map((a) => a.journees.map((j) => j.cle)),
+    "un second argument ne doit plus rien changer"
+  );
 });
 
-test("les journées qui remplissent la salle sont celles qu'on attend", () => {
-  // Cinq par année. Assez rare pour qu'une annonce se lise encore quand elle sort.
-  const grosses = F.feriesDeLAnnee(2026).filter((j) => j.affluence).map((j) => j.cle);
-  assert.deepEqual(grosses.sort(), [
-    "actionDeGrace", "dimanchePaques", "feteDesMeres", "feteDesPeres", "saintValentin",
-  ]);
+// --------------------------------------------- ce que chaque porte LIT
+//
+// alerte-ferie.js se charge avec un faux `window` : son contenu se construit en chaîne, sans
+// toucher au DOM, donc on peut le relire ici. C'est le seul endroit où l'on vérifie que les
+// deux modes disent deux choses différentes des mêmes journées.
+
+function texteDe(iso, mode) {
+  const fenetre = { Feries: F };
+  global.window = fenetre;
+  delete require.cache[require.resolve("../public/shared/alerte-ferie.js")];
+  require("../public/shared/alerte-ferie.js");
+  const alertes = F.alertes(iso);
+  assert.ok(alertes.length > 0, `aucune alerte le ${iso}`);
+  return fenetre.AlerteFerie._contenuHTML(alertes, "fr", false, mode);
+}
+
+test("le mode avis parle de paie et de monde, jamais de fournisseurs", () => {
+  // Fête du Travail : un férié tranquille. Le lien d'horaire doit dire que la paie change.
+  const avis = texteDe("2026-09-01", "avis");
+  assert.match(avis, /Fête à venir/);
+  assert.match(avis, /Fête du Travail/);
+  assert.match(avis, /la paie n'est pas la même/);
+  assert.doesNotMatch(avis, /fournisseur/i, "ces portes-là ne commandent rien");
+  assert.doesNotMatch(avis, /épicerie/i);
+  // Pas de liste de rappels, ni du texte ni du bouton qui l'ouvre.
+  assert.doesNotMatch(avis, /Tes rappels/);
+  assert.doesNotMatch(avis, /Modifier la liste/);
+});
+
+test("le mode commande parle de la commande", () => {
+  const commande = texteDe("2026-09-01", "commande");
+  assert.match(commande, /Commande à prévoir/);
+  assert.match(commande, /Commande d'avance/);
+  assert.doesNotMatch(commande, /la paie n'est pas la même/, "ce n'est pas sa question");
+});
+
+test("Noël : les deux portes le disent, chacune à sa façon", () => {
+  // 25 décembre, la seule journée de fermeture. C'est la journée qu'un filtre d'affluence
+  // cachait le plus gravement : fermé, et personne n'était prévenu sur le lien d'horaire.
+  const avis = texteDe("2026-12-12", "avis");
+  assert.match(avis, /Le restaurant est fermé le vendredi 25 décembre\./);
+  assert.doesNotMatch(avis, /réouverture/, "l'avis s'arrête au fait, sans consigne de commande");
+
+  const commande = texteDe("2026-12-12", "commande");
+  assert.match(commande, /Le restaurant est fermé le vendredi 25 décembre\./);
+  assert.match(commande, /jusqu'à la réouverture/);
+});
+
+test("une journée d'affluence met du monde au plancher des deux bords", () => {
+  const avis = texteDe("2026-05-02", "avis");
+  assert.match(avis, /La salle va être pleine/);
+  assert.match(avis, /monde au plancher/);
+  assert.doesNotMatch(avis, /la paie n'est pas la même/, "la fête des Mères n'est pas un férié");
+
+  const commande = texteDe("2026-05-02", "commande");
+  assert.match(commande, /Prévois le stock/);
 });

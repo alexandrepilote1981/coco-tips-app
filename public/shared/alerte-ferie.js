@@ -25,20 +25,31 @@
 // samedi est la veille du dimanche où l'horaire de la semaine se monte, donc l'annonce est
 // déjà à l'écran quand le gérant s'assoit pour le bâtir.
 //
-// LES DEUX MODES
+// LES DEUX MODES — MÊMES JOURNÉES, AUTRE PROPOS
 //
-//   « commande » — toutes les journées marquées. Pour /admin et le gérant de cuisine : ce
-//      sont les deux qui commandent. Avec la liste de rappels de fournisseurs.
+// Les deux retiennent TOUTES les journées marquées. « Je veux des notifications pour toutes
+// les fêtes dans les deux horaires. » Ce qui change d'un mode à l'autre, c'est ce qu'on en
+// dit, parce que les deux portes ne font pas le même geste avec la même journée.
 //
-//   « salle » — SEULEMENT les journées qui remplissent la salle (`affluence`). Demandé
-//      ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui annonce
-//      le férié pour prévoir du personnel ». Ce ne sont pas les mêmes journées : le Vendredi
-//      saint est un férié qui ne remplit pas la salle, la fête des Mères remplit la salle
-//      sans être un férié. Cinq journées par année, assez rare pour qu'on la lise encore.
+//   « commande » — /admin et le gérant de cuisine, les deux qui commandent. Les
+//      fournisseurs peuvent être fermés, la salle va se remplir, et le 25 décembre la
+//      commande doit couvrir jusqu'à la réouverture. Avec la liste de rappels.
 //
-// Le mode salle n'a PAS la liste de rappels : elle parle de fournisseurs, et ce lien-là est
-// partagé à toute l'équipe de salle. C'est aussi pourquoi son texte s'adresse à qui lit, et
-// ne donne d'ordre à personne.
+//   « avis » — les portes d'horaire : le lien de la salle, et le lien de lecture de la
+//      cuisine. Demandé ainsi : « pour le lien gérant de la salle, on devrait mettre une
+//      annonce qui annonce le férié pour prévoir du personnel ». Le propos est celui de
+//      quelqu'un qui monte un horaire : la paie n'est pas la même un férié, et une salle
+//      pleine demande du monde au plancher.
+//
+// Il y a eu une version où le mode avis ne retenait que les journées d'`affluence` — cinq
+// par année. Elle taisait exactement celles qui coûtent de l'argent à ignorer : le Vendredi
+// saint, qui change la paie sans remplir la salle, et le 25 décembre, où c'est fermé. Les
+// deux champs `type` et `affluence` restent séparés dans feries.js, et ils servent toujours —
+// plus à choisir les journées, mais à choisir les phrases.
+//
+// Le mode avis n'a PAS la liste de rappels : elle parle de fournisseurs, et ces portes-là ne
+// commandent pas. Le lien de la salle est en plus partagé à toute l'équipe — c'est pourquoi
+// son texte s'adresse à qui le lit et ne donne d'ordre à personne.
 
 window.AlerteFerie = (function () {
   const T = {
@@ -50,8 +61,10 @@ window.AlerteFerie = (function () {
         `Le restaurant est fermé le ${jour}. Les fournisseurs aussi — la commande doit couvrir jusqu'à la réouverture.`,
       ferie: "Les fournisseurs et les épiceries peuvent être fermés. Commande d'avance.",
       affluence: "La salle va être pleine. Prévois le stock, et assez de monde au plancher.",
-      titreSalle: "Grosse journée à venir",
-      affluenceSalle: "La salle va être pleine. Ça prend assez de monde au plancher.",
+      titreAvis: "Fête à venir",
+      avisFerme: (jour) => `Le restaurant est fermé le ${jour}.`,
+      avisFerie: "C'est un férié — la paie n'est pas la même.",
+      avisAffluence: "La salle va être pleine. Ça prend assez de monde au plancher.",
       mesRappels: "Tes rappels",
       aucunRappel: "Aucun rappel écrit pour l'instant.",
       modifier: "Modifier la liste",
@@ -68,8 +81,10 @@ window.AlerteFerie = (function () {
         `The restaurant is closed on ${jour}. So are the suppliers — the order has to cover until you reopen.`,
       ferie: "Suppliers and grocery stores may be closed. Order ahead.",
       affluence: "The dining room will be full. Stock up, and plan enough people on the floor.",
-      titreSalle: "Busy day coming up",
-      affluenceSalle: "The dining room will be full. It takes enough people on the floor.",
+      titreAvis: "Holiday coming up",
+      avisFerme: (jour) => `The restaurant is closed on ${jour}.`,
+      avisFerie: "It's a statutory holiday — pay is not the same.",
+      avisAffluence: "The dining room will be full. It takes enough people on the floor.",
       mesRappels: "Your reminders",
       aucunRappel: "No reminders written yet.",
       modifier: "Edit the list",
@@ -240,30 +255,41 @@ window.AlerteFerie = (function () {
   }
 
   // Les conseils d'une semaine, selon ce que la porte est venue chercher.
-  function conseilsDe(a, t, L, pourSalle) {
-    if (pourSalle) {
-      // Une seule phrase : ces journées-là sont déjà filtrées sur l'affluence, et parler de
-      // commande ou de paie à l'équipe de salle serait du bruit.
-      return [t.affluenceSalle];
-    }
+  //
+  // Les deux modes lisent les MÊMES journées — « je veux des notifications pour toutes les
+  // fêtes dans les deux horaires ». Ce qui change, c'est ce qu'on en dit : celui qui commande
+  // a besoin de savoir que les fournisseurs ferment, celui qui monte un horaire a besoin de
+  // savoir que la paie change et qu'il faut du monde. Personne n'a besoin des deux.
+  function conseilsDe(a, t, L, pourAvis) {
     const conseils = [];
     const ferme = a.journees.find((j) => j.ferme);
+    const ferie = a.journees.some((j) => j.type === "ferie" && !j.ferme);
+    const plein = a.journees.some((j) => j.affluence);
+
+    if (pourAvis) {
+      // Fermé d'abord : c'est le seul qui dit « ne cédule personne ».
+      if (ferme) conseils.push(t.avisFerme(fmtJour(ferme.date, L)));
+      if (ferie) conseils.push(t.avisFerie);
+      if (plein) conseils.push(t.avisAffluence);
+      return conseils;
+    }
+
     if (ferme) conseils.push(t.ferme(fmtJour(ferme.date, L)));
-    if (a.journees.some((j) => j.type === "ferie" && !j.ferme)) conseils.push(t.ferie);
+    if (ferie) conseils.push(t.ferie);
     // Celui qui commande monte aussi un horaire : une salle pleine demande du stock ET du
     // monde. Une SEULE phrase le dit — deux lignes qui commençaient toutes les deux par
     // « La salle va être pleine » se lisaient comme un bégaiement.
-    if (a.journees.some((j) => j.affluence)) conseils.push(t.affluence);
+    if (plein) conseils.push(t.affluence);
     return conseils;
   }
 
   function contenuHTML(alertes, lang, enEdition, modeDemande) {
     const t = tr(lang);
     const L = t.locale;
-    const pourSalle = (modeDemande || mode) === "salle";
+    const pourAvis = (modeDemande || mode) === "avis";
     return `
       <div class="af-boite" role="dialog" aria-modal="true">
-        <div class="af-titre">${pourSalle ? t.titreSalle : t.titre}</div>
+        <div class="af-titre">${pourAvis ? t.titreAvis : t.titre}</div>
         ${alertes
           .map((a) => {
             const jours = a.journees
@@ -273,13 +299,13 @@ window.AlerteFerie = (function () {
           <div class="af-bloc">
             <div class="af-semaine">${fmtSemaine(a.lundiISO, L, t)}</div>
             <div class="af-jour">${jours}</div>
-            ${conseilsDe(a, t, L, pourSalle).map((c) => `<div class="af-conseil">${c}</div>`).join("")}
+            ${conseilsDe(a, t, L, pourAvis).map((c) => `<div class="af-conseil">${c}</div>`).join("")}
           </div>`;
           })
           .join("")}
         ${
-          pourSalle
-            ? "" // pas de rappels : ils parlent de fournisseurs, et ce lien est partagé à l'équipe
+          pourAvis
+            ? "" // pas de rappels : ils parlent de fournisseurs, et ces portes ne commandent pas
             : enEdition
               ? `${formeHTML(t)}
                  <div class="af-petits">
@@ -347,15 +373,16 @@ window.AlerteFerie = (function () {
     if (installee) return; // une seule fenêtre par ouverture de l'app
     installee = true;
     hote = options;
-    mode = options.mode === "salle" ? "salle" : "commande";
+    mode = options.mode === "avis" ? "avis" : "commande";
 
-    // En mode salle, on ne garde que les journées qui remplissent la salle. Le filtre passe
-    // AVANT le regroupement par semaine, sinon la fenêtre resterait ouverte jusqu'au dernier
-    // férié de la semaine même une fois la grosse journée passée.
-    const alertes = window.Feries.alertes(aujourdhuiISO(), mode === "salle" ? (j) => j.affluence : null);
+    // Les deux modes voient TOUTES les journées marquées : « je veux des notifications pour
+    // toutes les fêtes dans les deux horaires ». Il y a eu une version où la porte d'horaire
+    // ne voyait que les journées d'affluence — elle taisait le Vendredi saint, qui change la
+    // paie, et le 25 décembre, où le restaurant est fermé.
+    const alertes = window.Feries.alertes(aujourdhuiISO());
     if (alertes.length === 0) return;
 
-    if (mode === "salle") {
+    if (mode === "avis") {
       // Rien à charger : pas de rappels de fournisseurs sur cette porte-là.
       restaurants = [];
     } else {

@@ -867,47 +867,41 @@ jusqu'à la réouverture. L'Action de grâce en donne deux à la fois.
 
 ### Deux modes : la commande, et le monde au plancher
 
-La même fenêtre sert deux questions différentes sur les mêmes journées du calendrier, et
-c'est `type` / `affluence` — gardés séparés depuis le début — qui les distinguent.
+Toutes les portes voient **toutes** les journées marquées — « je veux des notifications pour
+toutes les fêtes dans les deux horaires ». Ce qui change d'une porte à l'autre, c'est ce qu'on
+en DIT, et c'est `type` / `affluence` — gardés séparés depuis le début — qui composent la
+phrase.
 
-| mode | journées retenues | pour qui |
+| mode | portes | ce qu'il dit |
 | --- | --- | --- |
-| `commande` | toutes les journées marquées | `/admin` et le gérant de cuisine |
-| `salle` | seulement celles avec `affluence` | le lien d'horaire de la SALLE |
+| `commande` | `/admin` et le gérant de cuisine | fournisseurs fermés, stock à prévoir, et la liste de rappels |
+| `avis` | le lien de la SALLE et le lien de LECTURE de la cuisine | la paie d'un férié, le monde au plancher |
 
-Demandé ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui annonce
-le férié pour prévoir du personnel ». Ce ne sont presque jamais les mêmes jours — le Vendredi
-saint est un férié qui ne remplit pas la salle, la fête des Mères remplit la salle sans être
-un férié. **Cinq journées par année** côté salle (Saint-Valentin, dimanche de Pâques, fête
-des Mères, fête des Pères, Action de grâce), assez rare pour qu'on la lise encore.
+Demandé d'abord ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui
+annonce le férié pour prévoir du personnel ». La première version ne retenait côté horaire que
+les journées d'`affluence` — **cinq par année**. C'était une erreur, corrigée tout de suite :
+elle taisait exactement celles qui coûtent cher à ignorer, le Vendredi saint qui change la
+paie sans remplir la salle, et le 25 décembre où le restaurant est fermé. `Feries.alertes()`
+a donc reperdu son second argument, et `test/feries.test.js` vérifie qu'il ne revient pas —
+un filtre silencieux rendrait des fêtes invisibles sans que rien ne le dise.
 
-Le filtre passe en second argument de `Feries.alertes()`, et il s'applique **avant** le
-regroupement par semaine. Sinon la fenêtre de la salle resterait ouverte jusqu'au dernier
-férié de la semaine : la semaine de Pâques porte le Vendredi saint ET le dimanche, et
-l'annonce de la salle doit s'éteindre le dimanche soir, pas le lundi.
-
-Le mode salle **n'a pas la liste de rappels** : elle parle de fournisseurs, et ce lien-là est
-partagé à toute l'équipe de salle. Son texte est donc écrit pour qui le lit — « ça prend
-assez de monde au plancher » — et ne donne d'ordre à personne.
+Le mode avis **n'a pas la liste de rappels** : elle parle de fournisseurs, et ces deux
+portes-là ne commandent pas. Le lien de la salle est en plus partagé à toute l'équipe — son
+texte est donc écrit pour qui le lit, « ça prend assez de monde au plancher », et ne donne
+d'ordre à personne.
 
 Côté `commande`, une journée d'affluence donne **une seule phrase** pour le stock et le
 monde. Il y en a eu deux un moment, et elles commençaient toutes les deux par « La salle va
 être pleine » : ça se lisait comme un bégaiement.
 
-`horaire.html` ouvre la fenêtre **après le rendu**, pas au chargement du script : `porte.secteur`
-n'est connu qu'une fois la porte interrogée, et avant ça on aurait ouvert la mauvaise une
-fois sur deux.
+Le mode se choisit sur **`voitMontants`**, pas sur le secteur : c'est exactement la règle que
+le serveur applique à la route des rappels (`porteGerant`). Avec le secteur, le lien de
+lecture des cuisiniers demandait les rappels, recevait son 403, et n'affichait alors **rien du
+tout** — ni rappels, ni avis de férié. C'est pourtant ce lien-là qu'on envoie dans le groupe.
 
-### Les rappels
-
-`restaurants.rappels_ferie`, du texte libre, une ligne par rappel (« Appeler Dufour & Fils »).
-Écrit une fois, réaffiché à chaque alerte. C'est du texte et pas une table parce que ce sont
-trois ou quatre phrases qu'on ne trie ni ne compte jamais. Ça s'écrit depuis la fenêtre
-elle-même — la liste vit là où elle sert.
-
-Seuls **`/admin` et le lien du gérant de cuisine** voient la fenêtre et écrivent les rappels :
-ce sont les deux qui commandent. C'est le **serveur** qui refuse les autres portes (403), pas
-la page — `porteGerant()` dans `server.js`, couvert par `test/portes-horaire.test.mjs`.
+`horaire.html` ouvre la fenêtre **après le rendu**, pas au chargement du script : la porte
+n'est connue qu'une fois interrogée, et avant ça on aurait ouvert la mauvaise une fois sur
+deux.
 
 ## Le tableau de bord, en trois onglets
 
