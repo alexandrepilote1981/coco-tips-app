@@ -671,6 +671,46 @@ Numbers, sur un iPad, avec une vraie équipe — 26 lignes pour 2 personnes qui 
 Couvert par `test/ui-smoke.test.mjs`, qui attrape le CSV au vol — `URL.createObjectURL` est
 remplacé le temps de l'appel — plutôt que de le laisser se télécharger.
 
+### Le résumé par employé, et ce qu'une hôtesse n'a pas
+
+**Deux boutons de téléchargement, CÔTE À CÔTE** et de largeur égale : **Résumé pour paye**
+(`exportResumeCSV()`) et **Rapport total** (`exportCSV()`). Ils se choisissent l'un OU
+l'autre, et un bouton posé sous l'autre se lirait comme une suite d'étapes.
+
+Ce sont les noms du propriétaire, et ils valent mieux que ceux qu'on avait essayés : ils
+disent à quoi chacun SERT, pas comment il est fait. « Résumé pour paye » répond à la question
+qu'on se pose en l'ouvrant. Ils se suffisent, donc la sous-ligne qui expliquait le contenu
+est partie. Mesuré à 390 px : 151 px et 153 px, sur la même ligne, aucun mot coupé.
+
+Le rapport total reste en sourdine par sa couleur, pas par sa taille — on le sort quand
+quelqu'un conteste un chiffre, pas chaque semaine, mais il se tape aussi facilement. Sur une semaine normale — douze personnes, quatre à
+six journées chacune — le détaillé fait **84 lignes** : « c'est trop lourd toutes les
+journées ». Le résumé en fait 14.
+
+Ce n'est pas qu'une question de longueur. Les lignes SOUS-TOTAL du détaillé laissent vides
+les quatre colonnes d'argent, donc **« combien je dois à cette personne » et « combien il me
+reste à virer » n'étaient totalisés nulle part** — il fallait additionner 84 lignes à la
+main. Ce sont pourtant les deux chiffres pour lesquels on ouvre le rapport. Le résumé porte
+donc `Je lui dois` / `Déjà viré` / `RESTE À VIRER` / `Il me doit`.
+
+`Il me doit` ne compte que ce qui n'est **pas** réglé : une fois reçu, ce n'est plus dû.
+
+**Une journée d'HÔTESSE n'est pas une journée de vente.** Signalé ainsi : « les hôtes n'ont
+pas de client ». Sur une journée cochée hôtesse, la colonne `ventes` contient le **montant
+reçu des serveuses** — c'est le libellé du champ sur sa page — et ses clients valent 0.
+
+L'export additionnait ça dans « Ventes $ » : sur une semaine d'essai, **773 $ de pourboires
+remis comptés comme des ventes**, et un taux de pourboire du restaurant à 13,6 % au lieu de
+12,3 %. Les colonnes qui parlent de ventes et de clients ne regardent donc que les journées
+de SERVICE (`estJourneeHotesse`), et ce qu'une hôtesse a reçu a sa propre colonne.
+
+Une hôtesse affiche **« — »** et non « 0,00 » dans Ventes, Clients et Moy./client : un zéro
+dans une colonne de moyenne se lit comme un chiffre, pas comme une absence de chiffre.
+
+Les comptes se tiennent : une serveuse retranche de son net ce qu'elle remet, l'hôtesse
+l'ajoute au sien. Le total des pourboires du restaurant reste juste, et le même argent n'est
+pas compté deux fois.
+
 ### Le bandeau des retards
 
 **Une pastille par PERSONNE, pas par journée** — `regrouperParPersonne()` dans `admin.html`.

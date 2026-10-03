@@ -323,9 +323,18 @@
     .period-apply { flex: 1 1 120px; }
   }
   .period-label { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #F1EFEA; margin-top: 6px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  /* Les deux rapports côte à côte, de largeur égale : ils se choisissent l'un OU l'autre,
+     et un bouton posé sous l'autre se lit comme une suite d'étapes. Les noms se suffisent —
+     « Résumé pour paye » dit à quoi ça sert, « Rapport total » dit ce que ça contient. */
+  .export-row { display: flex; gap: 8px; margin-top: 12px; }
+  .export-row > button {
+    flex: 1 1 0; min-width: 0;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-size: 12.5px; font-weight: 800; padding: 13px 6px; border-radius: 10px; min-height: 48px;
+    white-space: nowrap;
+  }
   .export-btn {
-    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; background: #D4A857; color: #10151D;
-    font-size: 13.5px; font-weight: 700; padding: 13px; border-radius: 10px; box-shadow: 0 2px 8px rgba(212,168,87,0.25);
+    background: #D4A857; color: #10151D; box-shadow: 0 2px 8px rgba(212,168,87,0.25);
   }
   .backup-btn {
     display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 10px;
@@ -385,6 +394,13 @@
     font-size: 11.5px; font-weight: 700; padding: 10px 14px; border-radius: 999px;
     min-height: 40px; border: none;
   }
+  /* Deux boutons de téléchargement, de même taille et de même forme : ce sont deux rapports,
+     pas une action et son option. Le détail reste en second et en sourdine — on le sort quand
+     quelqu'un conteste un chiffre, pas chaque semaine — mais il se tape aussi facilement. */
+  .export-detail-btn {
+    background: rgba(212,168,87,0.14); color: #D4A857; border: 1px solid rgba(212,168,87,0.35);
+  }
+  .export-aide { font-size: 11px; color: #8993A4; margin: 7px 0 0; line-height: 1.4; }
   .rappel-sauvegarde {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     background: rgba(212,168,87,0.10); border: 1px solid rgba(212,168,87,0.28);
@@ -915,7 +931,13 @@ const I18N = {
     toutesLesDonnees: "Toutes les données, sans limite de date",
     choisisDate: "Choisis une date de début et de fin",
     duAu: (s, e) => `Du ${s} au ${e}`,
-    exporter: "Exporter en CSV (pour Numbers/Excel)",
+    exporter: "Résumé pour paye",
+    exporterDetail: "Rapport total",
+    exportAide: "Les deux s\u2019ouvrent dans Numbers ou Excel, sur la p\u00e9riode choisie plus haut.",
+    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $"],
+    nomFichierResume: "declara-resume",
+    nomFichierDetail: "declara-detail-par-jour",
+
     sauvegarder: "Télécharger une sauvegarde complète",
     sauvegardeAide: "Garde ce fichier ailleurs que sur le site — sur ton téléphone, ton ordinateur ou dans tes courriels. Refais-en une de temps en temps.",
     sauvegardeEnCours: "Préparation…",
@@ -1148,7 +1170,13 @@ const I18N = {
     toutesLesDonnees: "All data, no date limit",
     choisisDate: "Choose a start and end date",
     duAu: (s, e) => `From ${s} to ${e}`,
-    exporter: "Export CSV (for Numbers/Excel)",
+    exporter: "Payroll summary",
+    exporterDetail: "Full report",
+    exportAide: "Both open in Numbers or Excel, over the period chosen above.",
+    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $"],
+    nomFichierResume: "declara-summary",
+    nomFichierDetail: "declara-day-by-day",
+
     sauvegarder: "Download a full backup",
     sauvegardeAide: "Keep this file somewhere other than the site — on your phone, your computer, or in your email. Make a new one from time to time.",
     sauvegardeEnCours: "Preparing…",
@@ -1779,7 +1807,11 @@ function render() {
         </div>
         <div class="period-error" id="periodError" role="status" aria-live="polite" hidden></div>
         <div class="period-label" aria-live="polite">${periodLabel}</div>
-        <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
+        <div class="export-row">
+          <button class="export-btn" id="exportBtn">${icon("download", 13)} ${t("exporter")}</button>
+          <button class="export-detail-btn" id="exportDetailBtn">${icon("download", 13)} ${t("exporterDetail")}</button>
+        </div>
+        <p class="export-aide">${t("exportAide")}</p>
         <button class="backup-btn" id="backupBtn">${icon("shield", 14)} ${t("sauvegarder")}</button>
         <p class="backup-hint">${t("sauvegardeAide")}</p>
       </div>
@@ -2148,7 +2180,8 @@ function render() {
     customClear.addEventListener("click", () => changePeriod({ ...PERIOD_DEFAUT }));
   }
 
-  document.getElementById("exportBtn").addEventListener("click", exportCSV);
+  document.getElementById("exportBtn").addEventListener("click", exportResumeCSV);
+  document.getElementById("exportDetailBtn").addEventListener("click", exportCSV);
   document.getElementById("backupBtn").addEventListener("click", (ev) => downloadBackup(ev.currentTarget));
   // Le bouton du rappel n'existe que quand le rappel est là : pas de garde, pas de page.
   const btnRappel = document.getElementById("backupBtnRappel");
@@ -2707,6 +2740,116 @@ function moyenneParClient(ventes, clients) {
   return clients > 0 ? ventes / clients : 0;
 }
 
+/**
+ * Une journée d'HÔTESSE n'est pas une journée de vente.
+ *
+ * Sur une journée cochée « hôtesse », la colonne `ventes` ne contient pas des ventes : elle
+ * contient le MONTANT REÇU DES SERVEUSES, c'est le libellé du champ sur sa page. Et ses
+ * clients valent 0, parce qu'elle n'en sert pas.
+ *
+ * L'export additionnait tout ça dans la colonne « Ventes $ » : sur une semaine d'essai,
+ * 773 $ de pourboires remis se retrouvaient comptés comme des ventes du restaurant. Le même
+ * argent est déjà compté une fois chez les serveuses, dans « Remis employés ».
+ *
+ * Les colonnes qui parlent de VENTES et de CLIENTS ne regardent donc que les journées de
+ * service. Ce qu'une hôtesse a reçu vit dans sa propre colonne, et dans son pourboire net —
+ * qui, lui, est juste : son brut vaut ce qu'elle a reçu, et elle ne remet rien.
+ */
+function estJourneeHotesse(d) {
+  return !!d.is_hotesse;
+}
+
+// Les totaux d'une personne (ou d'un restaurant) sur une période.
+function totauxDe(entries) {
+  const s = { jours: 0, ventes: 0, clients: 0, remis: 0, brut: 0, net: 0,
+              recuHotesse: 0, duParMoi: 0, dejaVire: 0, duParLui: 0 };
+  for (const d of entries) {
+    s.jours++;
+    s.brut += d.pourboireBrut;
+    s.net += d.net;
+    if (estJourneeHotesse(d)) {
+      s.recuHotesse += d.ventes;
+    } else {
+      s.ventes += d.ventes;
+      s.clients += d.clients;
+      s.remis += d.remis;
+    }
+    if (d.remit_direction === "employer_owes") {
+      s.duParMoi += d.remit_amount || 0;
+      if (d.transferred) s.dejaVire += d.remit_amount || 0;
+    }
+    // « Il me doit » ne compte que ce qui n'est pas réglé : une fois reçu, ce n'est plus dû.
+    if (d.remit_direction === "employee_owes" && !d.transferred) s.duParLui += d.remit_amount || 0;
+  }
+  return s;
+}
+
+function ligneResume(nomResto, nom, numero, s) {
+  const pct = s.ventes > 0 ? (s.brut - s.recuHotesse) / s.ventes * 100 : 0;
+  // Un tiret plutôt qu'un zéro quand la personne n'a fait que de l'hôtesse : « 0,00 » dans
+  // une colonne de moyenne se lit comme un chiffre, pas comme une absence de chiffre.
+  const siVentes = (v) => (s.ventes > 0 ? v : "—");
+  return [
+    nomResto, nom, numero || "", String(s.jours),
+    siVentes(s.ventes.toFixed(2)),
+    siVentes(String(s.clients)),
+    siVentes(pct.toFixed(1)),
+    s.remis.toFixed(2),
+    s.recuHotesse > 0 ? s.recuHotesse.toFixed(2) : "",
+    s.brut.toFixed(2),
+    s.net.toFixed(2),
+    siVentes(moyenneParClient(s.ventes, s.clients).toFixed(2)),
+    s.duParMoi.toFixed(2),
+    s.dejaVire.toFixed(2),
+    (s.duParMoi - s.dejaVire).toFixed(2),
+    s.duParLui.toFixed(2),
+  ];
+}
+
+/**
+ * Le rapport qu'on sort neuf fois sur dix : UNE ligne par personne.
+ *
+ * Le détaillé donne une ligne par journée. Sur une semaine normale — douze personnes, quatre
+ * à six journées chacune — ça fait 84 lignes à lire sur un iPad. « C'est trop lourd toutes
+ * les journées. »
+ *
+ * Et il manquait l'essentiel : les lignes SOUS-TOTAL laissaient vides les colonnes d'argent,
+ * donc « combien je dois à Marie-Eve en tout » et « combien il me reste à virer » n'étaient
+ * totalisés NULLE PART. Il fallait additionner les 84 lignes à la main. Ces deux chiffres
+ * sont la raison d'être du rapport.
+ */
+function exportResumeCSV() {
+  const rows = [t("csvHeadersResume")];
+  overview.restaurants.forEach((r) => {
+    const declarants = r.employees.filter((e) => e.entries.length > 0);
+    if (declarants.length === 0) return;
+    const toutes = [];
+    declarants.forEach((e) => {
+      rows.push(ligneResume(r.name, e.name, e.employee_number, totauxDe(e.entries)));
+      toutes.push(...e.entries);
+    });
+    rows.push(ligneResume(r.name, t("csvTotalRestaurant"), "", totauxDe(toutes)));
+    rows.push([]);
+  });
+  telechargerCSV(rows, t("nomFichierResume"));
+}
+
+// Le téléchargement lui-même, partagé par les deux exports.
+function telechargerCSV(rows, prefixe) {
+  const csvContent = rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const { start, end } = resolvePeriod();
+  const suffix = period.mode === "all" ? t("tout") : `${start}_${lang === "fr" ? "au" : "to"}_${end}`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${prefixe}-${suffix}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function exportCSV() {
   const rows = [t("csvHeaders")];
 
@@ -2791,18 +2934,7 @@ function exportCSV() {
     rows.push([]); // ligne vide pour bien séparer visuellement chaque restaurant
   });
 
-  const csvContent = rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
-  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const { start, end } = resolvePeriod();
-  const suffix = period.mode === "all" ? t("tout") : `${start}_${lang === "fr" ? "au" : "to"}_${end}`;
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `coco-frutti-pourboires-${suffix}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  telechargerCSV(rows, t("nomFichierDetail"));
 }
 
 function openTransferModal(entryId, direction) {
