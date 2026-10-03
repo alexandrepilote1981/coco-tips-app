@@ -2683,13 +2683,41 @@ async function downloadBackup(btn) {
   }
 }
 
+// L'export CSV, tel qu'il s'ouvre dans Numbers ou Excel.
+//
+// Quatre défauts rapportés en le lisant sur un iPad, avec une vraie équipe :
+//
+//   1. Il listait TOUT l'effectif. Un cuisinier ne déclare jamais, une serveuse peut n'avoir
+//      rien déclaré dans la période — ils avaient quand même leur ligne de zéros. Sur le
+//      rapport du propriétaire : 26 lignes pour 2 personnes qui avaient déclaré.
+//   2. Les lignes SOUS-TOTAL perdaient le numéro d'employé et le nom du restaurant, alors
+//      qu'ils sont bien enregistrés. Trié ou filtré dans Numbers, un sous-total n'avait plus
+//      d'identité.
+//   3. La colonne « Moy./client » voulait dire DEUX choses : ventes ÷ clients sur une
+//      journée (la facture moyenne), pourboire net ÷ clients sur un sous-total. 17,48 $ sur
+//      la ligne, 1,73 $ sur son propre sous-total. Un chiffre faux est pire qu'un chiffre
+//      absent.
+//   4. Une personne avec UNE seule journée recevait quand même un SOUS-TOTAL qui répétait
+//      exactement cette journée. Un sous-total d'une ligne ne totalise rien.
+//
+// La moyenne par client est donc calculée partout comme `Math.moyenne` le fait dans
+// tip-math.js — ventes ÷ clients. C'est la définition qui a cours dans tout le reste de
+// l'app ; en avoir une deuxième ici était l'erreur.
+function moyenneParClient(ventes, clients) {
+  return clients > 0 ? ventes / clients : 0;
+}
+
 function exportCSV() {
   const rows = [t("csvHeaders")];
 
   overview.restaurants.forEach((r) => {
     const restoTotals = { ventes: 0, clients: 0, remis: 0, brut: 0, net: 0 };
+    // Un restaurant dont personne n'a déclaré ne produit RIEN — pas même un
+    // « TOTAL RESTAURANT 0,00 », qui se lirait comme un commerce sans ventes.
+    const declarants = r.employees.filter((e) => e.entries.length > 0);
+    if (declarants.length === 0) return;
 
-    r.employees.forEach((e) => {
+    declarants.forEach((e) => {
       const empTotals = { ventes: 0, clients: 0, remis: 0, brut: 0, net: 0 };
 
       e.entries.forEach((d) => {
@@ -2721,20 +2749,24 @@ function exportCSV() {
         empTotals.net += d.net;
       });
 
-      // Sous-total de l'employé (une seule ligne, après toutes ses journées)
-      const empPctMoyen = empTotals.ventes > 0 ? (empTotals.brut / empTotals.ventes) * 100 : 0;
-      const empMoyClient = empTotals.clients > 0 ? empTotals.net / empTotals.clients : 0;
-      rows.push([
-        "", t("csvSousTotal") + " " + e.name, "", "",
-        empTotals.ventes.toFixed(2),
-        empTotals.clients,
-        empPctMoyen.toFixed(1),
-        empTotals.remis.toFixed(2),
-        empTotals.brut.toFixed(2),
-        empTotals.net.toFixed(2),
-        empMoyClient.toFixed(2),
-        "", "", "", "",
-      ]);
+      // Sous-total de l'employé — sauté quand il n'a qu'UNE journée : la ligne répéterait
+      // mot pour mot celle du dessus.
+      if (e.entries.length > 1) {
+        const empPctMoyen = empTotals.ventes > 0 ? (empTotals.brut / empTotals.ventes) * 100 : 0;
+        rows.push([
+          // Le restaurant et le numéro suivent le sous-total : sans eux, une ligne triée ou
+          // filtrée dans Numbers ne dit plus de qui elle parle.
+          r.name, t("csvSousTotal") + " " + e.name, e.employee_number || "", "",
+          empTotals.ventes.toFixed(2),
+          empTotals.clients,
+          empPctMoyen.toFixed(1),
+          empTotals.remis.toFixed(2),
+          empTotals.brut.toFixed(2),
+          empTotals.net.toFixed(2),
+          moyenneParClient(empTotals.ventes, empTotals.clients).toFixed(2),
+          "", "", "", "",
+        ]);
+      }
 
       restoTotals.ventes += empTotals.ventes;
       restoTotals.clients += empTotals.clients;
@@ -2745,7 +2777,6 @@ function exportCSV() {
 
     // Total du restaurant au complet (tous les employés additionnés)
     const restoPctMoyen = restoTotals.ventes > 0 ? (restoTotals.brut / restoTotals.ventes) * 100 : 0;
-    const restoMoyClient = restoTotals.clients > 0 ? restoTotals.net / restoTotals.clients : 0;
     rows.push([
       r.name, t("csvTotalRestaurant"), "", "",
       restoTotals.ventes.toFixed(2),
@@ -2754,7 +2785,7 @@ function exportCSV() {
       restoTotals.remis.toFixed(2),
       restoTotals.brut.toFixed(2),
       restoTotals.net.toFixed(2),
-      restoMoyClient.toFixed(2),
+      moyenneParClient(restoTotals.ventes, restoTotals.clients).toFixed(2),
       "", "", "", "",
     ]);
     rows.push([]); // ligne vide pour bien séparer visuellement chaque restaurant
