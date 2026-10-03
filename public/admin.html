@@ -385,12 +385,15 @@
     font-size: 11.5px; font-weight: 700; padding: 10px 14px; border-radius: 999px;
     min-height: 40px; border: none;
   }
-  /* Le détail par jour : discret, sous l'export principal. Il ne doit pas se disputer la
-     place avec le rapport qu'on sort vraiment chaque semaine. */
+  /* Deux boutons de téléchargement, de même taille et de même forme : ce sont deux rapports,
+     pas une action et son option. Le détail reste en second et en sourdine — on le sort quand
+     quelqu'un conteste un chiffre, pas chaque semaine — mais il se tape aussi facilement. */
   .export-detail-btn {
-    background: none; color: #8993A4; font-size: 11.5px; font-weight: 700;
-    padding: 9px 0 2px; border: none; text-decoration: underline; min-height: 40px;
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px;
+    background: rgba(212,168,87,0.14); color: #D4A857; border: 1px solid rgba(212,168,87,0.35);
+    font-size: 13px; font-weight: 700; padding: 12px; border-radius: 10px; min-height: 44px;
   }
+  .export-aide { font-size: 11px; color: #8993A4; margin: 7px 0 0; line-height: 1.4; }
   .rappel-sauvegarde {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     background: rgba(212,168,87,0.10); border: 1px solid rgba(212,168,87,0.28);
@@ -921,8 +924,9 @@ const I18N = {
     toutesLesDonnees: "Toutes les données, sans limite de date",
     choisisDate: "Choisis une date de début et de fin",
     duAu: (s, e) => `Du ${s} au ${e}`,
-    exporter: "Exporter en CSV (un total par employé)",
-    exporterDetail: "Détail par jour (CSV)",
+    exporter: "Résumé — un total par employé",
+    exporterDetail: "Détail — une ligne par journée",
+    exportAide: "Les deux s\u2019ouvrent dans Numbers ou Excel, sur la p\u00e9riode choisie plus haut.",
     csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $"],
     nomFichierResume: "declara-resume",
     nomFichierDetail: "declara-detail-par-jour",
@@ -1159,8 +1163,9 @@ const I18N = {
     toutesLesDonnees: "All data, no date limit",
     choisisDate: "Choose a start and end date",
     duAu: (s, e) => `From ${s} to ${e}`,
-    exporter: "Export CSV (one total per employee)",
-    exporterDetail: "Day by day (CSV)",
+    exporter: "Summary — one total per employee",
+    exporterDetail: "Detail — one line per day",
+    exportAide: "Both open in Numbers or Excel, over the period chosen above.",
     csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $"],
     nomFichierResume: "declara-summary",
     nomFichierDetail: "declara-day-by-day",
@@ -1796,9 +1801,8 @@ function render() {
         <div class="period-error" id="periodError" role="status" aria-live="polite" hidden></div>
         <div class="period-label" aria-live="polite">${periodLabel}</div>
         <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
-        <!-- Le détail par jour reste accessible, mais en second : c'est la preuve qu'on sort
-             quand quelqu'un conteste un chiffre, pas le rapport qu'on lit chaque semaine. -->
-        <button class="export-detail-btn" id="exportDetailBtn">${t("exporterDetail")}</button>
+        <button class="export-detail-btn" id="exportDetailBtn">${icon("download", 13)} ${t("exporterDetail")}</button>
+        <p class="export-aide">${t("exportAide")}</p>
         <button class="backup-btn" id="backupBtn">${icon("shield", 14)} ${t("sauvegarder")}</button>
         <p class="backup-hint">${t("sauvegardeAide")}</p>
       </div>

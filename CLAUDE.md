@@ -673,8 +673,11 @@ remplacé le temps de l'appel — plutôt que de le laisser se télécharger.
 
 ### Le résumé par employé, et ce qu'une hôtesse n'a pas
 
-Le bouton principal sort maintenant **une ligne par personne** (`exportResumeCSV()`), et le
-détail par jour vit sous un lien discret. Sur une semaine normale — douze personnes, quatre à
+**Deux boutons de téléchargement**, de même taille et de même forme : ce sont deux rapports,
+pas une action et son option. **Résumé — un total par employé** (`exportResumeCSV()`), et
+**Détail — une ligne par journée** (`exportCSV()`). Les deux noms disent ce que le fichier
+CONTIENT, pas comment il est fait. Le détail reste en second et en sourdine — on le sort
+quand quelqu'un conteste un chiffre, pas chaque semaine — mais il se tape aussi facilement. Sur une semaine normale — douze personnes, quatre à
 six journées chacune — le détaillé fait **84 lignes** : « c'est trop lourd toutes les
 journées ». Le résumé en fait 14.
 
