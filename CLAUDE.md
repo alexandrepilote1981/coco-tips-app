@@ -865,6 +865,39 @@ fournisseurs peut-être fermés → commande d'avance ; salle pleine → prévoi
 restaurant fermé (le 25 décembre, seule journée de fermeture) → la commande doit couvrir
 jusqu'à la réouverture. L'Action de grâce en donne deux à la fois.
 
+### Deux modes : la commande, et le monde au plancher
+
+La même fenêtre sert deux questions différentes sur les mêmes journées du calendrier, et
+c'est `type` / `affluence` — gardés séparés depuis le début — qui les distinguent.
+
+| mode | journées retenues | pour qui |
+| --- | --- | --- |
+| `commande` | toutes les journées marquées | `/admin` et le gérant de cuisine |
+| `salle` | seulement celles avec `affluence` | le lien d'horaire de la SALLE |
+
+Demandé ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui annonce
+le férié pour prévoir du personnel ». Ce ne sont presque jamais les mêmes jours — le Vendredi
+saint est un férié qui ne remplit pas la salle, la fête des Mères remplit la salle sans être
+un férié. **Cinq journées par année** côté salle (Saint-Valentin, dimanche de Pâques, fête
+des Mères, fête des Pères, Action de grâce), assez rare pour qu'on la lise encore.
+
+Le filtre passe en second argument de `Feries.alertes()`, et il s'applique **avant** le
+regroupement par semaine. Sinon la fenêtre de la salle resterait ouverte jusqu'au dernier
+férié de la semaine : la semaine de Pâques porte le Vendredi saint ET le dimanche, et
+l'annonce de la salle doit s'éteindre le dimanche soir, pas le lundi.
+
+Le mode salle **n'a pas la liste de rappels** : elle parle de fournisseurs, et ce lien-là est
+partagé à toute l'équipe de salle. Son texte est donc écrit pour qui le lit — « ça prend
+assez de monde au plancher » — et ne donne d'ordre à personne.
+
+Côté `commande`, une journée d'affluence donne **une seule phrase** pour le stock et le
+monde. Il y en a eu deux un moment, et elles commençaient toutes les deux par « La salle va
+être pleine » : ça se lisait comme un bégaiement.
+
+`horaire.html` ouvre la fenêtre **après le rendu**, pas au chargement du script : `porte.secteur`
+n'est connu qu'une fois la porte interrogée, et avant ça on aurait ouvert la mauvaise une
+fois sur deux.
+
 ### Les rappels
 
 `restaurants.rappels_ferie`, du texte libre, une ligne par rappel (« Appeler Dufour & Fils »).

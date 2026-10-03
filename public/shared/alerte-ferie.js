@@ -1,4 +1,5 @@
-// La fenêtre qui s'ouvre avant un férié pour rappeler la commande.
+// La fenêtre qui s'ouvre avant une journée marquée. Elle a DEUX modes, parce que deux
+// portes posent deux questions différentes sur les mêmes journées du calendrier.
 //
 // D'où ça vient, dans les mots du gérant : « pendant nos fériés, les horaires de livraison
 // de nos fournisseurs peuvent changer… nous devrions faire attention à notre commande avant
@@ -20,7 +21,24 @@
 //
 // Le moment où elle sort est calculé dans feries.js (`alertes`) : le samedi, neuf jours
 // avant le lundi de la semaine visée, parce que la commande se passe une fois par semaine,
-// la semaine d'avant.
+// la semaine d'avant. Ce moment-là sert aussi à la salle, et pour une raison voisine : le
+// samedi est la veille du dimanche où l'horaire de la semaine se monte, donc l'annonce est
+// déjà à l'écran quand le gérant s'assoit pour le bâtir.
+//
+// LES DEUX MODES
+//
+//   « commande » — toutes les journées marquées. Pour /admin et le gérant de cuisine : ce
+//      sont les deux qui commandent. Avec la liste de rappels de fournisseurs.
+//
+//   « salle » — SEULEMENT les journées qui remplissent la salle (`affluence`). Demandé
+//      ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui annonce
+//      le férié pour prévoir du personnel ». Ce ne sont pas les mêmes journées : le Vendredi
+//      saint est un férié qui ne remplit pas la salle, la fête des Mères remplit la salle
+//      sans être un férié. Cinq journées par année, assez rare pour qu'on la lise encore.
+//
+// Le mode salle n'a PAS la liste de rappels : elle parle de fournisseurs, et ce lien-là est
+// partagé à toute l'équipe de salle. C'est aussi pourquoi son texte s'adresse à qui lit, et
+// ne donne d'ordre à personne.
 
 window.AlerteFerie = (function () {
   const T = {
@@ -31,7 +49,9 @@ window.AlerteFerie = (function () {
       ferme: (jour) =>
         `Le restaurant est fermé le ${jour}. Les fournisseurs aussi — la commande doit couvrir jusqu'à la réouverture.`,
       ferie: "Les fournisseurs et les épiceries peuvent être fermés. Commande d'avance.",
-      affluence: "La salle va être pleine. Prévois le stock.",
+      affluence: "La salle va être pleine. Prévois le stock, et assez de monde au plancher.",
+      titreSalle: "Grosse journée à venir",
+      affluenceSalle: "La salle va être pleine. Ça prend assez de monde au plancher.",
       mesRappels: "Tes rappels",
       aucunRappel: "Aucun rappel écrit pour l'instant.",
       modifier: "Modifier la liste",
@@ -47,7 +67,9 @@ window.AlerteFerie = (function () {
       ferme: (jour) =>
         `The restaurant is closed on ${jour}. So are the suppliers — the order has to cover until you reopen.`,
       ferie: "Suppliers and grocery stores may be closed. Order ahead.",
-      affluence: "The dining room will be full. Stock up.",
+      affluence: "The dining room will be full. Stock up, and plan enough people on the floor.",
+      titreSalle: "Busy day coming up",
+      affluenceSalle: "The dining room will be full. It takes enough people on the floor.",
       mesRappels: "Your reminders",
       aucunRappel: "No reminders written yet.",
       modifier: "Edit the list",
@@ -62,6 +84,7 @@ window.AlerteFerie = (function () {
   let hote = null;
   let restaurants = [];
   let fond = null;
+  let mode = "commande";
 
   function tr(lang) {
     return T[lang === "en" ? "en" : "fr"];
@@ -216,39 +239,55 @@ window.AlerteFerie = (function () {
       .join("");
   }
 
-  function contenuHTML(alertes, lang, enEdition) {
+  // Les conseils d'une semaine, selon ce que la porte est venue chercher.
+  function conseilsDe(a, t, L, pourSalle) {
+    if (pourSalle) {
+      // Une seule phrase : ces journées-là sont déjà filtrées sur l'affluence, et parler de
+      // commande ou de paie à l'équipe de salle serait du bruit.
+      return [t.affluenceSalle];
+    }
+    const conseils = [];
+    const ferme = a.journees.find((j) => j.ferme);
+    if (ferme) conseils.push(t.ferme(fmtJour(ferme.date, L)));
+    if (a.journees.some((j) => j.type === "ferie" && !j.ferme)) conseils.push(t.ferie);
+    // Celui qui commande monte aussi un horaire : une salle pleine demande du stock ET du
+    // monde. Une SEULE phrase le dit — deux lignes qui commençaient toutes les deux par
+    // « La salle va être pleine » se lisaient comme un bégaiement.
+    if (a.journees.some((j) => j.affluence)) conseils.push(t.affluence);
+    return conseils;
+  }
+
+  function contenuHTML(alertes, lang, enEdition, modeDemande) {
     const t = tr(lang);
     const L = t.locale;
+    const pourSalle = (modeDemande || mode) === "salle";
     return `
       <div class="af-boite" role="dialog" aria-modal="true">
-        <div class="af-titre">${t.titre}</div>
+        <div class="af-titre">${pourSalle ? t.titreSalle : t.titre}</div>
         ${alertes
           .map((a) => {
             const jours = a.journees
               .map((j) => `${window.Feries.libelle(j.cle, lang)} — ${fmtJour(j.date, L)}`)
               .join("<br>");
-            const ferme = a.journees.find((j) => j.ferme);
-            const conseils = [];
-            if (ferme) conseils.push(t.ferme(fmtJour(ferme.date, L)));
-            if (a.journees.some((j) => j.type === "ferie" && !j.ferme)) conseils.push(t.ferie);
-            if (a.journees.some((j) => j.affluence)) conseils.push(t.affluence);
             return `
           <div class="af-bloc">
             <div class="af-semaine">${fmtSemaine(a.lundiISO, L, t)}</div>
             <div class="af-jour">${jours}</div>
-            ${conseils.map((c) => `<div class="af-conseil">${c}</div>`).join("")}
+            ${conseilsDe(a, t, L, pourSalle).map((c) => `<div class="af-conseil">${c}</div>`).join("")}
           </div>`;
           })
           .join("")}
         ${
-          enEdition
-            ? `${formeHTML(t)}
-               <div class="af-petits">
-                 <button class="af-ok" data-af="enregistrer">${t.enregistrer}</button>
-                 <button class="af-non" data-af="annuler">${t.annuler}</button>
-               </div>`
-            : `${blocRappelsHTML(t)}
-               <button class="af-lien" data-af="modifier">${t.modifier}</button>`
+          pourSalle
+            ? "" // pas de rappels : ils parlent de fournisseurs, et ce lien est partagé à l'équipe
+            : enEdition
+              ? `${formeHTML(t)}
+                 <div class="af-petits">
+                   <button class="af-ok" data-af="enregistrer">${t.enregistrer}</button>
+                   <button class="af-non" data-af="annuler">${t.annuler}</button>
+                 </div>`
+              : `${blocRappelsHTML(t)}
+                 <button class="af-lien" data-af="modifier">${t.modifier}</button>`
         }
         <button class="af-fermer" data-af="fermer">${t.fermer}</button>
       </div>`;
@@ -308,14 +347,23 @@ window.AlerteFerie = (function () {
     if (installee) return; // une seule fenêtre par ouverture de l'app
     installee = true;
     hote = options;
+    mode = options.mode === "salle" ? "salle" : "commande";
 
-    const alertes = window.Feries.alertes(aujourdhuiISO());
+    // En mode salle, on ne garde que les journées qui remplissent la salle. Le filtre passe
+    // AVANT le regroupement par semaine, sinon la fenêtre resterait ouverte jusqu'au dernier
+    // férié de la semaine même une fois la grosse journée passée.
+    const alertes = window.Feries.alertes(aujourdhuiISO(), mode === "salle" ? (j) => j.affluence : null);
     if (alertes.length === 0) return;
 
-    try {
-      restaurants = (await hote.charger()) || [];
-    } catch (e) {
-      return; // porte sans droit, ou réseau : pas de fenêtre, et aucun message d'erreur
+    if (mode === "salle") {
+      // Rien à charger : pas de rappels de fournisseurs sur cette porte-là.
+      restaurants = [];
+    } else {
+      try {
+        restaurants = (await hote.charger()) || [];
+      } catch (e) {
+        return; // porte sans droit, ou réseau : pas de fenêtre, et aucun message d'erreur
+      }
     }
 
     injecterStyle();

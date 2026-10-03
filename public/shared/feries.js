@@ -267,12 +267,26 @@
    * @param {string} aujourdhuiISO
    * @returns {Array<{lundiISO, debutISO, finISO, journees}>}
    */
-  function alertes(aujourdhuiISO) {
+  /**
+   * Les alertes actives aujourd'hui.
+   *
+   * `filtre` restreint les journées retenues. Il existe parce que deux portes posent deux
+   * questions différentes sur les mêmes journées : la cuisine veut savoir quand COMMANDER
+   * (toutes les journées marquées), la salle veut savoir quand il faudra PLUS DE MONDE
+   * (seulement celles qui remplissent la salle). Le Vendredi saint regarde la première et
+   * pas la seconde ; la fête des Mères, l'inverse.
+   *
+   * Le filtre s'applique AVANT le regroupement par semaine : sinon la fenêtre de la salle
+   * s'arrêterait à la dernière journée marquée de la semaine plutôt qu'à sa dernière grosse
+   * journée, et resterait ouverte après que l'affluence soit passée.
+   */
+  function alertes(aujourdhuiISO, filtre) {
     if (!estISO(aujourdhuiISO)) return [];
     const an = parseInt(aujourdhuiISO.slice(0, 4), 10);
     // L'année d'avant et celle d'après : une semaine à cheval sur le Nouvel An appartient à
     // l'année suivante, et son alerte sort en décembre.
-    const toutes = [...feriesDeLAnnee(an - 1), ...feriesDeLAnnee(an), ...feriesDeLAnnee(an + 1)];
+    const brutes = [...feriesDeLAnnee(an - 1), ...feriesDeLAnnee(an), ...feriesDeLAnnee(an + 1)];
+    const toutes = typeof filtre === "function" ? brutes.filter(filtre) : brutes;
 
     const parSemaine = new Map();
     for (const f of toutes) {

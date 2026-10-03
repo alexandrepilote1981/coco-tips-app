@@ -912,6 +912,8 @@ async function load() {
         disponibilites = [];
       }
       render();
+      // Après le rendu : la porte est connue, et la fenêtre ne doit pas retarder l'horaire.
+      ouvrirAlerteFerie();
     } catch (e) {
       renderErreurAcces(e);
     }
@@ -1126,16 +1128,28 @@ TirerPourActualiser.init({
   },
 });
 
-// Même fenêtre que dans le tableau de bord. Elle ne s'ouvre que pour le gérant de cuisine :
-// c'est le SERVEUR qui refuse les autres portes (403), pas cette page — l'entrée par mot de
-// passe et le lien des cuisiniers n'ont rien à commander.
-if (RESTAURANT_CODE) {
-  AlerteFerie.init({
-    lang: () => lang,
-    charger: async () => (await api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`)).restaurants,
-    enregistrer: (id, rappels) =>
-      api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`, { method: "POST", body: JSON.stringify({ rappels }) }),
-  });
+// La fenêtre d'avant-férié, dans le mode qui correspond à la porte ouverte.
+//
+//   cuisine → « commande » : toutes les journées marquées, avec les rappels de fournisseurs.
+//             C'est le SERVEUR qui refuse le lien de LECTURE des cuisiniers (403), pas cette
+//             page — eux n'ont rien à commander.
+//   salle   → « salle » : seulement les journées qui remplissent la salle, pour que le monde
+//             soit prévu. Rien à charger côté serveur, donc aucune porte à refuser.
+//
+// Elle part d'ici et pas au chargement du script : `porte.secteur` n'est connu qu'une fois
+// la porte interrogée. Avant, on aurait ouvert la mauvaise fenêtre une fois sur deux.
+function ouvrirAlerteFerie() {
+  if (!RESTAURANT_CODE) return;
+  if (porte.secteur === "cuisine") {
+    AlerteFerie.init({
+      lang: () => lang,
+      charger: async () => (await api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`)).restaurants,
+      enregistrer: (id, rappels) =>
+        api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`, { method: "POST", body: JSON.stringify({ rappels }) }),
+    });
+  } else {
+    AlerteFerie.init({ mode: "salle", lang: () => lang });
+  }
 }
 
 </script>

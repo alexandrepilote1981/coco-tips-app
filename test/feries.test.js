@@ -328,3 +328,63 @@ test("le 25 décembre est la seule journée où le restaurant ferme", () => {
   // dire « ouvert » par accident.
   for (const f of F.feriesDeLAnnee(2027)) assert.equal(typeof f.ferme, "boolean", f.cle);
 });
+
+// ------------------------------------------- deux portes, deux questions
+//
+// La cuisine veut savoir quand COMMANDER, la salle quand il faudra PLUS DE MONDE. Ce ne sont
+// pas les mêmes journées, et c'est tout l'intérêt d'avoir gardé `type` et `affluence` comme
+// deux faits séparés.
+
+test("le filtre de la salle ne retient que les journées qui la remplissent", () => {
+  const salle = (iso) => F.alertes(iso, (j) => j.affluence);
+
+  // Fête des Mères 2026 : dimanche 10 mai. Elle remplit la salle sans être un férié.
+  const mai = salle("2026-05-02");
+  assert.equal(mai.length, 1);
+  assert.deepEqual(mai[0].journees.map((j) => j.cle), ["feteDesMeres"]);
+
+  // Fête du Travail : un férié que la salle n'a aucune raison de préparer autrement — les
+  // fournisseurs ferment, mais la salle ne se remplit pas plus que d'habitude.
+  assert.ok(
+    F.alertes("2026-09-01").length > 0,
+    "la cuisine, elle, a bien une alerte cette semaine-là"
+  );
+  assert.equal(salle("2026-09-01").length, 0, "la salle n'en a aucune");
+
+  // Et l'inverse d'une semaine mêlée : la Saint-Jean et la fête du Canada sont des fériés,
+  // la fête des Pères remplit la salle. La salle ne garde que la troisième.
+  assert.deepEqual(
+    salle("2026-06-20").map((a) => a.journees.map((j) => j.cle)),
+    [["feteDesPeres"]]
+  );
+});
+
+test("sans filtre, rien ne change pour la cuisine", () => {
+  // La signature a gagné un second paramètre ; les appels d'avant doivent se comporter
+  // exactement pareil.
+  assert.deepEqual(
+    F.alertes("2026-05-02").map((a) => a.journees.map((j) => j.cle)),
+    F.alertes("2026-05-02", null).map((a) => a.journees.map((j) => j.cle))
+  );
+});
+
+test("la fenêtre de la salle se ferme quand SA journée est passée, pas celle du férié", () => {
+  // Semaine de Pâques 2026 : Vendredi saint le 3 avril (férié, pas d'affluence) et le
+  // dimanche 5 (affluence, pas férié). Le filtre doit s'appliquer AVANT le regroupement,
+  // sinon la fenêtre de la salle resterait ouverte jusqu'au dernier férié de la semaine.
+  const paques = F.alertes("2026-04-05", (j) => j.affluence);
+  assert.equal(paques.length, 1);
+  assert.equal(paques[0].finISO, "2026-04-05", "elle s'arrête au dimanche, sa grosse journée");
+
+  // Le lundi de Pâques est un férié : la cuisine a encore une alerte, la salle non.
+  assert.ok(F.alertes("2026-04-06").length > 0);
+  assert.equal(F.alertes("2026-04-06", (j) => j.affluence).length, 0);
+});
+
+test("les journées qui remplissent la salle sont celles qu'on attend", () => {
+  // Cinq par année. Assez rare pour qu'une annonce se lise encore quand elle sort.
+  const grosses = F.feriesDeLAnnee(2026).filter((j) => j.affluence).map((j) => j.cle);
+  assert.deepEqual(grosses.sort(), [
+    "actionDeGrace", "dimanchePaques", "feteDesMeres", "feteDesPeres", "saintValentin",
+  ]);
+});
