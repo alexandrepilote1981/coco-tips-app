@@ -673,16 +673,17 @@ remplacé le temps de l'appel — plutôt que de le laisser se télécharger.
 
 ### Le résumé par employé, et ce qu'une hôtesse n'a pas
 
-**Deux boutons de téléchargement, CÔTE À CÔTE** et de largeur égale : **Résumé**
-(`exportResumeCSV()`) et **Détail** (`exportCSV()`). Ils se choisissent l'un OU l'autre, et
-un bouton posé sous l'autre se lirait comme une suite d'étapes.
+**Deux boutons de téléchargement, CÔTE À CÔTE** et de largeur égale : **Résumé pour paye**
+(`exportResumeCSV()`) et **Rapport total** (`exportCSV()`). Ils se choisissent l'un OU
+l'autre, et un bouton posé sous l'autre se lirait comme une suite d'étapes.
 
-Chacun porte son nom en gras et, dessous, ce que le fichier contient — « un total par
-employé », « une ligne par journée ». « Résumé » tout seul ne dit pas assez, et la phrase
-complète ne rentre pas à deux sur un téléphone : mesuré, chaque bouton fait 151 px de large
-à 390 px d'écran, sans un mot coupé. Le détail reste en sourdine par sa couleur, pas par sa
-taille — on le sort quand quelqu'un conteste un chiffre, pas chaque semaine, mais il se tape
-aussi facilement. Sur une semaine normale — douze personnes, quatre à
+Ce sont les noms du propriétaire, et ils valent mieux que ceux qu'on avait essayés : ils
+disent à quoi chacun SERT, pas comment il est fait. « Résumé pour paye » répond à la question
+qu'on se pose en l'ouvrant. Ils se suffisent, donc la sous-ligne qui expliquait le contenu
+est partie. Mesuré à 390 px : 151 px et 153 px, sur la même ligne, aucun mot coupé.
+
+Le rapport total reste en sourdine par sa couleur, pas par sa taille — on le sort quand
+quelqu'un conteste un chiffre, pas chaque semaine, mais il se tape aussi facilement. Sur une semaine normale — douze personnes, quatre à
 six journées chacune — le détaillé fait **84 lignes** : « c'est trop lourd toutes les
 journées ». Le résumé en fait 14.
 
