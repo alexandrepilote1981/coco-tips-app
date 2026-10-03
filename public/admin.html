@@ -323,9 +323,21 @@
     .period-apply { flex: 1 1 120px; }
   }
   .period-label { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #F1EFEA; margin-top: 6px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  /* Les deux rapports côte à côte, de largeur égale : ils se choisissent l'un OU l'autre,
+     et un bouton posé sous l'autre se lit comme une suite d'étapes. Chacun porte son nom en
+     gras et, dessous, ce que le fichier contient — « Résumé » tout seul ne dit pas assez, et
+     la phrase complète ne rentre pas à deux sur un téléphone. */
+  .export-row { display: flex; gap: 8px; margin-top: 12px; }
+  .export-row > button { flex: 1 1 0; min-width: 0; }
+  .export-nom {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-size: 13px; font-weight: 800; white-space: nowrap;
+  }
+  .export-quoi { font-size: 10.5px; font-weight: 600; opacity: 0.75; line-height: 1.25; text-align: center; }
   .export-btn {
-    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; background: #D4A857; color: #10151D;
-    font-size: 13.5px; font-weight: 700; padding: 13px; border-radius: 10px; box-shadow: 0 2px 8px rgba(212,168,87,0.25);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    background: #D4A857; color: #10151D; padding: 11px 8px; border-radius: 10px; min-height: 56px;
+    box-shadow: 0 2px 8px rgba(212,168,87,0.25);
   }
   .backup-btn {
     display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 10px;
@@ -389,9 +401,9 @@
      pas une action et son option. Le détail reste en second et en sourdine — on le sort quand
      quelqu'un conteste un chiffre, pas chaque semaine — mais il se tape aussi facilement. */
   .export-detail-btn {
-    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
     background: rgba(212,168,87,0.14); color: #D4A857; border: 1px solid rgba(212,168,87,0.35);
-    font-size: 13px; font-weight: 700; padding: 12px; border-radius: 10px; min-height: 44px;
+    padding: 11px 8px; border-radius: 10px; min-height: 56px;
   }
   .export-aide { font-size: 11px; color: #8993A4; margin: 7px 0 0; line-height: 1.4; }
   .rappel-sauvegarde {
@@ -924,8 +936,10 @@ const I18N = {
     toutesLesDonnees: "Toutes les données, sans limite de date",
     choisisDate: "Choisis une date de début et de fin",
     duAu: (s, e) => `Du ${s} au ${e}`,
-    exporter: "Résumé — un total par employé",
-    exporterDetail: "Détail — une ligne par journée",
+    exporter: "Résumé",
+    exporterSous: "un total par employé",
+    exporterDetail: "Détail",
+    exporterDetailSous: "une ligne par journée",
     exportAide: "Les deux s\u2019ouvrent dans Numbers ou Excel, sur la p\u00e9riode choisie plus haut.",
     csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $"],
     nomFichierResume: "declara-resume",
@@ -1163,8 +1177,10 @@ const I18N = {
     toutesLesDonnees: "All data, no date limit",
     choisisDate: "Choose a start and end date",
     duAu: (s, e) => `From ${s} to ${e}`,
-    exporter: "Summary — one total per employee",
-    exporterDetail: "Detail — one line per day",
+    exporter: "Summary",
+    exporterSous: "one total per employee",
+    exporterDetail: "Detail",
+    exporterDetailSous: "one line per day",
     exportAide: "Both open in Numbers or Excel, over the period chosen above.",
     csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $"],
     nomFichierResume: "declara-summary",
@@ -1800,8 +1816,16 @@ function render() {
         </div>
         <div class="period-error" id="periodError" role="status" aria-live="polite" hidden></div>
         <div class="period-label" aria-live="polite">${periodLabel}</div>
-        <button class="export-btn" id="exportBtn">${icon("download", 14)} ${t("exporter")}</button>
-        <button class="export-detail-btn" id="exportDetailBtn">${icon("download", 13)} ${t("exporterDetail")}</button>
+        <div class="export-row">
+          <button class="export-btn" id="exportBtn">
+            <span class="export-nom">${icon("download", 13)} ${t("exporter")}</span>
+            <span class="export-quoi">${t("exporterSous")}</span>
+          </button>
+          <button class="export-detail-btn" id="exportDetailBtn">
+            <span class="export-nom">${icon("download", 13)} ${t("exporterDetail")}</span>
+            <span class="export-quoi">${t("exporterDetailSous")}</span>
+          </button>
+        </div>
         <p class="export-aide">${t("exportAide")}</p>
         <button class="backup-btn" id="backupBtn">${icon("shield", 14)} ${t("sauvegarder")}</button>
         <p class="backup-hint">${t("sauvegardeAide")}</p>
