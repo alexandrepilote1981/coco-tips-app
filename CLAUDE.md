@@ -798,10 +798,23 @@ se déduisent pas l'un de l'autre :
 | `type`      | `ferie` = la paie n'est pas la même ; `occasion` = la loi n'a rien à dire |
 | `affluence` | la salle va se remplir, donc il faut plus de monde au plancher |
 
-La fête des Mères remplit la salle sans être un férié. Le Vendredi saint est un férié sans
-être une grosse journée. L'**Action de grâce est les deux**. Seul `type` se voit encore, et
-seulement en mots : l'infobulle d'un férié ajoute « · férié » (`Feries.estFerie()`), là où ça
-ne coûte pas un pixel dans une colonne déjà étroite.
+La fête des Mères et la Saint-Valentin remplissent la salle sans être des fériés. Dans
+l'autre sens, par contre, ça se recouvre presque partout : **« les jours fériés augmentent
+l'achalandage »** — le monde est en congé et sort manger. C'est le propriétaire qui le dit, et
+c'est lui qui tient la salle.
+
+Toutes les journées marquées sont donc des journées d'affluence, **sauf le 25 décembre**, où
+le restaurant est fermé : une salle fermée ne se remplit pas. `affluence` n'a presque plus
+qu'une valeur, et c'est tant mieux — le champ reste parce que le jour où une journée s'avère
+tranquille, c'est un mot à changer, et parce que `ferme` et `affluence` ne se déduisent pas
+l'un de l'autre.
+
+Les huit fériés étaient marqués tranquilles au départ, et ça donnait le conseil **inverse** du
+bon à qui montait son horaire. Verrouillé par `test/feries.test.js` dans les deux sens : les
+huit remplissent la salle, et la seule qui ne la remplit pas est celle où elle est fermée.
+
+Seul `type` se voit encore, et seulement en mots : l'infobulle d'un férié ajoute « · férié »
+(`Feries.estFerie()`), là où ça ne coûte pas un pixel dans une colonne déjà étroite.
 
 Vendredi saint ET lundi de Pâques sont affichés : la loi laisse l'employeur choisir, en
 cacher un ferait manquer le bon. Le dimanche entre les deux n'est pas un férié du tout, mais
@@ -863,18 +876,49 @@ le lundi de Pâques a la sienne une semaine plus tard, parce qu'il relève d'une
 Trois messages, composés à partir des faits de la journée (`type`, `affluence`, `ferme`) :
 fournisseurs peut-être fermés → commande d'avance ; salle pleine → prévois le stock ;
 restaurant fermé (le 25 décembre, seule journée de fermeture) → la commande doit couvrir
-jusqu'à la réouverture. L'Action de grâce en donne deux à la fois.
+jusqu'à la réouverture. Un férié en donne **deux à la fois**, puisqu'il remplit aussi la
+salle — et les deux phrases ne se répètent pas : l'une parle de la commande, l'autre du
+monde.
 
-### Les rappels
+### Deux modes : la commande, et le monde au plancher
 
-`restaurants.rappels_ferie`, du texte libre, une ligne par rappel (« Appeler Dufour & Fils »).
-Écrit une fois, réaffiché à chaque alerte. C'est du texte et pas une table parce que ce sont
-trois ou quatre phrases qu'on ne trie ni ne compte jamais. Ça s'écrit depuis la fenêtre
-elle-même — la liste vit là où elle sert.
+Toutes les portes voient **toutes** les journées marquées — « je veux des notifications pour
+toutes les fêtes dans les deux horaires ». Ce qui change d'une porte à l'autre, c'est ce qu'on
+en DIT, et c'est `type` / `affluence` — gardés séparés depuis le début — qui composent la
+phrase.
 
-Seuls **`/admin` et le lien du gérant de cuisine** voient la fenêtre et écrivent les rappels :
-ce sont les deux qui commandent. C'est le **serveur** qui refuse les autres portes (403), pas
-la page — `porteGerant()` dans `server.js`, couvert par `test/portes-horaire.test.mjs`.
+| mode | portes | ce qu'il dit |
+| --- | --- | --- |
+| `commande` | `/admin` et le gérant de cuisine | fournisseurs fermés, stock à prévoir, et la liste de rappels |
+| `avis` | le lien de la SALLE et le lien de LECTURE de la cuisine | la paie d'un férié, le monde au plancher |
+
+Demandé d'abord ainsi : « pour le lien gérant de la salle, on devrait mettre une annonce qui
+annonce le férié pour prévoir du personnel ». La première version ne retenait côté horaire que
+les journées d'`affluence` — **cinq par année**. C'était une erreur, corrigée tout de suite :
+elle taisait exactement celles qui coûtent cher à ignorer, les fériés qui changent la paie et
+le 25 décembre où le restaurant est fermé. (Les fériés sont depuis marqués comme des journées
+d'affluence, mais ça ne rend pas le filtre moins faux : il reposait sur un champ qui pouvait
+se tromper, et c'est la fête qu'on ne voit pas qui coûte cher.) `Feries.alertes()`
+a donc reperdu son second argument, et `test/feries.test.js` vérifie qu'il ne revient pas —
+un filtre silencieux rendrait des fêtes invisibles sans que rien ne le dise.
+
+Le mode avis **n'a pas la liste de rappels** : elle parle de fournisseurs, et ces deux
+portes-là ne commandent pas. Le lien de la salle est en plus partagé à toute l'équipe — son
+texte est donc écrit pour qui le lit, « ça prend assez de monde au plancher », et ne donne
+d'ordre à personne.
+
+Côté `commande`, une journée d'affluence donne **une seule phrase** pour le stock et le
+monde. Il y en a eu deux un moment, et elles commençaient toutes les deux par « La salle va
+être pleine » : ça se lisait comme un bégaiement.
+
+Le mode se choisit sur **`voitMontants`**, pas sur le secteur : c'est exactement la règle que
+le serveur applique à la route des rappels (`porteGerant`). Avec le secteur, le lien de
+lecture des cuisiniers demandait les rappels, recevait son 403, et n'affichait alors **rien du
+tout** — ni rappels, ni avis de férié. C'est pourtant ce lien-là qu'on envoie dans le groupe.
+
+`horaire.html` ouvre la fenêtre **après le rendu**, pas au chargement du script : la porte
+n'est connue qu'une fois interrogée, et avant ça on aurait ouvert la mauvaise une fois sur
+deux.
 
 ## Le tableau de bord, en trois onglets
 

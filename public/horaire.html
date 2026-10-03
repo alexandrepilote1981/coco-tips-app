@@ -912,6 +912,8 @@ async function load() {
         disponibilites = [];
       }
       render();
+      // Après le rendu : la porte est connue, et la fenêtre ne doit pas retarder l'horaire.
+      ouvrirAlerteFerie();
     } catch (e) {
       renderErreurAcces(e);
     }
@@ -1126,16 +1128,34 @@ TirerPourActualiser.init({
   },
 });
 
-// Même fenêtre que dans le tableau de bord. Elle ne s'ouvre que pour le gérant de cuisine :
-// c'est le SERVEUR qui refuse les autres portes (403), pas cette page — l'entrée par mot de
-// passe et le lien des cuisiniers n'ont rien à commander.
-if (RESTAURANT_CODE) {
-  AlerteFerie.init({
-    lang: () => lang,
-    charger: async () => (await api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`)).restaurants,
-    enregistrer: (id, rappels) =>
-      api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`, { method: "POST", body: JSON.stringify({ rappels }) }),
-  });
+// La fenêtre d'avant-férié. TOUTES les portes d'horaire l'ouvrent — « je veux des
+// notifications pour toutes les fêtes dans les deux horaires » — et toutes voient les mêmes
+// journées. Seul le propos change, par le mode.
+//
+//   gérant de cuisine → « commande » : avec les rappels de fournisseurs, parce que c'est lui
+//                       qui commande.
+//   salle, et lecture de la cuisine → « avis » : la paie d'un férié, le monde au plancher.
+//                       Rien à charger côté serveur, donc aucune porte à refuser.
+//
+// Le mode se choisit sur `voitMontants` et non sur le secteur, parce que c'est EXACTEMENT la
+// règle que le serveur applique à la route des rappels (`porteGerant`). Avant, le lien de
+// LECTURE des cuisiniers demandait les rappels, recevait un 403, et n'affichait donc rien du
+// tout — ni rappels, ni avis de férié. C'est pourtant ce lien-là qu'on envoie dans le groupe.
+//
+// Elle part d'ici et pas au chargement du script : la porte n'est connue qu'une fois
+// interrogée. Avant, on aurait ouvert la mauvaise fenêtre une fois sur deux.
+function ouvrirAlerteFerie() {
+  if (!RESTAURANT_CODE) return;
+  if (porte.voitMontants) {
+    AlerteFerie.init({
+      lang: () => lang,
+      charger: async () => (await api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`)).restaurants,
+      enregistrer: (id, rappels) =>
+        api(`/api/schedule/by-code/${RESTAURANT_CODE}/rappels`, { method: "POST", body: JSON.stringify({ rappels }) }),
+    });
+  } else {
+    AlerteFerie.init({ mode: "avis", lang: () => lang });
+  }
 }
 
 </script>
