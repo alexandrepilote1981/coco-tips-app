@@ -957,11 +957,22 @@ répond encore.
 **Le découpage suit le SENS, pas l'ancienne disposition.** Le premier essai avait déplacé
 les deux grilles et laissé tout le reste où il était — l'équipe de cuisine, ses liens, ses
 taux, ses plafonds et les charges de l'employeur restaient donc dans l'onglet des
-déclarations. La cuisine ne déclare rien : tout ce qui la concerne vit avec son horaire, et
-les charges y nourrissent la masse salariale affichée juste au-dessus. La salle, elle, reste
-dans Déclarations, parce que ses cartes SONT les déclarations. Vérifié dans
+déclarations. La cuisine ne déclare rien : tout ce qui la concerne vit avec son horaire. La
+salle, elle, reste dans Déclarations, parce que ses cartes SONT les déclarations. Vérifié dans
 `test/ui-smoke.test.mjs`, dans les deux sens : présent dans l'onglet cuisine, absent des
 déclarations.
+
+**« Employés cuisine » passe AVANT la grille**, et c'est le propriétaire qui l'a demandé :
+« monte ça en haut, en bas c'est pas super ». La section vivait sous une grille de quatorze
+rangées — mesuré sur son équipe, elle commençait au-delà de l'écran et il fallait traverser
+tout l'horaire pour atteindre un lien, un taux, un plafond ou le mot de passe du lien gérant.
+Repliée, elle ne coûte qu'une ligne : la grille commence à 835 px sur un téléphone, 684 px sur
+un iPad, et l'équipe est visible sans défiler des deux côtés.
+
+C'est le même raisonnement que le repli des fiches d'employé : ce qu'on vient chercher dans
+cet onglet, ce n'est pas toujours un quart. Le prix assumé est que les charges de l'employeur
+se règlent maintenant au-dessus de la masse salariale qu'elles nourrissent plutôt qu'en
+dessous — les deux restent voisines, et la barre de coût est en tête de la grille.
 
 Le repli des fiches d'employé, livré depuis, a ramené cet onglet de 10,6 à 5,2 écrans : voir
 « Les fiches d'employé sont repliées » plus haut.
