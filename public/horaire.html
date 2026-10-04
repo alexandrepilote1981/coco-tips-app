@@ -628,6 +628,9 @@ const I18N = {
     locale: "fr-CA",
     loginTagline: "Gère l'horaire, où que tu sois.",
     accesHoraire: "ACCÈS HORAIRE",
+    accesGerantCuisine: "ACCÈS GÉRANT CUISINE",
+    mdpPorteAide: "Ce lien demande un mot de passe. Demande-le au propriétaire.",
+    mdpPorteFaux: "Mot de passe invalide.",
     motDePasse: "Mot de passe",
     entrer: "Entrer",
     retourAccueil: "← Retour à l'accueil",
@@ -727,6 +730,9 @@ const I18N = {
     locale: "en-CA",
     loginTagline: "Manage the schedule, wherever you are.",
     accesHoraire: "SCHEDULE ACCESS",
+    accesGerantCuisine: "KITCHEN MANAGER ACCESS",
+    mdpPorteAide: "This link needs a password. Ask the owner for it.",
+    mdpPorteFaux: "Invalid password.",
     motDePasse: "Password",
     entrer: "Enter",
     retourAccueil: "← Back to home",
@@ -856,6 +862,46 @@ async function login(password) {
   ecrireStockage("sessionStorage", "scheduleToken", TOKEN);
 }
 
+// Le mot de passe du lien gérant de cuisine, quand ce lien-là en porte un.
+//
+// Il vit dans sessionStorage et pas dans localStorage : il s'efface en fermant l'onglet.
+// C'est la clé des salaires et des codes personnels de l'équipe — sur le téléphone du
+// restaurant, qui passe de main en main, « reste connecté pour toujours » serait un cadeau.
+//
+// La clé porte le CODE du lien : deux liens différents ouverts sur le même appareil ne
+// doivent pas se prêter leur mot de passe.
+const CLE_MDP = `horaireMdp:${RESTAURANT_CODE || ""}`;
+let MDP_PORTE = lireStockage("sessionStorage", CLE_MDP) || "";
+
+// TOUT ce qui passe par /api/schedule/by-code/... passe par ici, et c'est le point : il y a
+// sept endroits qui appellent cette porte, et un seul oublié suffit pour que la page affiche
+// « erreur » là où il fallait demander le mot de passe.
+async function fetchPorte(chemin, opts) {
+  const o = opts || {};
+  const entetes = { ...(o.headers || {}) };
+  if (MDP_PORTE) entetes["X-Horaire-Mdp"] = MDP_PORTE;
+  return fetch(`/api/schedule/by-code/${RESTAURANT_CODE}${chemin}`, { ...o, headers: entetes });
+}
+
+// Comme fetchPorte, mais rend le JSON et lève une erreur portant le statut HTTP — c'est ce
+// statut qui permet ensuite de distinguer « il faut un mot de passe » de « lien invalide ».
+async function porteJSON(chemin, opts) {
+  const res = await fetchPorte(chemin, opts);
+  if (!res.ok) {
+    let corps = null;
+    try {
+      corps = await res.json();
+    } catch (e) {
+      /* pas de JSON : le statut porte à lui seul l'information */
+    }
+    const erreur = new Error((corps && corps.error) || "Erreur");
+    erreur.statut = res.status;
+    erreur.mdpRequis = !!(corps && corps.mdpRequis);
+    throw erreur;
+  }
+  return res.json();
+}
+
 async function api(path, opts) {
   const res = await fetch(path, {
     ...opts,
@@ -880,9 +926,7 @@ async function api(path, opts) {
 async function load() {
   if (RESTAURANT_CODE) {
     try {
-      const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}`);
-      if (!res.ok) throw new Error("Lien invalide");
-      const data = await res.json();
+      const data = await porteJSON("");
       // Les droits viennent du serveur, jamais du code lu dans l'URL : c'est lui qui sait
       // quelle porte ce lien ouvre, et cacher un bouton ne protégerait rien tout seul.
       porte = {
@@ -893,8 +937,7 @@ async function load() {
       };
       roster = { restaurants: [{ id: data.restaurant.id, name: data.restaurant.name, employees: data.employees }] };
       try {
-        const shiftsRes = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
-        const shiftsData = await shiftsRes.json();
+        const shiftsData = await porteJSON("/shifts");
         shifts = shiftsData.shifts || [];
         heuresAilleurs = shiftsData.heuresAilleurs || [];
       } catch (e) {
@@ -902,12 +945,12 @@ async function load() {
         heuresAilleurs = [];
       }
       try {
-        absences = (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/absences`)).json()).absences || [];
+        absences = (await porteJSON("/absences")).absences || [];
       } catch (e) {
         absences = [];
       }
       try {
-        disponibilites = (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/disponibilites`)).json()).disponibilites || [];
+        disponibilites = (await porteJSON("/disponibilites")).disponibilites || [];
       } catch (e) {
         disponibilites = [];
       }
@@ -915,6 +958,8 @@ async function load() {
       // Après le rendu : la porte est connue, et la fenêtre ne doit pas retarder l'horaire.
       ouvrirAlerteFerie();
     } catch (e) {
+      // 401 n'est pas une erreur à afficher : c'est la porte qui demande son mot de passe.
+      if (e && e.statut === 401) return renderMdpPorte();
       renderErreurAcces(e);
     }
     return;
@@ -978,6 +1023,60 @@ function renderInvalidCode() {
 }
 
 
+// Le mot de passe du lien gérant de cuisine. Même écran que la connexion par mot de passe,
+// parce que c'est le même geste pour qui le regarde — mais il ne passe PAS par
+// /api/schedule/login : ce mot de passe-là appartient au restaurant, pas à l'installation.
+// On le garde, on recharge, et c'est le serveur qui tranche. La page ne vérifie rien
+// elle-même : elle n'a aucun moyen de le faire, et c'est très bien ainsi.
+function renderMdpPorte(messageErreur) {
+  document.getElementById("app").innerHTML = `
+    <div class="login-screen">
+      <div class="login-glow g1"></div>
+      <div class="login-glow g2"></div>
+      <button class="login-lang-toggle" id="langToggle">${lang === "fr" ? "EN" : "FR"}</button>
+      <div class="login-content">
+        <div class="login-brand">
+          <span class="login-brand-mark">D</span>
+          <span class="login-brand-name">Déclara</span>
+        </div>
+        <p class="login-tagline">${t("loginTagline")}</p>
+        <div class="login-box">
+          <h2>${icon("calendar", 12)}${t("accesGerantCuisine")}</h2>
+          <div class="login-field-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="pwPorte" inputmode="numeric" placeholder="${t("motDePasse")}" />
+          </div>
+          <button id="mdpBtn">${t("entrer")}</button>
+          <p style="color:${messageErreur ? "#E2685A" : "#8993A4"}; font-size:12px; margin:12px 0 0;">${messageErreur || t("mdpPorteAide")}</p>
+        </div>
+        <a class="login-back" href="/">${t("retourAccueil")}</a>
+      </div>
+    </div>`;
+  document.getElementById("langToggle").addEventListener("click", () => setLang(lang === "fr" ? "en" : "fr"));
+  const champ = document.getElementById("pwPorte");
+  champ.focus();
+  champ.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") document.getElementById("mdpBtn").click();
+  });
+  document.getElementById("mdpBtn").addEventListener("click", async () => {
+    const essai = champ.value;
+    if (!essai) return;
+    MDP_PORTE = essai;
+    try {
+      await porteJSON("");
+    } catch (e) {
+      // On ne garde PAS un mot de passe qui vient d'être refusé : sinon il repartirait tout
+      // seul au prochain chargement et la personne se ferait bloquer sans jamais le retaper.
+      MDP_PORTE = "";
+      ecrireStockage("sessionStorage", CLE_MDP, "");
+      if (e && e.statut === 429) return renderErreurAcces(e);
+      return renderMdpPorte(t("mdpPorteFaux"));
+    }
+    ecrireStockage("sessionStorage", CLE_MDP, essai);
+    await load();
+  });
+}
+
 function renderLogin(errorMsg) {
   document.getElementById("app").innerHTML = `
     <div class="login-screen">
@@ -1031,12 +1130,7 @@ function renderLogin(errorMsg) {
 
 async function shiftApiCall(path, opts) {
   if (RESTAURANT_CODE) {
-    const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}${path}`, {
-      ...opts,
-      headers: { "Content-Type": "application/json", ...(opts && opts.headers) },
-    });
-    if (!res.ok) throw new Error((await res.json()).error || "Erreur");
-    return res.json();
+    return porteJSON(path, { ...opts, headers: { "Content-Type": "application/json", ...(opts && opts.headers) } });
   }
   return api(`/api/admin${path}`, opts);
 }
@@ -1077,8 +1171,7 @@ ScheduleUI.init({
   heuresAilleurs: () => heuresAilleurs,
   reloadShifts: async () => {
     if (RESTAURANT_CODE) {
-      const res = await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/shifts`);
-      const data = await res.json();
+      const data = await porteJSON("/shifts");
       heuresAilleurs = data.heuresAilleurs || [];
       return data.shifts;
     }
@@ -1101,14 +1194,19 @@ ScheduleUI.init({
   },
   reloadAbsences: async () => {
     if (RESTAURANT_CODE) {
-      return (await (await fetch(`/api/schedule/by-code/${RESTAURANT_CODE}/absences`)).json()).absences;
+      return (await porteJSON("/absences")).absences;
     }
     return (await api("/api/admin/absences")).absences;
   },
   shiftApi: (path, opts) => shiftApiCall(path, opts),
   pdfRequest: (restaurantId, weekISO, langue) =>
     RESTAURANT_CODE
-      ? { url: `/api/schedule/by-code/${RESTAURANT_CODE}/pdf?week=${weekISO}&lang=${langue}`, options: {} }
+      ? {
+          url: `/api/schedule/by-code/${RESTAURANT_CODE}/pdf?week=${weekISO}&lang=${langue}`,
+          // Le PDF se récupère en blob justement pour pouvoir porter un en-tête : un simple
+          // lien <a href> ne pourrait pas, et la feuille reviendrait en 401.
+          options: MDP_PORTE ? { headers: { "X-Horaire-Mdp": MDP_PORTE } } : {},
+        }
       : {
           url: `/api/admin/schedule/pdf?restaurantId=${encodeURIComponent(restaurantId)}&week=${weekISO}&lang=${langue}`,
           options: { headers: { "X-Admin-Token": TOKEN } },

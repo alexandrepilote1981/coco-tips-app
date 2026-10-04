@@ -13,6 +13,7 @@ const Absences = require("./public/shared/absences.js");
 // appartient à un secteur par son POSTE, et plus par le secteur de la personne.
 const Secteurs = require("./public/shared/secteurs.js");
 const { guard, blocageSecondes, refuser, noteFailure, clearFailures, noteSuccess, estConnu } = require("./rate-limit");
+const Mdp = require("./mdp");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
 const { computeEntry } = require("./public/shared/tip-math.js");
@@ -585,6 +586,82 @@ function porteGerant(req, res) {
   return porte;
 }
 
+// ---------------------------------------------------------------- les deux gardes
+//
+// Tout ce qui passe par /api/schedule/by-code/:code franchit ces deux-là, dans cet ordre, et
+// elles sont déclarées ICI — avant la première route by-code, qui est celle des rappels.
+// Les ranger plus bas les ferait sauter par les routes déclarées au-dessus : c'est exactement
+// ce qui arrivait au plafond de tentatives, que /rappels contournait sans que ça se voie.
+
+// 1. Le code existe-t-il, et cette adresse a-t-elle le droit d'essayer ?
+app.use("/api/schedule/by-code/:code", (req, res, next) => {
+  // Même logique que la porte employé, et pour la même raison : l'équipe partage un WiFi.
+  const code = (req.params.code || "").toUpperCase();
+  if (estConnu("schedule-code", req, code)) return next();
+
+  const attente = blocageSecondes("schedule-code", req);
+  if (attente) return refuser(res, attente);
+
+  if (!getRestaurantByCode(code)) {
+    noteFailure("schedule-code", req, code);
+    return res.status(404).json({ error: "Lien invalide" });
+  }
+  noteSuccess("schedule-code", req, code);
+  next();
+});
+
+// 2. Le mot de passe du lien gérant de cuisine, quand il y en a un.
+//
+// Seule cette porte-là en demande un : c'est celle qui montre les salaires et les codes
+// d'accès personnels de l'équipe. La salle et le lien de lecture des cuisiniers passent sans
+// rien, comme avant — ce sont des liens partagés à des équipes entières, un mot de passe que
+// quinze personnes connaissent n'en est pas un.
+//
+// Trois réponses à distinguer, et c'est ce qui permet à la page de dire la vérité :
+//   - rien d'envoyé       → 401 « il en faut un », et ça NE COMPTE PAS comme un échec. Sinon
+//                           ouvrir sa page dix fois bloquerait le gérant sans qu'il ait jamais
+//                           tapé un seul mauvais mot de passe.
+//   - mauvais mot de passe → 401, et celui-là compte. 1212 fait quatre chiffres : sans
+//                           plafond, on les essaie tous en quelques secondes.
+//   - trop de tentatives   → 429, avec le délai.
+app.use("/api/schedule/by-code/:code", async (req, res, next) => {
+  const porte = porteParCode(req.params.code);
+  if (!porte || !porte.voitMontants) return next();
+  if (!Mdp.estPose(porte.restaurant.mdp_cuisine)) return next();
+
+  const essai = req.get("X-Horaire-Mdp");
+  if (!essai) {
+    return res.status(401).json({ error: "Mot de passe requis", mdpRequis: true });
+  }
+
+  // Un mot de passe DÉJÀ accepté depuis cette adresse passe toujours, même pendant un
+  // blocage — exactement la mécanique des codes employés, et pour la même raison : toute
+  // l'équipe est sur un seul WiFi, donc une seule adresse. Sans ça, quelqu'un qui malmène ce
+  // lien enfermerait dehors le gérant dont le mot de passe est bon. Ça ne donne rien à qui
+  // cherche à deviner : pour qu'un mot de passe soit « connu » de son adresse, il faut qu'il
+  // ait déjà réussi avec — donc qu'il l'ait déjà.
+  if (!estConnu("horaire-mdp", req, essai)) {
+    const attente = blocageSecondes("horaire-mdp", req);
+    if (attente) return refuser(res, attente);
+  }
+
+  let bon = false;
+  try {
+    bon = await Mdp.verifier(essai, porte.restaurant.mdp_cuisine);
+  } catch (e) {
+    return res.status(500).json({ error: "Erreur" });
+  }
+  if (!bon) {
+    // L'essai sert de marque : réessayer VINGT fois le même mot de passe mal retenu compte
+    // pour un, alors que deviner en change forcément à chaque coup.
+    noteFailure("horaire-mdp", req, essai);
+    return res.status(401).json({ error: "Mot de passe invalide", mdpRequis: true });
+  }
+  clearFailures("horaire-mdp", req);
+  noteSuccess("horaire-mdp", req, essai);
+  next();
+});
+
 app.get("/api/schedule/by-code/:code/rappels", (req, res) => {
   const porte = porteGerant(req, res);
   if (!porte) return;
@@ -742,22 +819,6 @@ function sansMontants(employes) {
   return employes.map(({ taux_horaire, heures_max, ...reste }) => reste);
 }
 
-// Même protection que pour les codes employés, sur les liens horaire par code.
-app.use("/api/schedule/by-code/:code", (req, res, next) => {
-  // Même logique que la porte employé, et pour la même raison : l'équipe partage un WiFi.
-  const code = (req.params.code || "").toUpperCase();
-  if (estConnu("schedule-code", req, code)) return next();
-
-  const attente = blocageSecondes("schedule-code", req);
-  if (attente) return refuser(res, attente);
-
-  if (!getRestaurantByCode(code)) {
-    noteFailure("schedule-code", req, code);
-    return res.status(404).json({ error: "Lien invalide" });
-  }
-  noteSuccess("schedule-code", req, code);
-  next();
-});
 
 // Le code d'accès personnel d'un employé, pour la porte du gérant seulement.
 //
@@ -1121,7 +1182,12 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
         totals.pctMoyen = totals.ventes > 0 ? totals.brut / totals.ventes : 0;
         return { ...emp, entries, totals };
       });
-    return { ...r, employees };
+    // L'empreinte du mot de passe ne sort pas d'ici. Elle partait toute seule, parce que la
+    // requête fait SELECT * — le même piège que les taux horaires sur la page employé : toute
+    // colonne ajoutée à la table se met à voyager sans que personne l'ait décidé. L'écran n'a
+    // besoin que d'une chose : y en a-t-il un, oui ou non.
+    const { mdp_cuisine, ...sansEmpreinte } = r;
+    return { ...sansEmpreinte, mdp_cuisine_pose: Mdp.estPose(mdp_cuisine), employees };
   });
   res.json({ restaurants: data, derniereSauvegarde: derniereSauvegarde() });
 });
@@ -1359,6 +1425,38 @@ app.post("/api/admin/restaurants/:id/charges", requireAdmin, (req, res) => {
   const pct = Number.isFinite(n) && n >= 0 ? Math.min(n, 100) : 0;
   db.prepare("UPDATE restaurants SET charges_pct = ? WHERE id = ?").run(pct, r.id);
   res.json({ charges_pct: pct });
+});
+
+// Un lien gérant de cuisine tout neuf. L'ancien meurt à l'instant : c'est le but même du
+// bouton — un gérant qui s'en va, un téléphone perdu, un lien collé dans la mauvaise
+// conversation. Il n'y a rien à « désactiver » ailleurs, le lien EST la clé.
+//
+// Seul celui du gérant se change ici. Les deux autres se partagent à des équipes entières :
+// les refaire obligerait à redistribuer un lien à quinze personnes pour régler un problème
+// qu'elles n'ont pas.
+app.post("/api/admin/restaurants/:id/nouveau-code-cuisine", requireAdmin, (req, res) => {
+  const r = db.prepare("SELECT id FROM restaurants WHERE id = ?").get(req.params.id);
+  if (!r) return res.status(404).json({ error: "Restaurant introuvable" });
+  // codeLibre() vérifie l'unicité sur les TROIS colonnes : un même code ne peut pas désigner
+  // deux portes, sinon /horaire/<code> ouvrirait la mauvaise une fois sur deux.
+  const code = codeLibre();
+  db.prepare("UPDATE restaurants SET schedule_code_cuisine = ? WHERE id = ?").run(code, r.id);
+  res.json({ schedule_code_cuisine: code });
+});
+
+// Poser, changer ou retirer le mot de passe de ce lien. Un champ vide RETIRE le verrou — il
+// faut que ça se défasse aussi facilement que ça se fait, sinon on hésite à s'en servir.
+//
+// La réponse ne renvoie jamais le mot de passe ni son empreinte, seulement s'il y en a un :
+// ce qui revient d'un enregistrement finit dans la page, et la page se garde en cache.
+app.post("/api/admin/restaurants/:id/mdp-cuisine", requireAdmin, async (req, res) => {
+  const r = db.prepare("SELECT id FROM restaurants WHERE id = ?").get(req.params.id);
+  if (!r) return res.status(404).json({ error: "Restaurant introuvable" });
+  const brut = req.body.mot_de_passe == null ? "" : String(req.body.mot_de_passe);
+  if (brut.length > 200) return res.status(400).json({ error: "Mot de passe trop long" });
+  const empreinte = await Mdp.poser(brut);
+  db.prepare("UPDATE restaurants SET mdp_cuisine = ? WHERE id = ?").run(empreinte, r.id);
+  res.json({ mdp_cuisine_pose: Mdp.estPose(empreinte) });
 });
 
 app.delete("/api/admin/employees/:id", requireAdmin, (req, res) => {
