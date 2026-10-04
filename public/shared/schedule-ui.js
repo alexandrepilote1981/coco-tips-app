@@ -179,6 +179,22 @@ window.ScheduleUI = (function () {
   // (TACHE_MAX, soit « Commande à défaire ») s'écrive en entier plutôt que de finir en « … ».
   const COLONNE_MIN = { salle: 62, cuisine: 100 };
 
+  /**
+   * La largeur minimale d'une colonne de jour, pour CETTE grille-ci.
+   *
+   * La salle tient dans 62 px parce qu'elle n'affiche qu'une heure de début et un poste. Dès
+   * qu'une note s'y affiche, 62 px la coupent en « Ferm… » — et c'est précisément ce que les
+   * largeurs minimales existent pour empêcher. Elle prend donc les 100 px de la cuisine, mais
+   * seulement les semaines qui portent une note : une équipe de salle qui n'en écrit jamais
+   * n'hérite pas d'une grille qui glisse de côté sur un téléphone.
+   */
+  function largeurColonne(secteur, shifts, dates) {
+    if (secteur === "cuisine") return COLONNE_MIN.cuisine;
+    const jours = new Set(dates);
+    const avecNote = (shifts || []).some((q) => jours.has(q.date) && tacheDuQuart(q));
+    return avecNote ? COLONNE_MIN.cuisine : COLONNE_MIN.salle;
+  }
+
   // ---------- congés et vacances ----------
 
   function absencesDuSecteur(employees) {
@@ -391,7 +407,7 @@ window.ScheduleUI = (function () {
            </div>`
         : ""
     }
-    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(${COLONNE_MIN[secteur]}px, 1fr));">
+    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(${largeurColonne(secteur, shifts, dates.map(isoDate))}px, 1fr));">
       <div></div>
       ${dates
         .map(
@@ -459,7 +475,7 @@ window.ScheduleUI = (function () {
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
                        <div class="rl">${echapper(libelleRole(shift.role, lang))}</div>
-                       ${tacheDuQuart(shift, secteur) ? `<div class="tk">${echapper(tacheDuQuart(shift, secteur))}</div>` : ""}
+                       ${tacheDuQuart(shift) ? `<div class="tk">${echapper(tacheDuQuart(shift))}</div>` : ""}
                      </div>`
                   : absence
                   ? // Une journée d'absence reste cliquable : il arrive qu'on doive quand même
@@ -623,14 +639,17 @@ window.ScheduleUI = (function () {
   // La tâche s'ajoute SOUS le poste, elle ne le remplace pas. On avait d'abord misé sur la
   // couleur de la pastille pour dire le poste — dans une grille de quatorze personnes, on lit
   // les mots, pas les teintes, et le poste disparaissait dès qu'une tâche était écrite.
-  function tacheDuQuart(shift, secteur) {
-    return secteur === "cuisine" ? String(shift.note || "").trim() : "";
+  // La tâche vit sur les deux grilles. Elle n'était qu'en cuisine, parce qu'elle était née
+  // pour « Prép » et « Commande à défaire » ; mais la salle a les siennes — « Fermeture »,
+  // « Terrasse », « Formation » — et c'était demandé ainsi : « comme pour la cuisine, être
+  // capable d'ajouter une note dans horaire salle ».
+  function tacheDuQuart(shift) {
+    return String((shift && shift.note) || "").trim();
   }
 
   // Les tâches déjà employées dans cette équipe, les plus récentes d'abord. Rien à
   // configurer : l'app apprend de ce qui a vraiment été écrit.
   function tachesRecentes(secteur, employees) {
-    if (secteur !== "cuisine") return [];
     const ids = new Set((employees || []).map((e) => e.id));
     const vues = [];
     const quarts = quartsDe(secteur)
@@ -779,20 +798,17 @@ window.ScheduleUI = (function () {
     document.getElementById("shiftModalOverlay").style.display = "none";
   }
 
-  // Le bloc n'apparaît qu'en cuisine : « Prép » ou « Commande à défaire » ne veulent rien
-  // dire pour une serveuse, et l'utilisateur a demandé que ça reste à la cuisine.
+  // Le bloc apparaît dans les deux équipes. Seul l'EXEMPLE change : « Prép » ne dit rien à
+  // une serveuse, et « Fermeture » rien à un plongeur. Les tâches déjà écrites se proposent
+  // aussi par équipe (`tachesRecentes`), donc les deux listes ne se mélangent jamais.
   function preparerBlocTache(equipe, champ) {
     const bloc = document.getElementById("shiftTacheBloc");
     if (!bloc) return;
-    if (equipe !== "cuisine") {
-      bloc.style.display = "none";
-      return;
-    }
     bloc.style.display = "block";
 
     const max = window.HoraireMiseEnPage.TACHE_MAX;
     champ.maxLength = max;
-    champ.placeholder = host.t("tachePlaceholder");
+    champ.placeholder = host.t(equipe === "cuisine" ? "tachePlaceholder" : "tachePlaceholderSalle");
     document.getElementById("shiftTacheLabel").textContent = host.t("tacheDuQuart");
 
     const reste = document.getElementById("shiftTacheReste");
@@ -1198,7 +1214,7 @@ window.ScheduleUI = (function () {
           weekStartISO: weekISO,
           lang: host.lang(),
           avecHeureFin: ctx.secteur === "cuisine",
-          avecTaches: ctx.secteur === "cuisine",
+          avecTaches: true,
         });
         const nomFichier = window.HoraireImage.nomImage(nomFeuille, weekISO, host.lang());
         await partagerOuEnregistrer(blob, nomFichier, host.t("titrePartage"));
@@ -1397,6 +1413,8 @@ window.ScheduleUI = (function () {
     rolesDe,
     echapper,
     tachesRecentes,
+    tacheDuQuart,
+    largeurColonne,
     downloadWeekImage,
     downloadWeekPdf,
     bindGridEvents,

@@ -163,7 +163,17 @@ a été posée, et vérifiée en maquette. Ils ne se confondent pas parce qu'ils
 jamais la même forme : une absence est une CASE entière teintée qui porte son mot écrit, un
 poste est un TRAIT sur une case qui porte une heure en gros.
 
-Chaque quart de cuisine peut aussi porter une **tâche** (« Prép », « Commande à défaire »).
+Chaque quart peut aussi porter une **tâche** — « Prép » ou « Commande à défaire » en cuisine,
+« Fermeture » ou « Terrasse » en salle. Elle n'a d'abord existé qu'en cuisine, où elle est
+née ; la salle l'a eue ensuite, à la demande du propriétaire : « comme pour la cuisine, être
+capable d'ajouter une note dans horaire salle ». Rien n'a été ajouté à la base pour ça — la
+colonne `shifts.note` et sa validation serveur étaient déjà partagées, seul l'affichage
+gardait la porte fermée.
+
+Les **suggestions** de tâches déjà écrites (`tachesRecentes`) restent séparées par équipe, et
+l'exemple du champ aussi : proposer « Commande à défaire » à une hôtesse rendrait la liste
+inutilisable des deux bords.
+
 Elle s'ajoute au poste sans le remplacer : on avait d'abord misé sur la couleur de la
 pastille pour dire le poste, mais dans une grille de quatorze personnes on lit les mots, pas
 les teintes. Les deux partagent **une seule ligne** (« Cuisinier · Prép »), à l'écran comme
@@ -182,6 +192,14 @@ librement coupait tout sur un téléphone — « 08:00 » devenait « 08:0 », �
 qu'une plage horaire tienne sur une ligne et qu'une tâche de longueur maximale s'écrive en
 entier.
 
+**La salle passe à 100 px, mais seulement les semaines qui portent une note**
+(`largeurColonne()`). Ses 62 px suffisent à une heure de début et un poste ; ils couperaient
+« Fermeture » en « Ferm… », ce que les largeurs minimales existent justement pour empêcher.
+Élargir en permanence aurait fait glisser la grille de côté pour une équipe qui n'écrit jamais
+de note — le prix est payé par celles qui s'en servent, la semaine où elles s'en servent. Une
+note écrite ailleurs dans l'année n'élargit pas la semaine qu'on regarde, et une note faite
+d'espaces ne compte pas : `test/schedule-ui.test.js` tient les quatre cas.
+
 La feuille imprimée porte **les mêmes quatre teintes**, en version papier : un fond très
 pâle et une encre soutenue par poste (`COULEURS.posteFond` / `posteEncre` dans
 `horaire-mise-en-page.js`). Elle était restée à l'ancien système à deux couleurs bien après
@@ -191,7 +209,8 @@ violet : le pâle d'une journée marquée (`marqueFond`) tire vers le saumon, et
 voisins sur une feuille punaisée au mur se confondraient.
 
 Sur la feuille imprimée il n'y a de place que pour deux lignes (une case fait 26 points de
-haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép ». Quand les deux
+haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép », « Serveur ·
+Fermeture ». Les DEUX feuilles les portent (`avecTaches`), le PDF comme l'image. Quand les deux
 ne rentrent pas dans la colonne, mesurée par `surface.mesurer`, c'est le POSTE qui cède — sa
 couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
