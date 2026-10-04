@@ -177,23 +177,20 @@ window.ScheduleUI = (function () {
   // place de tenir sur une seule ligne garde aussi la case à la même hauteur qu'ailleurs.
   // 96 px en cuisine : c'est ce qu'il faut pour qu'une tâche de longueur maximale
   // (TACHE_MAX, soit « Commande à défaire ») s'écrive en entier plutôt que de finir en « … ».
-  const COLONNE_MIN = { salle: 62, cuisine: 100 };
-
-  /**
-   * La largeur minimale d'une colonne de jour, pour CETTE grille-ci.
-   *
-   * La salle tient dans 62 px parce qu'elle n'affiche qu'une heure de début et un poste. Dès
-   * qu'une note s'y affiche, 62 px la coupent en « Ferm… » — et c'est précisément ce que les
-   * largeurs minimales existent pour empêcher. Elle prend donc les 100 px de la cuisine, mais
-   * seulement les semaines qui portent une note : une équipe de salle qui n'en écrit jamais
-   * n'hérite pas d'une grille qui glisse de côté sur un téléphone.
-   */
-  function largeurColonne(secteur, shifts, dates) {
-    if (secteur === "cuisine") return COLONNE_MIN.cuisine;
-    const jours = new Set(dates);
-    const avecNote = (shifts || []).some((q) => jours.has(q.date) && tacheDuQuart(q));
-    return avecNote ? COLONNE_MIN.cuisine : COLONNE_MIN.salle;
-  }
+  // Les deux équipes à la même largeur, et c'est une décision du propriétaire : « ça
+  // fonctionne bien côté cuisine, fais la même chose en salle ».
+  //
+  // La salle était à 62 px, ce qui suffisait à « 16:00 » et « Serveur ». Depuis qu'un quart
+  // de salle porte une note, 62 px coupent « Fermeture » en « Ferm… ». Il y a eu une version
+  // où la salle ne s'élargissait que les semaines portant une note ; elle évitait de faire
+  // glisser la grille d'une équipe qui n'en écrit jamais, mais elle donnait deux grilles de
+  // salle différentes selon la semaine, et une seule configuration est plus facile à vivre.
+  //
+  // Ce que ça coûte, et c'est assumé : sur un téléphone la grille de salle laisse voir trois
+  // jours à la fois au lieu de cinq. Elle glissait déjà latéralement à 62 px — 96 px de noms
+  // plus sept colonnes ne tiennent sur aucun téléphone — donc c'est un glissement plus long,
+  // pas un glissement qui apparaît.
+  const COLONNE_MIN = { salle: 100, cuisine: 100 };
 
   // ---------- congés et vacances ----------
 
@@ -407,7 +404,7 @@ window.ScheduleUI = (function () {
            </div>`
         : ""
     }
-    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(${largeurColonne(secteur, shifts, dates.map(isoDate))}px, 1fr));">
+    <div class="week-grid ${secteur === "cuisine" ? "grille-cuisine" : ""}" style="grid-template-columns: 96px repeat(7, minmax(${COLONNE_MIN[secteur]}px, 1fr));">
       <div></div>
       ${dates
         .map(
@@ -1414,7 +1411,7 @@ window.ScheduleUI = (function () {
     echapper,
     tachesRecentes,
     tacheDuQuart,
-    largeurColonne,
+    COLONNE_MIN,
     downloadWeekImage,
     downloadWeekPdf,
     bindGridEvents,

@@ -396,32 +396,17 @@ test("la note se lit sur un quart de salle comme sur un quart de cuisine", () =>
   assert.equal(UI.tacheDuQuart(undefined), "");
 });
 
-test("la colonne de salle ne s'élargit QUE si la semaine porte une note", () => {
-  // C'est tout l'enjeu. 62 px suffisent à « 08:00 » et « Serveur » ; ils coupent « Fermeture »
-  // en « Ferm… », et les largeurs minimales existent précisément pour empêcher ça. Mais
-  // élargir tout le temps ferait glisser la grille de côté sur le téléphone d'une équipe qui
-  // n'écrit jamais de note.
-  const semaine = ["2026-10-05", "2026-10-06", "2026-10-07"];
-
-  const sansNote = [{ date: "2026-10-05", note: "" }, { date: "2026-10-06" }];
-  assert.equal(UI.largeurColonne("salle", sansNote, semaine), 62);
-
-  const avecNote = [...sansNote, { date: "2026-10-07", note: "Fermeture" }];
-  assert.equal(UI.largeurColonne("salle", avecNote, semaine), 100);
-
-  // Une note qui vit AILLEURS dans l'année ne doit pas élargir la semaine qu'on regarde.
-  const noteAilleurs = [...sansNote, { date: "2026-11-20", note: "Fermeture" }];
-  assert.equal(UI.largeurColonne("salle", noteAilleurs, semaine), 62);
-
-  // Une note faite d'espaces n'est pas une note : elle n'affiche rien, elle n'élargit rien.
-  assert.equal(UI.largeurColonne("salle", [{ date: "2026-10-05", note: "   " }], semaine), 62);
-});
-
-test("la cuisine garde ses 100 px, note ou pas", () => {
-  // Sa largeur ne vient pas de la tâche mais de la plage horaire « 17:30–01:30 », qui doit
-  // tenir sur une ligne. Elle ne doit donc jamais rétrécir quand une semaine est sans note.
-  assert.equal(UI.largeurColonne("cuisine", [], ["2026-10-05"]), 100);
-  assert.equal(UI.largeurColonne("cuisine", [{ date: "2026-10-05", note: "Prép" }], ["2026-10-05"]), 100);
+test("les deux grilles ont la même largeur de colonne", () => {
+  // « Ça fonctionne bien côté cuisine, fais la même chose en salle. » Une seule configuration
+  // plutôt que deux.
+  //
+  // Ce test garde surtout un plancher : 62 px suffisaient à « 16:00 » et « Serveur », mais
+  // depuis qu'un quart de salle porte une note ils couperaient « Fermeture » en « Ferm… ».
+  // Si quelqu'un rabaisse la salle pour regagner de la largeur sur un téléphone, c'est la
+  // note qui disparaît en silence.
+  assert.equal(UI.COLONNE_MIN.salle, 100);
+  assert.equal(UI.COLONNE_MIN.cuisine, 100);
+  assert.equal(UI.COLONNE_MIN.salle, UI.COLONNE_MIN.cuisine, "les deux équipes, même grille");
 });
 
 test("les listes de tâches récentes ne se mélangent pas entre les deux équipes", () => {

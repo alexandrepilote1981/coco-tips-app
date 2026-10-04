@@ -185,20 +185,31 @@ sont serrés exprès pour que les trois lignes tiennent dans la hauteur que la c
 déjà : écrire une tâche ne doit pas allonger la grille. Ni le poste ni la tâche ne reviennent
 à la ligne (`white-space: nowrap` + ellipsis).
 
-Les colonnes de jour ont une largeur minimale (`COLONNE_MIN` dans `schedule-ui.js` : 62 px en
-salle, 100 px en cuisine) et la grille glisse latéralement en dessous. Les laisser rétrécir
-librement coupait tout sur un téléphone — « 08:00 » devenait « 08:0 », « Serveur » devenait
-« Ser… ». Les 100 px de la cuisine ne sont pas un chiffre rond : c'est ce qu'il faut pour
-qu'une plage horaire tienne sur une ligne et qu'une tâche de longueur maximale s'écrive en
-entier.
+Les colonnes de jour ont une largeur minimale (`COLONNE_MIN` dans `schedule-ui.js`) et la
+grille glisse latéralement en dessous. Les laisser rétrécir librement coupait tout sur un
+téléphone — « 08:00 » devenait « 08:0 », « Serveur » devenait « Ser… ». Les 100 px ne sont pas
+un chiffre rond : c'est ce qu'il faut pour qu'une plage horaire (« 17:30–01:30 ») tienne sur
+une ligne.
 
-**La salle passe à 100 px, mais seulement les semaines qui portent une note**
-(`largeurColonne()`). Ses 62 px suffisent à une heure de début et un poste ; ils couperaient
-« Fermeture » en « Ferm… », ce que les largeurs minimales existent justement pour empêcher.
-Élargir en permanence aurait fait glisser la grille de côté pour une équipe qui n'écrit jamais
-de note — le prix est payé par celles qui s'en servent, la semaine où elles s'en servent. Une
-note écrite ailleurs dans l'année n'élargit pas la semaine qu'on regarde, et une note faite
-d'espaces ne compte pas : `test/schedule-ui.test.js` tient les quatre cas.
+**Les deux équipes sont à 100 px**, et c'est une décision du propriétaire : « ça fonctionne
+bien côté cuisine, fais la même chose en salle ». La salle était à 62 px, ce qui suffisait à
+une heure de début et un poste ; depuis qu'un quart de salle porte une note, 62 px coupent
+« Fermeture » en « Ferm… ». Il y a eu entre les deux une version où la salle ne s'élargissait
+que les semaines portant une note — elle épargnait le défilement aux équipes qui n'en écrivent
+jamais, mais elle donnait deux grilles de salle différentes selon la semaine. Une seule
+configuration est plus facile à vivre.
+
+Ce que ça coûte, et c'est assumé : sur un téléphone la grille de salle laisse voir 2,2 jours
+à la fois au lieu de 3,5. Elle glissait **déjà** latéralement à 62 px — 96 px de noms plus
+sept colonnes ne tiennent sur aucun téléphone — donc c'est un glissement plus long, pas un
+glissement qui apparaît.
+
+**Ce qui reste faux, et qui est connu** : une tâche de longueur maximale ne rentre PAS dans
+100 px. Mesuré à l'écran, la pastille laisse 78 px au texte et « Commande à défaire » en
+demande 84 ; « Vérifie jus d'orange » en demande 79 et s'affiche « Vérifie jus d'oran ». Le
+`text-overflow: ellipsis` fait son travail, mais le mot est perdu. Il faudrait 106 px de
+colonne, ou rogner le rembourrage de la pastille. La feuille imprimée, elle, mesure avant
+d'écrire et laisse tomber le POSTE plutôt que la tâche — elle n'a pas ce défaut.
 
 La feuille imprimée porte **les mêmes quatre teintes**, en version papier : un fond très
 pâle et une encre soutenue par poste (`COULEURS.posteFond` / `posteEncre` dans
