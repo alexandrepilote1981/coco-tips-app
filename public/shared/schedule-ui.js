@@ -177,7 +177,20 @@ window.ScheduleUI = (function () {
   // place de tenir sur une seule ligne garde aussi la case à la même hauteur qu'ailleurs.
   // 96 px en cuisine : c'est ce qu'il faut pour qu'une tâche de longueur maximale
   // (TACHE_MAX, soit « Commande à défaire ») s'écrive en entier plutôt que de finir en « … ».
-  const COLONNE_MIN = { salle: 62, cuisine: 100 };
+  // Les deux équipes à la même largeur, et c'est une décision du propriétaire : « ça
+  // fonctionne bien côté cuisine, fais la même chose en salle ».
+  //
+  // La salle était à 62 px, ce qui suffisait à « 16:00 » et « Serveur ». Depuis qu'un quart
+  // de salle porte une note, 62 px coupent « Fermeture » en « Ferm… ». Il y a eu une version
+  // où la salle ne s'élargissait que les semaines portant une note ; elle évitait de faire
+  // glisser la grille d'une équipe qui n'en écrit jamais, mais elle donnait deux grilles de
+  // salle différentes selon la semaine, et une seule configuration est plus facile à vivre.
+  //
+  // Ce que ça coûte, et c'est assumé : sur un téléphone la grille de salle laisse voir trois
+  // jours à la fois au lieu de cinq. Elle glissait déjà latéralement à 62 px — 96 px de noms
+  // plus sept colonnes ne tiennent sur aucun téléphone — donc c'est un glissement plus long,
+  // pas un glissement qui apparaît.
+  const COLONNE_MIN = { salle: 100, cuisine: 100 };
 
   // ---------- congés et vacances ----------
 
@@ -459,7 +472,7 @@ window.ScheduleUI = (function () {
                           ${peutModifier ? `data-action="editShift" data-id="${shift.id}"` : ""}>
                        <div class="st">${heuresAffichees(shift, secteur)}</div>
                        <div class="rl">${echapper(libelleRole(shift.role, lang))}</div>
-                       ${tacheDuQuart(shift, secteur) ? `<div class="tk">${echapper(tacheDuQuart(shift, secteur))}</div>` : ""}
+                       ${tacheDuQuart(shift) ? `<div class="tk">${echapper(tacheDuQuart(shift))}</div>` : ""}
                      </div>`
                   : absence
                   ? // Une journée d'absence reste cliquable : il arrive qu'on doive quand même
@@ -623,14 +636,17 @@ window.ScheduleUI = (function () {
   // La tâche s'ajoute SOUS le poste, elle ne le remplace pas. On avait d'abord misé sur la
   // couleur de la pastille pour dire le poste — dans une grille de quatorze personnes, on lit
   // les mots, pas les teintes, et le poste disparaissait dès qu'une tâche était écrite.
-  function tacheDuQuart(shift, secteur) {
-    return secteur === "cuisine" ? String(shift.note || "").trim() : "";
+  // La tâche vit sur les deux grilles. Elle n'était qu'en cuisine, parce qu'elle était née
+  // pour « Prép » et « Commande à défaire » ; mais la salle a les siennes — « Fermeture »,
+  // « Terrasse », « Formation » — et c'était demandé ainsi : « comme pour la cuisine, être
+  // capable d'ajouter une note dans horaire salle ».
+  function tacheDuQuart(shift) {
+    return String((shift && shift.note) || "").trim();
   }
 
   // Les tâches déjà employées dans cette équipe, les plus récentes d'abord. Rien à
   // configurer : l'app apprend de ce qui a vraiment été écrit.
   function tachesRecentes(secteur, employees) {
-    if (secteur !== "cuisine") return [];
     const ids = new Set((employees || []).map((e) => e.id));
     const vues = [];
     const quarts = quartsDe(secteur)
@@ -779,20 +795,17 @@ window.ScheduleUI = (function () {
     document.getElementById("shiftModalOverlay").style.display = "none";
   }
 
-  // Le bloc n'apparaît qu'en cuisine : « Prép » ou « Commande à défaire » ne veulent rien
-  // dire pour une serveuse, et l'utilisateur a demandé que ça reste à la cuisine.
+  // Le bloc apparaît dans les deux équipes. Seul l'EXEMPLE change : « Prép » ne dit rien à
+  // une serveuse, et « Fermeture » rien à un plongeur. Les tâches déjà écrites se proposent
+  // aussi par équipe (`tachesRecentes`), donc les deux listes ne se mélangent jamais.
   function preparerBlocTache(equipe, champ) {
     const bloc = document.getElementById("shiftTacheBloc");
     if (!bloc) return;
-    if (equipe !== "cuisine") {
-      bloc.style.display = "none";
-      return;
-    }
     bloc.style.display = "block";
 
     const max = window.HoraireMiseEnPage.TACHE_MAX;
     champ.maxLength = max;
-    champ.placeholder = host.t("tachePlaceholder");
+    champ.placeholder = host.t(equipe === "cuisine" ? "tachePlaceholder" : "tachePlaceholderSalle");
     document.getElementById("shiftTacheLabel").textContent = host.t("tacheDuQuart");
 
     const reste = document.getElementById("shiftTacheReste");
@@ -1198,7 +1211,7 @@ window.ScheduleUI = (function () {
           weekStartISO: weekISO,
           lang: host.lang(),
           avecHeureFin: ctx.secteur === "cuisine",
-          avecTaches: ctx.secteur === "cuisine",
+          avecTaches: true,
         });
         const nomFichier = window.HoraireImage.nomImage(nomFeuille, weekISO, host.lang());
         await partagerOuEnregistrer(blob, nomFichier, host.t("titrePartage"));
@@ -1397,6 +1410,8 @@ window.ScheduleUI = (function () {
     rolesDe,
     echapper,
     tachesRecentes,
+    tacheDuQuart,
+    COLONNE_MIN,
     downloadWeekImage,
     downloadWeekPdf,
     bindGridEvents,

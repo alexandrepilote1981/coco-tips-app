@@ -993,6 +993,7 @@ const I18N = {
     enregistrer: "Enregistrer",
     tacheDuQuart: "Tâche du quart",
     tachePlaceholder: "Ex. : Prép",
+    tachePlaceholderSalle: "Ex. : Fermeture",
     tacheReste: (restant, max) => (restant === 0 ? `Limite atteinte (${max} caractères)` : `${restant} caractère${restant > 1 ? "s" : ""} restant${restant > 1 ? "s" : ""}`),
     ajouterQuart: "Ajouter un quart",
     erreurAjoutQuart: "Erreur lors de l'ajout du quart. Réessaie.",
@@ -1241,6 +1242,7 @@ const I18N = {
     enregistrer: "Save",
     tacheDuQuart: "Shift task",
     tachePlaceholder: "e.g. Prep",
+    tachePlaceholderSalle: "e.g. Closing",
     tacheReste: (restant, max) => (restant === 0 ? `Limit reached (${max} characters)` : `${restant} character${restant > 1 ? "s" : ""} left`),
     ajouterQuart: "Add a shift",
     erreurAjoutQuart: "Error adding the shift. Try again.",
@@ -1997,15 +1999,20 @@ function render() {
       return;
     }
     if (onglet === "cuisine") {
+      // L'équipe de cuisine passe AVANT la grille — « monte ça en haut, en bas c'est pas
+      // super ». Elle était sous une grille de quatorze rangées, donc hors de l'écran : il
+      // fallait traverser tout l'horaire pour atteindre un lien, un taux ou le mot de passe.
+      // Repliée, elle ne coûte qu'une ligne avant la grille, et c'est par elle qu'on entre
+      // dans cet onglet quand on vient chercher autre chose qu'un quart.
       html += equipeCuisine.length === 0
-        ? `<div class="card"><div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div><p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p></div>
-           <div class="card">${blocEquipeCuisine}</div>`
+        ? `<div class="card">${blocEquipeCuisine}</div>
+           <div class="card"><div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div><p style="font-size:12px; color:#8993A4;">${t("aucunEmployePourHoraire")}</p></div>`
         : `
+      <div class="card">${blocEquipeCuisine}</div>
       <div class="card">
         <div class="restaurant-title" style="font-size:19px; margin-bottom:14px;">${icon("chef", 17, "margin-right:8px;")}${r.name} — ${t("cuisine")}</div>
         ${ScheduleUI.renderWeekGrid(r.id, equipeCuisine, { secteur: "cuisine", voitMontants: true, chargesPct: r.charges_pct || 0 })}
-      </div>
-      <div class="card">${blocEquipeCuisine}</div>`;
+      </div>`;
       return;
     }
 

@@ -379,3 +379,49 @@ test("la fin proposée ne dépasse jamais 8 h", () => {
   }
 });
 
+
+// ------------------------------------------- la note d'un quart, des deux bords
+//
+// Elle n'existait qu'en cuisine, où elle est née pour « Prép » et « Commande à défaire ».
+// La salle a les siennes — « Fermeture », « Terrasse » — et c'était la demande : « comme pour
+// la cuisine, être capable d'ajouter une note dans horaire salle ».
+
+test("la note se lit sur un quart de salle comme sur un quart de cuisine", () => {
+  assert.equal(UI.tacheDuQuart({ note: "Fermeture" }), "Fermeture");
+  assert.equal(UI.tacheDuQuart({ note: "  Prép  " }), "Prép", "les espaces autour sont rognés");
+  assert.equal(UI.tacheDuQuart({ note: "" }), "");
+  assert.equal(UI.tacheDuQuart({}), "");
+  // Une grille lit des lignes venues du serveur : une ligne sans note ne doit pas planter.
+  assert.equal(UI.tacheDuQuart(null), "");
+  assert.equal(UI.tacheDuQuart(undefined), "");
+});
+
+test("les deux grilles ont la même largeur de colonne", () => {
+  // « Ça fonctionne bien côté cuisine, fais la même chose en salle. » Une seule configuration
+  // plutôt que deux.
+  //
+  // Ce test garde surtout un plancher : 62 px suffisaient à « 16:00 » et « Serveur », mais
+  // depuis qu'un quart de salle porte une note ils couperaient « Fermeture » en « Ferm… ».
+  // Si quelqu'un rabaisse la salle pour regagner de la largeur sur un téléphone, c'est la
+  // note qui disparaît en silence.
+  assert.equal(UI.COLONNE_MIN.salle, 100);
+  assert.equal(UI.COLONNE_MIN.cuisine, 100);
+  assert.equal(UI.COLONNE_MIN.salle, UI.COLONNE_MIN.cuisine, "les deux équipes, même grille");
+});
+
+test("les listes de tâches récentes ne se mélangent pas entre les deux équipes", () => {
+  // Les deux équipes écrivent maintenant des notes. Proposer « Commande à défaire » à une
+  // hôtesse rendrait la liste inutilisable des deux bords.
+  // `tachesRecentes` lit les quarts par l'hôte, comme en vrai : on lui en fournit un minimal
+  // plutôt que de contourner le chemin que la page emprunte réellement.
+  UI.init({
+    shifts: () => [
+      { id: "1", employee_id: "salle1", date: "2026-10-05", start_time: "16:00", role: "server", note: "Fermeture" },
+      { id: "2", employee_id: "cuis1", date: "2026-10-05", start_time: "08:00", end_time: "14:00", role: "cuisinier", note: "Prép" },
+    ],
+  });
+  assert.deepEqual(UI.tachesRecentes("salle", [{ id: "salle1" }]), ["Fermeture"]);
+  assert.deepEqual(UI.tachesRecentes("cuisine", [{ id: "cuis1" }]), ["Prép"]);
+  // Et chacune ne voit que SES gens : le quart de l'autre équipe n'est pas dans sa liste.
+  assert.deepEqual(UI.tachesRecentes("salle", [{ id: "cuis1" }]), []);
+});

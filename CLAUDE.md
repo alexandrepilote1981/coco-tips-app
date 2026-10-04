@@ -163,7 +163,17 @@ a été posée, et vérifiée en maquette. Ils ne se confondent pas parce qu'ils
 jamais la même forme : une absence est une CASE entière teintée qui porte son mot écrit, un
 poste est un TRAIT sur une case qui porte une heure en gros.
 
-Chaque quart de cuisine peut aussi porter une **tâche** (« Prép », « Commande à défaire »).
+Chaque quart peut aussi porter une **tâche** — « Prép » ou « Commande à défaire » en cuisine,
+« Fermeture » ou « Terrasse » en salle. Elle n'a d'abord existé qu'en cuisine, où elle est
+née ; la salle l'a eue ensuite, à la demande du propriétaire : « comme pour la cuisine, être
+capable d'ajouter une note dans horaire salle ». Rien n'a été ajouté à la base pour ça — la
+colonne `shifts.note` et sa validation serveur étaient déjà partagées, seul l'affichage
+gardait la porte fermée.
+
+Les **suggestions** de tâches déjà écrites (`tachesRecentes`) restent séparées par équipe, et
+l'exemple du champ aussi : proposer « Commande à défaire » à une hôtesse rendrait la liste
+inutilisable des deux bords.
+
 Elle s'ajoute au poste sans le remplacer : on avait d'abord misé sur la couleur de la
 pastille pour dire le poste, mais dans une grille de quatorze personnes on lit les mots, pas
 les teintes. Les deux partagent **une seule ligne** (« Cuisinier · Prép »), à l'écran comme
@@ -175,12 +185,31 @@ sont serrés exprès pour que les trois lignes tiennent dans la hauteur que la c
 déjà : écrire une tâche ne doit pas allonger la grille. Ni le poste ni la tâche ne reviennent
 à la ligne (`white-space: nowrap` + ellipsis).
 
-Les colonnes de jour ont une largeur minimale (`COLONNE_MIN` dans `schedule-ui.js` : 62 px en
-salle, 100 px en cuisine) et la grille glisse latéralement en dessous. Les laisser rétrécir
-librement coupait tout sur un téléphone — « 08:00 » devenait « 08:0 », « Serveur » devenait
-« Ser… ». Les 100 px de la cuisine ne sont pas un chiffre rond : c'est ce qu'il faut pour
-qu'une plage horaire tienne sur une ligne et qu'une tâche de longueur maximale s'écrive en
-entier.
+Les colonnes de jour ont une largeur minimale (`COLONNE_MIN` dans `schedule-ui.js`) et la
+grille glisse latéralement en dessous. Les laisser rétrécir librement coupait tout sur un
+téléphone — « 08:00 » devenait « 08:0 », « Serveur » devenait « Ser… ». Les 100 px ne sont pas
+un chiffre rond : c'est ce qu'il faut pour qu'une plage horaire (« 17:30–01:30 ») tienne sur
+une ligne.
+
+**Les deux équipes sont à 100 px**, et c'est une décision du propriétaire : « ça fonctionne
+bien côté cuisine, fais la même chose en salle ». La salle était à 62 px, ce qui suffisait à
+une heure de début et un poste ; depuis qu'un quart de salle porte une note, 62 px coupent
+« Fermeture » en « Ferm… ». Il y a eu entre les deux une version où la salle ne s'élargissait
+que les semaines portant une note — elle épargnait le défilement aux équipes qui n'en écrivent
+jamais, mais elle donnait deux grilles de salle différentes selon la semaine. Une seule
+configuration est plus facile à vivre.
+
+Ce que ça coûte, et c'est assumé : sur un téléphone la grille de salle laisse voir 2,2 jours
+à la fois au lieu de 3,5. Elle glissait **déjà** latéralement à 62 px — 96 px de noms plus
+sept colonnes ne tiennent sur aucun téléphone — donc c'est un glissement plus long, pas un
+glissement qui apparaît.
+
+**Ce qui reste faux, et qui est connu** : une tâche de longueur maximale ne rentre PAS dans
+100 px. Mesuré à l'écran, la pastille laisse 78 px au texte et « Commande à défaire » en
+demande 84 ; « Vérifie jus d'orange » en demande 79 et s'affiche « Vérifie jus d'oran ». Le
+`text-overflow: ellipsis` fait son travail, mais le mot est perdu. Il faudrait 106 px de
+colonne, ou rogner le rembourrage de la pastille. La feuille imprimée, elle, mesure avant
+d'écrire et laisse tomber le POSTE plutôt que la tâche — elle n'a pas ce défaut.
 
 La feuille imprimée porte **les mêmes quatre teintes**, en version papier : un fond très
 pâle et une encre soutenue par poste (`COULEURS.posteFond` / `posteEncre` dans
@@ -191,7 +220,8 @@ violet : le pâle d'une journée marquée (`marqueFond`) tire vers le saumon, et
 voisins sur une feuille punaisée au mur se confondraient.
 
 Sur la feuille imprimée il n'y a de place que pour deux lignes (une case fait 26 points de
-haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép ». Quand les deux
+haut), alors le poste et la tâche partagent la seconde : « Cuisinier · Prép », « Serveur ·
+Fermeture ». Les DEUX feuilles les portent (`avecTaches`), le PDF comme l'image. Quand les deux
 ne rentrent pas dans la colonne, mesurée par `surface.mesurer`, c'est le POSTE qui cède — sa
 couleur le dit encore, la tâche n'est écrite nulle part ailleurs. Sa longueur maximale (`TACHE_MAX`) vit dans `horaire-mise-en-page.js` parce que
 c'est la largeur d'une colonne de jour qui la dicte ; le champ de saisie et le serveur s'y
@@ -957,11 +987,22 @@ répond encore.
 **Le découpage suit le SENS, pas l'ancienne disposition.** Le premier essai avait déplacé
 les deux grilles et laissé tout le reste où il était — l'équipe de cuisine, ses liens, ses
 taux, ses plafonds et les charges de l'employeur restaient donc dans l'onglet des
-déclarations. La cuisine ne déclare rien : tout ce qui la concerne vit avec son horaire, et
-les charges y nourrissent la masse salariale affichée juste au-dessus. La salle, elle, reste
-dans Déclarations, parce que ses cartes SONT les déclarations. Vérifié dans
+déclarations. La cuisine ne déclare rien : tout ce qui la concerne vit avec son horaire. La
+salle, elle, reste dans Déclarations, parce que ses cartes SONT les déclarations. Vérifié dans
 `test/ui-smoke.test.mjs`, dans les deux sens : présent dans l'onglet cuisine, absent des
 déclarations.
+
+**« Employés cuisine » passe AVANT la grille**, et c'est le propriétaire qui l'a demandé :
+« monte ça en haut, en bas c'est pas super ». La section vivait sous une grille de quatorze
+rangées — mesuré sur son équipe, elle commençait au-delà de l'écran et il fallait traverser
+tout l'horaire pour atteindre un lien, un taux, un plafond ou le mot de passe du lien gérant.
+Repliée, elle ne coûte qu'une ligne : la grille commence à 835 px sur un téléphone, 684 px sur
+un iPad, et l'équipe est visible sans défiler des deux côtés.
+
+C'est le même raisonnement que le repli des fiches d'employé : ce qu'on vient chercher dans
+cet onglet, ce n'est pas toujours un quart. Le prix assumé est que les charges de l'employeur
+se règlent maintenant au-dessus de la masse salariale qu'elles nourrissent plutôt qu'en
+dessous — les deux restent voisines, et la barre de coût est en tête de la grille.
 
 Le repli des fiches d'employé, livré depuis, a ramené cet onglet de 10,6 à 5,2 écrans : voir
 « Les fiches d'employé sont repliées » plus haut.

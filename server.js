@@ -1079,7 +1079,8 @@ async function sendSchedulePdf(res, restaurant, weekStartISO, lang, secteur) {
     // serveuse part quand la salle est vide — l'heure écrite serait une promesse fausse.
     avecHeureFin: secteur === "cuisine",
     // Les tâches de quart (« Prép », « Commande à défaire ») n'existent qu'en cuisine.
-    avecTaches: secteur === "cuisine",
+    // Les deux équipes écrivent des tâches, donc la feuille les porte toutes les deux.
+    avecTaches: true,
   });
   // Le nom de fichier porte aussi l'équipe : sans ça, le PDF de la cuisine et celui de la
   // salle de la même semaine s'écrasent l'un l'autre dans le dossier de téléchargements.
