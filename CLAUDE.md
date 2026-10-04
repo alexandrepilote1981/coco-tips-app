@@ -42,6 +42,7 @@ db.js                     ouverture SQLite, schéma, migrations idempotentes
 backup.js                 archive .zip téléchargeable (base + CSV lisibles)
 pdf-horaire.js            PDF de l'horaire hebdomadaire (pdfkit)
 rate-limit.js             plafond de tentatives en mémoire, sur les échecs seulement
+mdp.js                    le mot de passe du lien gérant cuisine : le poser, le vérifier
 public/admin.html         tableau de bord du gérant
 public/employee.html      page d'un employé, atteinte par /e/<code>
 public/horaire.html       horaire seul, atteint par /horaire/<code>
@@ -985,6 +986,7 @@ Cinq portes d'entrée, sans compte utilisateur :
 - **Horaire cuisine, gérant** : `/horaire/<schedule_code_cuisine>` — modifie l'horaire de la
   cuisine, montre les salaires, et reçoit les **codes d'accès personnels de la cuisine** pour
   que le gérant distribue les liens à son équipe. Ce lien ne se partage pas à l'équipe.
+  **C'est la seule porte qui peut porter un mot de passe** — voir plus bas.
 - **Horaire cuisine, cuisiniers** : `/horaire/<schedule_code_cuisine_lecture>` — le même
   horaire en lecture seule, sans un montant. C'est ce lien qu'on envoie dans le groupe.
 
@@ -1026,6 +1028,81 @@ inconnu reçoit toujours la même réponse, quel qu'il soit — vérifié dans
 
 La limite assumée : quelqu'un qui ouvre son lien pour la **première** fois pendant que son WiFi
 est bloqué doit attendre la fin du blocage.
+
+### Le verrou du lien gérant de cuisine
+
+Deux commandes sur la fiche du restaurant, dans l'onglet Horaire cuisine : **Changer le lien**
+et un champ de **mot de passe**. Demandées ensemble — « j'ai besoin que tu changes le lien
+gérant cuisine et ajoute un mot de passe ».
+
+Pourquoi cette porte-là et elle seule : c'est celle qui montre les salaires, la masse
+salariale ET les codes d'accès personnels de toute la cuisine — chacun étant la clé de la page
+de quelqu'un. Les deux autres liens d'horaire se partagent à des équipes entières et ne
+montrent pas un sou ; un mot de passe que quinze personnes connaissent n'en est pas un.
+
+**Changer le lien** tire un code neuf et l'ancien meurt à l'instant. C'est le but : un gérant
+qui s'en va, un téléphone perdu, un lien collé dans la mauvaise conversation. Le lien EST la
+clé, il n'y a rien d'autre à révoquer. Les deux autres codes ne bougent pas — les refaire
+obligerait à redistribuer un lien à quinze personnes pour régler un problème qu'elles n'ont
+pas.
+
+**Le mot de passe** vit dans `restaurants.mdp_cuisine`, et ce n'est pas le mot de passe : c'est
+`sel:empreinte` calculé par scrypt (`mdp.js`, via `node:crypto` — aucune dépendance neuve).
+Personne ne peut le relire, pas même en ouvrant la base, et c'est ce qui compte parce que la
+sauvegarde téléchargeable emporte la base avec elle. Un champ vide RETIRE le verrou : ça doit
+se défaire aussi facilement que ça se fait, sinon on hésite à s'en servir.
+
+L'empreinte **ne sort pas du serveur**. Elle partait toute seule vers `/admin`, parce que
+l'aperçu fait `SELECT *` — exactement le piège des taux horaires sur la page employé : toute
+colonne ajoutée à la table se met à voyager sans que personne l'ait décidé. Seul
+`mdp_cuisine_pose`, un oui/non, voyage.
+
+**Les deux gardes sont déclarées ensemble, avant la première route `by-code`** — le plafond de
+tentatives d'abord, le mot de passe ensuite. Les ranger plus bas les ferait sauter par les
+routes déclarées au-dessus : c'est exactement ce qui arrivait au plafond, que `/rappels`
+contournait sans que ça se voie. Un test parcourt les cinq chemins de la porte, `/rappels` et
+le PDF compris.
+
+Trois réponses à distinguer, et c'est ce qui permet à la page de dire la vérité plutôt que
+« erreur » :
+
+| situation | réponse | compte comme un échec ? |
+| --- | --- | --- |
+| rien envoyé (première visite) | 401 `mdpRequis` | **non** — sinon ouvrir sa page dix fois bloquerait le gérant sans qu'il ait tapé un seul mauvais mot de passe |
+| mauvais mot de passe | 401 `mdpRequis` | oui — 1212 fait quatre chiffres, sans plafond on les essaie tous en quelques secondes |
+| trop de tentatives | 429 avec le délai | — |
+
+Un mot de passe **déjà accepté depuis cette adresse passe toujours**, même pendant un blocage
+(`noteSuccess` / `estConnu`, la mécanique des codes employés). Même raison : toute l'équipe est
+sur un seul WiFi, donc une seule adresse — sans ça, quelqu'un qui malmène ce lien enfermerait
+dehors le gérant dont le mot de passe est bon.
+
+Côté page, **tous** les appels de cette porte passent par `fetchPorte()` / `porteJSON()` dans
+`horaire.html`. Il y avait sept endroits qui appelaient `/api/schedule/by-code/…` à la main ;
+un seul oublié affichait « erreur » là où il fallait demander le mot de passe. Le mot de passe
+vit dans `sessionStorage` sous une clé qui porte le CODE du lien — il s'efface en fermant
+l'onglet, et deux liens ouverts sur le même appareil ne se le prêtent pas. Un mot de passe
+refusé n'est **pas** gardé : il repartirait tout seul au chargement suivant et ferait bloquer
+la personne sans qu'elle le retape jamais.
+
+Le PDF de la semaine se récupère en blob justement pour pouvoir porter un en-tête — un simple
+`<a href>` ne pourrait pas, et la feuille reviendrait en 401.
+
+**Le coût mesuré, et pourquoi il y a un cache.** scrypt prend 81 ms par calcul, et c'est le
+but. Mais la page d'horaire fait cinq appels rien qu'à l'ouverture, et le serveur n'a qu'un
+fil : recalculer à chaque requête le gelait presque une demi-seconde. Le calcul est donc
+asynchrone, et un mot de passe déjà vérifié est retenu dix minutes. La clé du cache est la
+paire (empreinte, essai) : une mauvaise réponse n'y est jamais, donc celui qui cherche à
+deviner repaie les 81 ms à chaque coup. Le cache aide les vraies personnes et personne d'autre.
+
+**Une valeur abîmée en base FERME la porte.** `estPose()` tient toute valeur non vide pour un
+mot de passe, même illisible. La première version demandait un « : » dans la chaîne — donc
+n'importe quel caractère de travers rendait la porte libre d'accès. Une serrure se trompe vers
+le fermé.
+
+Couvert par `test/mdp.test.js` (le calcul) et par le dernier bloc de
+`test/portes-horaire.test.mjs` (les portes sur le vrai serveur), dont le sous-test de force
+brute doit rester **en dernier** : il bloque volontairement 127.0.0.1 pour quinze minutes.
 
 Pour piloter `/admin` dans un test sans passer par l'écran de connexion :
 
@@ -1079,6 +1156,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/secteurs.test.js` — le secteur d'un quart se lit sur son poste, « les deux » est des
   deux équipes, et un poste inconnu penche toujours vers la salle.
 - `test/rate-limit.test.js` — la mécanique du plafond, chaque test sur son propre guichet.
+- `test/mdp.test.js` — le mot de passe du lien gérant : il ne se relit pas, une valeur
+  abîmée ferme la porte, et le cache ne fait jamais passer un mauvais essai.
 - `test/verrou-codes.test.mjs` — la promesse vécue par une employée : mon lien marche-t-il ?
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
   est bon, et qu'il la ferme quand même à qui essaie de deviner.

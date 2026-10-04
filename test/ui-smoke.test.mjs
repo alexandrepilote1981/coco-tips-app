@@ -258,6 +258,11 @@ test("interface", optionsDuTest, async (t) => {
   async function ouvrirAdmin() {
     await onglet.aller(`${serveur.base}/admin`, "#app");
     await onglet.ev(`sessionStorage.setItem("adminToken", ${JSON.stringify(MOT_DE_PASSE)})`);
+    // L'onglet actif est gardé dans localStorage, exprès : un gérant qui monte son horaire
+    // rafraîchit vingt fois. Mais entre deux tests, cette mémoire fait qu'un test qui finit
+    // sur une grille d'horaire décide de l'écran d'entrée du suivant. On repart donc des
+    // déclarations, qui sont ce que `.period-bar` ci-dessous attend.
+    await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
   }
 
@@ -1116,12 +1121,18 @@ test("interface", optionsDuTest, async (t) => {
     const hotesse = await creer("Une Hotesse", "salle");
     const cuisinier = await creer("Un Cuisinier", "cuisine");
     const plongeur = await creer("Un Plongeur", "cuisine");
-    const demain = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
+    // AUJOURD'HUI, et pas « demain ». La grille montre la semaine en cours, du lundi au
+    // dimanche : un dimanche, demain tombe dans la semaine SUIVANTE et aucune pastille
+    // n'apparaît. Le test mourait donc un jour sur sept — et comme il meurt après avoir
+    // changé d'onglet, l'onglet actif reste en mémoire (`coco-onglet-admin`) et les deux
+    // tests suivants, qui attendent la barre de période des déclarations, tombaient avec lui.
+    // Aujourd'hui est dans la semaine affichée tous les jours de l'année.
+    const jour = new Date().toISOString().slice(0, 10);
     for (const [emp, role] of [[serveuse, "server"], [hotesse, "hostess"],
                                [cuisinier, "cuisinier"], [plongeur, "plongeur"]]) {
       await api("/api/admin/shifts", {
         method: "POST",
-        body: JSON.stringify({ employee_id: emp.id, date: demain, start_time: "09:00", end_time: "17:00", role }),
+        body: JSON.stringify({ employee_id: emp.id, date: jour, start_time: "09:00", end_time: "17:00", role }),
       });
     }
 

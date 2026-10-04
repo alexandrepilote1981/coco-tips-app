@@ -905,3 +905,148 @@ test("les trois portes de l'horaire", async (t) => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// LE VERROU DU LIEN GÉRANT DE CUISINE
+//
+// Cette porte-là montre les salaires, la masse salariale ET les codes d'accès personnels de
+// toute la cuisine — chacun étant la clé de la page de quelqu'un. D'où deux choses : on peut
+// refaire le lien quand il a traîné, et on peut lui poser un mot de passe.
+//
+// Son propre serveur, parce que le dernier sous-test bloque volontairement 127.0.0.1 pour
+// quinze minutes. Le mêler aux autres les ferait tomber pour une raison qui n'est pas la leur.
+test("le mot de passe et le changement du lien gérant", async (t) => {
+  const dossier = mkdtempSync(path.join(tmpdir(), "declara-verrou-"));
+  const { proc, base } = await demarrerServeur(dossier);
+  t.after(() => {
+    proc.kill("SIGKILL");
+    rmSync(dossier, { recursive: true, force: true });
+  });
+
+  const admin = (chemin, opts = {}) =>
+    fetch(`${base}${chemin}`, {
+      ...opts,
+      headers: { "Content-Type": "application/json", "X-Admin-Token": MOT_DE_PASSE, ...(opts.headers || {}) },
+    });
+
+  const resto = await (await admin("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Chez Coco" }) })).json();
+  await admin("/api/admin/employees", {
+    method: "POST",
+    body: JSON.stringify({ restaurant_id: resto.id, name: "Lokassa Mbala", secteur: "cuisine", taux_horaire: 18.5 }),
+  });
+
+  const SALLE = resto.schedule_code;
+  const LECTURE = resto.schedule_code_cuisine_lecture;
+  let GERANT = resto.schedule_code_cuisine;
+
+  const porte = (code, chemin = "", mdp) =>
+    fetch(`${base}/api/schedule/by-code/${code}${chemin}`, mdp ? { headers: { "X-Horaire-Mdp": mdp } } : {});
+  const poserMdp = (mot) =>
+    admin(`/api/admin/restaurants/${resto.id}/mdp-cuisine`, { method: "POST", body: JSON.stringify({ mot_de_passe: mot }) });
+
+  await t.test("sans mot de passe posé, rien ne change", async () => {
+    // Ce qu'il ne faut SURTOUT pas casser : les installations qui tournent déjà n'ont pas de
+    // mot de passe, et aucune porte ne doit se fermer toute seule sous les pieds de quelqu'un.
+    for (const code of [SALLE, GERANT, LECTURE]) assert.equal((await porte(code)).status, 200, code);
+  });
+
+  await t.test("une fois posé, la porte du gérant le demande", async () => {
+    assert.equal((await poserMdp("1212")).status, 200);
+
+    const sans = await porte(GERANT);
+    assert.equal(sans.status, 401);
+    const corps = await sans.json();
+    assert.equal(corps.mdpRequis, true, "la page doit pouvoir distinguer ça d'une vraie erreur");
+
+    assert.equal((await porte(GERANT, "", "9999")).status, 401, "un autre mot de passe ne passe pas");
+    assert.equal((await porte(GERANT, "", "1212")).status, 200);
+  });
+
+  await t.test("les deux autres portes restent libres", async () => {
+    // Ce sont des liens partagés à des équipes entières, et ni l'une ni l'autre ne montre un
+    // sou. Un mot de passe que quinze personnes connaissent n'en est pas un.
+    assert.equal((await porte(SALLE)).status, 200);
+    assert.equal((await porte(LECTURE)).status, 200);
+  });
+
+  await t.test("TOUTES les routes de la porte sont fermées, pas seulement la première", async () => {
+    // /rappels est déclarée plus haut dans server.js que les gardes : si elles étaient rangées
+    // à leur ancienne place, cette route-là passerait sans mot de passe — et c'est justement
+    // celle qui écrit dans la base. Le plafond de tentatives avait exactement ce trou.
+    for (const chemin of ["", "/shifts", "/absences", "/disponibilites", "/rappels"]) {
+      assert.equal((await porte(GERANT, chemin)).status, 401, `sans mot de passe : ${chemin || "/"}`);
+      assert.equal((await porte(GERANT, chemin, "1212")).status, 200, `avec : ${chemin || "/"}`);
+    }
+    assert.equal((await porte(GERANT, "/pdf?week=2026-09-21")).status, 401, "même la feuille PDF");
+  });
+
+  await t.test("les codes personnels ne sortent pas sans le mot de passe", async () => {
+    // C'est le vrai enjeu : un code d'accès EST la clé de la page de quelqu'un.
+    const refus = await porte(GERANT);
+    assert.equal(refus.status, 401);
+    assert.ok(!(await refus.text()).includes("access_code"));
+
+    const ouvert = await (await porte(GERANT, "", "1212")).json();
+    assert.ok(ouvert.employees.every((e) => e.access_code), "avec le mot de passe, ils sont bien là");
+  });
+
+  await t.test("l'empreinte ne sort jamais vers le tableau de bord", async () => {
+    // Le SELECT * de l'aperçu emportait toute la colonne. Même piège que les taux horaires sur
+    // la page employé : ce qu'on ajoute à la table se met à voyager tout seul.
+    const vue = await (await admin("/api/admin/overview")).json();
+    const r = vue.restaurants.find((x) => x.id === resto.id);
+    assert.equal(r.mdp_cuisine, undefined);
+    assert.equal(r.mdp_cuisine_pose, true);
+    assert.ok(!JSON.stringify(vue).includes("1212"), "ni le mot de passe lui-même, évidemment");
+  });
+
+  await t.test("un champ vide retire le verrou", async () => {
+    // Ça doit se défaire aussi facilement que ça se fait, sinon on hésite à s'en servir.
+    assert.equal((await (await poserMdp("")).json()).mdp_cuisine_pose, false);
+    assert.equal((await porte(GERANT)).status, 200);
+    await poserMdp("1212"); // on le remet pour la suite
+  });
+
+  await t.test("changer le lien tue l'ancien sur-le-champ", async () => {
+    const ancien = GERANT;
+    const rep = await (await admin(`/api/admin/restaurants/${resto.id}/nouveau-code-cuisine`, { method: "POST" })).json();
+    GERANT = rep.schedule_code_cuisine;
+
+    assert.match(GERANT, /^[A-Z0-9]{6}$/);
+    assert.notEqual(GERANT, ancien);
+    assert.equal((await porte(ancien, "", "1212")).status, 404, "l'ancien lien ne mène plus nulle part");
+    assert.equal((await porte(GERANT, "", "1212")).status, 200);
+    // Le mot de passe appartient au RESTAURANT, pas au code : refaire le lien ne le dégrafe pas.
+    assert.equal((await porte(GERANT)).status, 401);
+  });
+
+  await t.test("les deux autres liens ne bougent pas quand on refait celui du gérant", async () => {
+    // Les refaire obligerait à redistribuer un lien à quinze personnes pour régler un problème
+    // qu'elles n'ont pas.
+    const vue = await (await admin("/api/admin/overview")).json();
+    const r = vue.restaurants.find((x) => x.id === resto.id);
+    assert.equal(r.schedule_code, SALLE);
+    assert.equal(r.schedule_code_cuisine_lecture, LECTURE);
+  });
+
+  // DERNIER : il bloque 127.0.0.1 pour quinze minutes sur ce serveur.
+  await t.test("deviner le mot de passe se fait couper, le gérant non", async () => {
+    // 1212 fait quatre chiffres : sans plafond, on les essaie tous en quelques secondes.
+    // Le gérant entre d'abord — son adresse connaît désormais le bon mot de passe.
+    assert.equal((await porte(GERANT, "", "1212")).status, 200);
+
+    const statuts = [];
+    for (let i = 0; i < 14; i++) statuts.push((await porte(GERANT, "", `essai${i}`)).status);
+    assert.ok(statuts.includes(429), "au bout de dix essais différents, c'est coupé");
+    assert.equal(statuts[0], 401, "mais pas dès le premier");
+
+    // Et la raison d'être de la mémoire des mots de passe connus : toute l'équipe partage un
+    // seul WiFi, donc une seule adresse. Sans elle, celui qui malmène ce lien enfermerait
+    // dehors le gérant dont le mot de passe est bon.
+    assert.equal((await porte(GERANT, "", "1212")).status, 200, "le gérant passe encore");
+
+    // Ouvrir la page SANS rien envoyer n'est pas un échec : sinon le gérant se bloquerait
+    // tout seul en rafraîchissant dix fois avant d'avoir tapé quoi que ce soit.
+    assert.equal((await porte(GERANT)).status, 401, "401, et non 429");
+  });
+});

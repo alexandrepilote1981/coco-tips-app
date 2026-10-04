@@ -507,6 +507,29 @@
   /* Ce lien porte des salaires : il ne se partage pas comme les autres, et ça doit se voir. */
   .lien-confidentiel { border-left: 2px solid #D4A857; padding-left: 12px; }
   .lien-avis { font-size: 10px; color: #D4A857; margin-top: 5px; display: flex; align-items: center; }
+  /* Le verrou du lien gérant cuisine. Les deux boutons sont hauts de 36 px et bien séparés :
+     « Nouveau lien » casse le lien de quelqu'un et ne doit pas se taper du pouce par erreur,
+     c'est la même leçon que « Effacer la semaine ». */
+  .mdp-bloc { margin-top: 10px; }
+  .mdp-etat { font-size: 11px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+  .mdp-etat.pose { color: #6FBF93; }
+  .mdp-etat.absent { color: #8993A4; }
+  .mdp-ligne { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mdp-ligne input {
+    flex: 1 1 130px; min-width: 0; height: 36px; padding: 0 10px; font-size: 14px;
+    background: #10151D; color: #F1EFEA; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  }
+  .mdp-ligne button {
+    height: 36px; padding: 0 14px; font-size: 12px; font-weight: 700; border: 0; border-radius: 8px;
+    background: #6FBF93; color: #10151D; cursor: pointer; flex: 0 0 auto;
+  }
+  .mdp-ligne button:disabled { opacity: 0.5; cursor: default; }
+  .mdp-aide { font-size: 10px; color: #8993A4; margin-top: 5px; line-height: 1.4; }
+  .lien-refaire {
+    margin-top: 8px; height: 36px; padding: 0 12px; font-size: 12px; font-weight: 600;
+    background: transparent; color: #E2685A; border: 1px solid rgba(226,104,90,0.45);
+    border-radius: 8px; cursor: pointer;
+  }
   /* En cuisine la pastille porte deux heures : le texte passe volontairement sur deux
      lignes plutôt que de déborder de la colonne. */
   .week-grid.grille-cuisine .shift-chip .st { font-size: 10.5px; line-height: 1.15; }
@@ -779,6 +802,7 @@ const ICON_PATHS = {
   trash2: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>',
   chef: '<path d="M6 20h12"/><path d="M7 16h10a4 4 0 0 0 .6-7.95 4.5 4.5 0 0 0-8.4-1.6A3.5 3.5 0 0 0 7 16Z"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 };
 function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
@@ -995,6 +1019,15 @@ const I18N = {
     aucunEmployeCuisine: "Personne en cuisine pour l'instant. Ajoute quelqu'un ci-dessous, ou déplace une personne de la salle.",
     lienGerantCuisine: "Lien gérant cuisine",
     lienGerantCuisineAvis: "Ce lien montre les salaires — ne le partage pas à l'équipe.",
+    mdpPose: "Protégé par un mot de passe",
+    mdpAbsent: "Aucun mot de passe — le lien seul suffit pour entrer",
+    mdpChamp: "Nouveau mot de passe",
+    mdpPoser: "Enregistrer",
+    mdpRetirer: "Retirer",
+    mdpAide: "Laisse le champ vide et touche Enregistrer pour retirer le mot de passe. Il ne se relit nulle part : si tu l'oublies, remets-en un neuf.",
+    mdpEnregistre: "✓ Enregistré",
+    lienRefaire: "Changer le lien",
+    lienRefaireConfirme: "Un nouveau lien sera créé pour le gérant de cuisine.\n\nL'ancien cessera de fonctionner immédiatement — il faudra envoyer le nouveau à ton gérant.\n\nContinuer ?",
     lienCuisiniers: "Lien cuisiniers (lecture seule, aucun montant)",
     tauxHoraire: "Taux horaire",
     heuresMax: "Heures max / semaine",
@@ -1234,6 +1267,15 @@ const I18N = {
     aucunEmployeCuisine: "Nobody in the kitchen yet. Add someone below, or move someone from the dining room.",
     lienGerantCuisine: "Kitchen manager link",
     lienGerantCuisineAvis: "This link shows wages — do not share it with the team.",
+    mdpPose: "Password protected",
+    mdpAbsent: "No password — the link alone gets you in",
+    mdpChamp: "New password",
+    mdpPoser: "Save",
+    mdpRetirer: "Remove",
+    mdpAide: "Leave the field empty and tap Save to remove the password. It is never shown again: if you forget it, set a new one.",
+    mdpEnregistre: "✓ Saved",
+    lienRefaire: "Change the link",
+    lienRefaireConfirme: "A new link will be created for the kitchen manager.\n\nThe old one stops working immediately — you will need to send the new one to your manager.\n\nContinue?",
     lienCuisiniers: "Kitchen staff link (read-only, no amounts)",
     tauxHoraire: "Hourly rate",
     heuresMax: "Max hours / week",
@@ -1865,6 +1907,17 @@ function render() {
             <button class="copy-btn" data-action="copyLink" data-link="${origin}/horaire/${r.schedule_code_cuisine}">${icon("copy", 13)} ${t("copier")}</button>
           </div>
           <div class="lien-avis">${icon("alert", 11, "margin-right:4px;")}${t("lienGerantCuisineAvis")}</div>
+          <button class="lien-refaire" data-action="refaireLienCuisine" data-resto="${r.id}">${t("lienRefaire")}</button>
+          <div class="mdp-bloc">
+            <div class="mdp-etat ${r.mdp_cuisine_pose ? "pose" : "absent"}">
+              ${icon(r.mdp_cuisine_pose ? "lock" : "alert", 11)} ${r.mdp_cuisine_pose ? t("mdpPose") : t("mdpAbsent")}
+            </div>
+            <div class="mdp-ligne">
+              <input type="text" id="mdp-${r.id}" placeholder="${t("mdpChamp")}" autocomplete="off" />
+              <button data-action="poserMdp" data-resto="${r.id}">${r.mdp_cuisine_pose ? t("mdpPoser") : t("mdpPoser")}</button>
+            </div>
+            <div class="mdp-aide">${t("mdpAide")}</div>
+          </div>
         </div>
         <div style="margin:14px 0;">
           <div class="employee-stat-label" style="margin-bottom:4px;">${icon("calendar", 11, "margin-right:4px;")}${t("lienCuisiniers")}</div>
@@ -2215,6 +2268,50 @@ function render() {
       if (cuisinesOuvertes.has(rid)) cuisinesOuvertes.delete(rid);
       else cuisinesOuvertes.add(rid);
       render();
+    });
+  });
+
+  // Changer le lien du gérant de cuisine. La confirmation dit CE QUI CASSE, pas « êtes-vous
+  // sûr ? » : ce qu'on a besoin de savoir avant de taper, c'est que l'ancien lien meurt et
+  // qu'il faudra en renvoyer un neuf.
+  document.querySelectorAll('[data-action="refaireLienCuisine"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(t("lienRefaireConfirme"))) return;
+      const rid = btn.dataset.resto;
+      cuisinesOuvertes.add(rid); // la section reste ouverte : le lien neuf est à copier tout de suite
+      btn.disabled = true;
+      try {
+        await api(`/api/admin/restaurants/${rid}/nouveau-code-cuisine`, { method: "POST" });
+      } catch (e) {
+        btn.disabled = false;
+        alert(e.message || "Erreur");
+        return;
+      }
+      await load();
+    });
+  });
+
+  // Poser, changer ou retirer le mot de passe. Le champ vide RETIRE — c'est écrit sous le
+  // champ, parce qu'un bouton « Retirer » séparé se tape par erreur à côté d'« Enregistrer ».
+  document.querySelectorAll('[data-action="poserMdp"]').forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const rid = btn.dataset.resto;
+      const champ = document.getElementById(`mdp-${rid}`);
+      cuisinesOuvertes.add(rid);
+      btn.disabled = true;
+      try {
+        await api(`/api/admin/restaurants/${rid}/mdp-cuisine`, {
+          method: "POST",
+          body: JSON.stringify({ mot_de_passe: champ.value }),
+        });
+      } catch (e) {
+        // On ne vide PAS le champ : la personne vient de taper son mot de passe, et l'effacer
+        // sur un échec réseau lui ferait croire que c'est passé. Même règle que la page employé.
+        btn.disabled = false;
+        alert(e.message || "Erreur");
+        return;
+      }
+      await load();
     });
   });
 

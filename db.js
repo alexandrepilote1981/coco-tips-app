@@ -27,6 +27,16 @@ CREATE TABLE IF NOT EXISTS restaurants (
   --                                 et sans un sou affiché
   schedule_code_cuisine TEXT,
   schedule_code_cuisine_lecture TEXT,
+  -- Un second verrou sur le lien du GÉRANT de cuisine, et sur lui seul : c'est la porte qui
+  -- montre les salaires et qui porte les codes d'accès personnels de l'équipe. Un lien se
+  -- fait suivre ; un lien plus un mot de passe, beaucoup moins.
+  --
+  -- Ce n'est PAS le mot de passe en clair : sel:empreinte, calculé par scrypt (node:crypto,
+  -- aucune dépendance neuve). Personne ne peut le relire, pas même en ouvrant la base — et
+  -- c'est voulu, puisque les gens réemploient leurs mots de passe ailleurs. Vide ou NULL veut
+  -- dire « aucun mot de passe », l'état d'avant cette colonne : rien ne se ferme tout seul
+  -- sur les installations existantes.
+  mdp_cuisine TEXT,
   -- Ce que l'employeur paie EN PLUS du salaire (vacances, CNESST, RRQ…), en pourcentage du
   -- taux horaire. Reste à 0 tant que le comptable n'a pas donné le vrai chiffre : mieux vaut
   -- un coût visiblement incomplet qu'un coût inventé.
@@ -225,7 +235,7 @@ try {
 } catch (e) {
   // colonne déjà présente — rien à faire
 }
-for (const col of ["schedule_code_cuisine TEXT", "schedule_code_cuisine_lecture TEXT", "charges_pct REAL DEFAULT 0", "rappels_ferie TEXT DEFAULT ''"]) {
+for (const col of ["schedule_code_cuisine TEXT", "schedule_code_cuisine_lecture TEXT", "charges_pct REAL DEFAULT 0", "rappels_ferie TEXT DEFAULT ''", "mdp_cuisine TEXT"]) {
   try {
     db.exec(`ALTER TABLE restaurants ADD COLUMN ${col};`);
   } catch (e) {
