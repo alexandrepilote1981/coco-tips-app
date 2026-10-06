@@ -712,6 +712,17 @@ donc quand ELLE corrige, la journée retourne dans sa pile. Quand c'est le GÉRA
 elle n'a rien à renvoyer — la remettre dans sa liste lui ferait refaire un geste pour une
 faute qui n'est pas la sienne, et ferait monter la pastille rouge à chaque coquille réparée.
 
+**Le bouton se réarme à l'OUVERTURE de la fenêtre**, et pas seulement quand un envoi échoue.
+Rapporté ainsi : « ça marchait pour un mais l'autre que j'ai voulu modifier ça s'enregistre pas
+quand j'appuie sur le piton ». L'enregistrement désactive le bouton le temps de l'aller-retour
+et ne le réactivait que dans le `catch` — une correction RÉUSSIE le laissait donc désactivé
+pour toujours. La fenêtre se rouvrait normalement, les champs se remplissaient, et taper
+« Enregistrer » ne faisait plus rien, sans un mot d'explication.
+
+Le test qui le garde corrige **deux** journées d'affilée (`test/ui-smoke.test.mjs`). Un test
+qui n'en corrige qu'une passe au vert sur le bogue même — c'est exactement ce qui s'est passé :
+la vérification au navigateur n'avait fait qu'une seule correction.
+
 **La date ne se modifie pas** depuis cette fenêtre : la déplacer changerait la semaine de la
 journée et pourrait créer un doublon avec une autre déjà déclarée. Effacer et refaire reste le
 chemin pour ça. La photo ne bouge pas non plus.
