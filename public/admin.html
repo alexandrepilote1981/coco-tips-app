@@ -178,6 +178,45 @@
   .transfer-btn.owed-employer { background: #D4A857; }
   /* La poubelle d'une journée reste grise au repos et ne devient rouge qu'au survol : dans un
      tableau où chaque rangée en porte une, une colonne de rouge se lirait comme une alerte. */
+  /* Le crayon vit à côté de la poubelle, gris au repos comme elle : dans un tableau où
+     chaque rangée porte deux boutons, une colonne de couleur se lirait comme une alerte. */
+  .day-edit-btn {
+    background: none; border: 0; color: #8993A4; cursor: pointer;
+    padding: 4px 5px; border-radius: 6px; line-height: 0; margin-right: 2px;
+  }
+  .day-edit-btn:hover { color: #6FBF93; background: rgba(111,191,147,0.12); }
+  .entry-grille { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .entry-grille label { font-size: 11px; color: #8993A4; }
+  .entry-grille input {
+    width: 100%; margin-top: 4px; padding: 9px 10px; font-size: 14px;
+    background: #10151D; color: #F1EFEA; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  }
+  #entryMontant {
+    padding: 9px 10px; font-size: 14px; background: #10151D; color: #F1EFEA;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  }
+  .entry-net {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(111,191,147,0.1); border-radius: 10px; padding: 10px 12px; margin-top: 12px;
+  }
+  .entry-net span { font-size: 11px; color: #8993A4; font-weight: 700; letter-spacing: 0.04em; }
+  .entry-net b { font-family: Fraunces, serif; font-size: 17px; font-weight: 800; color: #6FBF93; }
+  .entry-net.negatif b { color: #E2685A; }
+  .entry-avant { font-size: 10.5px; color: #8993A4; margin-top: 5px; }
+  .entry-avis {
+    background: rgba(226,104,90,0.12); border: 1px solid rgba(226,104,90,0.35);
+    border-radius: 10px; padding: 9px 11px; margin-bottom: 14px;
+  }
+  .entry-avis b { display: block; font-size: 11.5px; color: #E2685A; line-height: 1.35; }
+  .entry-avis span { display: block; font-size: 11px; color: #8993A4; margin-top: 3px; line-height: 1.35; }
+  .entry-sens { display: flex; gap: 6px; margin-bottom: 8px; }
+  .entry-sens button {
+    flex: 1; height: 34px; font-size: 11.5px; border: 0; border-radius: 8px;
+    background: rgba(255,255,255,0.07); color: #8993A4; cursor: pointer;
+  }
+  .entry-sens button.actif { background: #6FBF93; color: #10151D; font-weight: 700; }
+  .entry-hotesse { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: #F1EFEA; }
+  .entry-hotesse input { width: 17px; height: 17px; accent-color: #6FBF93; }
   .day-del-btn {
     background: none; color: #8993A4; padding: 4px 6px; border-radius: 6px; line-height: 0;
   }
@@ -769,7 +808,60 @@
   </div>
 </div>
 
+<!-- Corriger une journée déclarée. Une FENÊTRE et pas une édition dans le tableau : le
+     tableau des journées glisse déjà de côté sur un téléphone, taper dedans serait une
+     misère. Elle reprend la boîte de la fenêtre de quart, que l'équipe connaît déjà. -->
+<div id="entryModalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header-row">
+      <h3 id="entryModalTitle"></h3>
+      <button class="modal-close-x" id="entryModalCloseX">✕</button>
+    </div>
+    <p id="entryModalQui" style="font-size:13px; font-weight:700; color:#F1EFEA; margin:-4px 0 12px;"></p>
+
+    <!-- L'avertissement n'apparaît que si le virement est déjà marqué reçu. On ne BLOQUE
+         pas — c'est son commerce — mais ça se lit AVANT d'enregistrer, pas après. -->
+    <div id="entryVireAvis" class="entry-avis" style="display:none;"></div>
+
+    <div class="entry-grille">
+      <label><span id="lblVentes"></span><input id="entryVentes" inputmode="decimal" /></label>
+      <label><span id="lblClients"></span><input id="entryClients" inputmode="numeric" /></label>
+      <label><span id="lblPct"></span><input id="entryPct" inputmode="decimal" /></label>
+      <label><span id="lblRemis"></span><input id="entryRemis" inputmode="decimal" /></label>
+    </div>
+
+    <div class="entry-net">
+      <span id="lblNet"></span>
+      <b id="entryNet"></b>
+    </div>
+    <div class="entry-avant" id="entryAvant"></div>
+
+    <div style="margin-top:14px;">
+      <div class="employee-stat-label" id="lblVirement"></div>
+      <div class="entry-sens">
+        <button type="button" data-sens="" id="sensAucun"></button>
+        <button type="button" data-sens="employee_owes" id="sensElleDoit"></button>
+        <button type="button" data-sens="employer_owes" id="sensJeDois"></button>
+      </div>
+      <input id="entryMontant" inputmode="decimal" style="width:100%;" />
+    </div>
+
+    <label class="entry-hotesse">
+      <input type="checkbox" id="entryHotesse" />
+      <span id="lblHotesse"></span>
+    </label>
+
+    <div class="modal-actions" style="margin-top:16px;">
+      <button id="entrySaveBtn"></button>
+      <button class="secondary" id="entryCancelBtn" style="flex:0 0 92px;"></button>
+    </div>
+  </div>
+</div>
+
 <!-- Grille d'horaire commune à cette page et à /horaire : une seule définition. -->
+<!-- Le calcul des pourboires, le même que côté serveur. La fenêtre de correction montre
+     le net pendant qu'on tape : le recopier ici le ferait diverger en silence. -->
+<script src="/shared/tip-math.js"></script>
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/absences.js"></script>
@@ -1162,6 +1254,23 @@ const I18N = {
     confirmRetirerEmploye: "Retirer cet employé et ses données?",
     thEffacer: "",
     effacerJournee: "Effacer cette journée",
+    modifierJournee: "Corriger cette journée",
+    corrigerTitre: "Corriger la journée",
+    champVentes: "Ventes $",
+    champClients: "Clients",
+    champPct: "Pourboire %",
+    champRemis: "Remis à l'hôtesse $",
+    champNet: "POURBOIRE NET",
+    netAvant: (montant) => `Se recalcule pendant que tu tapes. Avant : ${montant}`,
+    champVirement: "Virement",
+    sensAucun: "Aucun",
+    sensElleDoit: "Elle me doit",
+    sensJeDois: "Je lui dois",
+    champHotesse: "Journée d'hôtesse",
+    vireDejaRecu: (montant) => `Le virement de ${montant} est déjà marqué réglé.`,
+    vireDejaRecuSuite: "Si le montant change, la marque reste. À toi de la retirer au besoin.",
+    corrigerEnregistrer: "Enregistrer",
+    corrigerAnnuler: "Annuler",
     confirmEffacerJournee: (date) =>
       `Effacer la journée du ${date}? Les ventes, les pourboires et la photo partent avec. Impossible à annuler.`,
     // Un virement déjà marqué fait veut dire que de l'argent a changé de mains. On ne bloque
@@ -1408,6 +1517,23 @@ const I18N = {
     confirmRetirerEmploye: "Remove this employee and their data?",
     thEffacer: "",
     effacerJournee: "Delete this day",
+    modifierJournee: "Correct this day",
+    corrigerTitre: "Correct the day",
+    champVentes: "Sales $",
+    champClients: "Guests",
+    champPct: "Tip %",
+    champRemis: "Given to host $",
+    champNet: "NET TIPS",
+    netAvant: (montant) => `Recalculated as you type. Before: ${montant}`,
+    champVirement: "Transfer",
+    sensAucun: "None",
+    sensElleDoit: "They owe me",
+    sensJeDois: "I owe them",
+    champHotesse: "Host shift",
+    vireDejaRecu: (montant) => `The ${montant} transfer is already marked settled.`,
+    vireDejaRecuSuite: "If the amount changes, the mark stays. Remove it yourself if needed.",
+    corrigerEnregistrer: "Save",
+    corrigerAnnuler: "Cancel",
     confirmEffacerJournee: (date) =>
       `Delete the day of ${date}? Sales, tips and the photo go with it. This cannot be undone.`,
     confirmEffacerJourneeViree: (date, montant) =>
@@ -2148,7 +2274,7 @@ function render() {
                     <td>${fmtMoney(d.moyenne)}</td>
                     <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
                     <td>${virementCell}</td>
-                    <td><button class="day-del-btn" data-action="delEntry" data-entry="${d.id}" data-date="${fmtDateShort(d.date)}" data-vire="${d.transferred ? fmtMoney(d.remit_amount) : ""}" title="${t("effacerJournee")}" aria-label="${t("effacerJournee")}">${icon("trash2", 13)}</button></td>
+                    <td><button class="day-edit-btn" data-action="editEntry" data-entry="${d.id}" title="${t("modifierJournee")}" aria-label="${t("modifierJournee")}">${icon("edit", 13)}</button><button class="day-del-btn" data-action="delEntry" data-entry="${d.id}" data-date="${fmtDateShort(d.date)}" data-vire="${d.transferred ? fmtMoney(d.remit_amount) : ""}" title="${t("effacerJournee")}" aria-label="${t("effacerJournee")}">${icon("trash2", 13)}</button></td>
                   </tr>
                 `;}).join("")}
               </tbody>
@@ -2580,6 +2706,10 @@ function render() {
     });
   });
 
+  document.querySelectorAll('[data-action="editEntry"]').forEach((btn) => {
+    btn.addEventListener("click", () => ouvrirCorrection(btn.dataset.entry));
+  });
+
   document.querySelectorAll('[data-action="delEntry"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       const { entry, date, vire } = btn.dataset;
@@ -2840,6 +2970,122 @@ async function downloadBackup(btn) {
 // La moyenne par client est donc calculée partout comme `Math.moyenne` le fait dans
 // tip-math.js — ventes ÷ clients. C'est la définition qui a cours dans tout le reste de
 // l'app ; en avoir une deuxième ici était l'erreur.
+// ---------------------------------------------------------------- corriger une journée
+//
+// Le gérant pouvait effacer une journée déclarée mais pas la réparer. Pour une coquille —
+// 1 240 $ tapé 12 400 — il fallait rejoindre l'employée et lui expliquer où taper, ou tout
+// effacer et lui demander de recommencer.
+//
+// L'état vit au niveau du module, comme `fichesOuvertes` : `render()` reconstruit toute la
+// page, et un identifiant posé sur un nœud ne survivrait pas au premier rafraîchissement.
+let journeeEnCorrection = null;
+
+function journeeParId(entryId) {
+  for (const r of (overview && overview.restaurants) || [])
+    for (const e of r.employees || [])
+      for (const d of e.entries || []) if (d.id === entryId) return { employe: e, journee: d };
+  return null;
+}
+
+// Le net affiché pendant la frappe. Il passe par TipMath — la même fonction que le serveur —
+// parce que ce calcul a déjà existé en double dans ce dépôt et que les deux versions avaient
+// divergé en silence : l'écran montrait un montant, la base en gardait un autre.
+function majNetCorrection() {
+  const lu = (id) => document.getElementById(id).value;
+  const calcule = TipMath.computeEntry({ ventes: lu("entryVentes"), clients: lu("entryClients"), pct: lu("entryPct"), remis: lu("entryRemis") });
+  const boite = document.querySelector(".entry-net");
+  document.getElementById("entryNet").textContent = fmtMoney(calcule.net);
+  // Un net négatif est un cas réel — elle a remis plus que son pourboire brut — mais il doit
+  // se voir : en vert, il se lirait comme une somme qu'elle a gagnée.
+  boite.classList.toggle("negatif", calcule.net < 0);
+}
+
+function majSensCorrection(sens) {
+  for (const b of document.querySelectorAll(".entry-sens button")) b.classList.toggle("actif", b.dataset.sens === (sens || ""));
+  // Sans sens de virement il n'y a pas de montant : le champ disparaît plutôt que de rester
+  // là avec un chiffre qui ne compte plus.
+  document.getElementById("entryMontant").style.display = sens ? "block" : "none";
+}
+
+function ouvrirCorrection(entryId) {
+  const trouve = journeeParId(entryId);
+  if (!trouve) return;
+  const { employe, journee } = trouve;
+  journeeEnCorrection = { id: entryId, netAvant: journee.net };
+
+  document.getElementById("entryModalTitle").textContent = t("corrigerTitre");
+  document.getElementById("entryModalQui").textContent = `${employe.name} · ${fmtDateLong(journee.date)}`;
+  for (const [id, cle] of [["lblVentes", "champVentes"], ["lblClients", "champClients"], ["lblPct", "champPct"],
+                           ["lblRemis", "champRemis"], ["lblNet", "champNet"], ["lblVirement", "champVirement"],
+                           ["lblHotesse", "champHotesse"], ["sensAucun", "sensAucun"],
+                           ["sensElleDoit", "sensElleDoit"], ["sensJeDois", "sensJeDois"],
+                           ["entrySaveBtn", "corrigerEnregistrer"], ["entryCancelBtn", "corrigerAnnuler"]])
+    document.getElementById(id).textContent = t(cle);
+
+  document.getElementById("entryVentes").value = journee.ventes || 0;
+  document.getElementById("entryClients").value = journee.clients || 0;
+  document.getElementById("entryPct").value = journee.pct || 0;
+  document.getElementById("entryRemis").value = journee.remis || 0;
+  document.getElementById("entryMontant").value = journee.remit_amount || 0;
+  document.getElementById("entryHotesse").checked = !!journee.is_hotesse;
+  document.getElementById("entryAvant").textContent = t("netAvant", fmtMoney(journee.net));
+
+  // L'avertissement : les chiffres se recalculent, l'argent déjà viré entre deux personnes
+  // non. C'est le piège qu'on veut fermer avant la tape, pas après.
+  const avis = document.getElementById("entryVireAvis");
+  if (journee.transferred && journee.remit_amount) {
+    // Les deux textes sortent de nos dictionnaires et d'un montant formaté : on les pose en
+    // TEXTE et pas en HTML, pour ne pas ouvrir un chemin d'injection là où il n'en faut pas.
+    const titre = document.createElement("b");
+    titre.textContent = `⚠ ${t("vireDejaRecu", fmtMoney(journee.remit_amount))}`;
+    const suite = document.createElement("span");
+    suite.textContent = t("vireDejaRecuSuite");
+    avis.replaceChildren(titre, suite);
+    avis.style.display = "block";
+  } else {
+    avis.style.display = "none";
+  }
+
+  majSensCorrection(journee.remit_direction || "");
+  majNetCorrection();
+  document.getElementById("entryModalOverlay").style.display = "flex";
+}
+
+function fermerCorrection() {
+  document.getElementById("entryModalOverlay").style.display = "none";
+  journeeEnCorrection = null;
+}
+
+async function enregistrerCorrection() {
+  if (!journeeEnCorrection) return;
+  const bouton = document.getElementById("entrySaveBtn");
+  const actif = document.querySelector(".entry-sens button.actif");
+  const sens = actif ? actif.dataset.sens : "";
+  bouton.disabled = true;
+  try {
+    await api(`/api/admin/entries/${journeeEnCorrection.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ventes: document.getElementById("entryVentes").value,
+        clients: document.getElementById("entryClients").value,
+        pct: document.getElementById("entryPct").value,
+        remis: document.getElementById("entryRemis").value,
+        remit_direction: sens || null,
+        remit_amount: document.getElementById("entryMontant").value,
+        is_hotesse: document.getElementById("entryHotesse").checked,
+      }),
+    });
+  } catch (e) {
+    // On ne vide ni ne referme : il vient de taper ses chiffres, et laisser croire que
+    // c'est passé est pire que de le dire. Même règle que la page de l'employée.
+    bouton.disabled = false;
+    alert(e.message || "Erreur");
+    return;
+  }
+  fermerCorrection();
+  await load();
+}
+
 function moyenneParClient(ventes, clients) {
   return clients > 0 ? ventes / clients : 0;
 }
@@ -3144,6 +3390,20 @@ ScheduleUI.init({
   rerender: () => render(),
 });
 ScheduleUI.bindShiftModal();
+
+// La fenêtre de correction vit hors de #app, comme celle des quarts : ses écouteurs se
+// posent UNE fois. Les rebrancher dans render() en empilerait un de plus à chaque
+// rafraîchissement, et un enregistrement partirait en double.
+document.getElementById("entryModalCloseX").addEventListener("click", fermerCorrection);
+document.getElementById("entryCancelBtn").addEventListener("click", fermerCorrection);
+document.getElementById("entrySaveBtn").addEventListener("click", enregistrerCorrection);
+document.getElementById("entryModalOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "entryModalOverlay") fermerCorrection();
+});
+for (const champ of ["entryVentes", "entryClients", "entryPct", "entryRemis"])
+  document.getElementById(champ).addEventListener("input", majNetCorrection);
+for (const bouton of document.querySelectorAll(".entry-sens button"))
+  bouton.addEventListener("click", () => majSensCorrection(bouton.dataset.sens));
 
 if (TOKEN) load(); else renderLogin();
 // Tirer vers le bas depuis le haut de la page recharge les données, sans repartir de zéro.

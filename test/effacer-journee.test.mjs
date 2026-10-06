@@ -266,3 +266,127 @@ test("mettre des pastilles de côté en lot", async (t) => {
     assert.equal(res.status, 401);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// CORRIGER une journée déclarée, depuis le tableau de bord.
+//
+// Même famille que l'effacement, et né de la même question : « j'aimerais savoir comment
+// modifier la déclaration d'une fille ». Avant, pour une coquille — 1 240 $ tapé 12 400 — il
+// fallait rejoindre l'employée ou tout effacer et lui demander de recommencer.
+//
+// Ce qui se joue : de l'argent, et trois faits qui ne se recalculent PAS tout seuls.
+test("corriger les chiffres d'une journée déclarée", async (t) => {
+  const dossier = mkdtempSync(path.join(tmpdir(), "declara-corriger-"));
+  const { proc, base } = await demarrerServeur(dossier);
+  t.after(() => {
+    proc.kill("SIGKILL");
+    rmSync(dossier, { recursive: true, force: true });
+  });
+
+  const admin = (chemin, opts = {}) =>
+    fetch(`${base}${chemin}`, {
+      ...opts,
+      headers: { "Content-Type": "application/json", "X-Admin-Token": MOT_DE_PASSE, ...(opts.headers || {}) },
+    });
+
+  const resto = await (await admin("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Chez Coco" }) })).json();
+  const creer = (name) => admin("/api/admin/employees", { method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name }) }).then((r) => r.json());
+  const marie = await creer("Marie Tremblay");
+  const sophie = await creer("Sophie Roy");
+
+  const declarer = (emp, date, corps) =>
+    fetch(`${base}/api/employee/${emp.access_code}/entries`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, clients: 62, pct: 12, remis: 0, ...corps }),
+    }).then((r) => r.json());
+  const journee = async (emp, i = 0) =>
+    (await (await fetch(`${base}/api/employee/${emp.access_code}`)).json()).entries[i];
+  const corriger = (id, corps) => admin(`/api/admin/entries/${id}`, { method: "PATCH", body: JSON.stringify(corps) });
+
+  // La coquille : un zéro de trop, la journée déjà envoyée, le virement déjà réglé.
+  const coquille = await declarer(marie, "2026-10-03", { ventes: 12400, remit_direction: "employee_owes", remit_amount: 75 });
+  await fetch(`${base}/api/employee/${marie.access_code}/entries/${coquille.id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" } });
+  await admin(`/api/admin/entries/${coquille.id}/transferred`, { method: "POST", body: JSON.stringify({ transferred: true }) });
+  // Une collègue a déclaré LE MÊME JOUR.
+  const voisine = await declarer(sophie, "2026-10-03", { ventes: 900, clients: 40, pct: 11 });
+
+  await t.test("les chiffres et le net se refont", async () => {
+    const rep = await corriger(coquille.id, { ventes: 1240, clients: 62, pct: 12, remis: 0, remit_direction: "employee_owes", remit_amount: 75 });
+    assert.equal(rep.status, 200);
+    // Le net revient dans la réponse : la page affiche le montant neuf sans recharger.
+    // On compare à un cent près : 1240 × 0,12 vaut 148,799999… en virgule flottante, et
+    // l'app n'arrondit qu'à l'affichage. Exiger l'égalité exacte testerait la représentation
+    // des nombres, pas le calcul des pourboires.
+    const aUnCentPres = (a, b, quoi) => assert.ok(Math.abs(a - b) < 0.005, `${quoi} : ${a} ≈ ${b}`);
+    aUnCentPres((await rep.json()).entry.net, 148.8, "le net rendu");
+
+    const apres = await journee(marie);
+    assert.equal(apres.ventes, 1240);
+    aUnCentPres(apres.net, 148.8, "1240 × 12 % — recalculé, jamais stocké");
+  });
+
+  await t.test("la journée NE repasse PAS « à envoyer »", async () => {
+    // C'est la différence avec la saisie de l'employée, où corriger après coup remet la
+    // journée dans sa pile. Ici c'est le gérant qui corrige : elle n'a rien à renvoyer, et
+    // la remettre dans sa liste lui ferait refaire un geste pour une faute qui n'est pas la
+    // sienne.
+    assert.ok((await journee(marie)).submitted_at, "elle reste envoyée");
+  });
+
+  await t.test("le virement déjà réglé reste réglé", async () => {
+    // Les chiffres se recalculent, l'argent qui a circulé entre deux personnes non. La
+    // fenêtre le dit en rouge AVANT d'enregistrer ; le serveur, lui, n'y touche pas.
+    const d = await journee(marie);
+    assert.equal(!!d.transferred, true);
+    assert.equal(d.remit_amount, 75);
+  });
+
+  await t.test("la trace « modifiée après coup » reste possible", async () => {
+    // `data_updated_at` bouge à chaque correction : c'est ce qui permet au tableau de bord
+    // d'écrire « modifiée le … ». Sans ça, un chiffre pourrait changer sans laisser de trace.
+    const d = await journee(marie);
+    assert.ok(d.data_updated_at, "la date de dernière modification est écrite");
+    assert.ok(d.data_updated_at >= d.created_at);
+  });
+
+  await t.test("la journée du MÊME JOUR d'une collègue ne bouge pas", async () => {
+    // La borne qui compte le plus, comme pour l'effacement.
+    const d = await journee(sophie);
+    assert.equal(d.id, voisine.id);
+    assert.equal(d.ventes, 900);
+    assert.equal(d.net, 99);
+  });
+
+  await t.test("une saisie de travers vaut zéro, jamais NaN", async () => {
+    // Un NaN se propagerait ensuite dans TOUS les totaux du restaurant sans rien afficher
+    // d'anormal. Les montants ne descendent pas sous zéro non plus — c'est le NET qui peut
+    // être négatif, et il se calcule.
+    const rep = await corriger(coquille.id, { ventes: "abc", clients: -5, pct: 300, remis: "", remit_direction: "hop", remit_amount: 999 });
+    const e = (await rep.json()).entry;
+    assert.equal(e.ventes, 0);
+    assert.equal(e.clients, 0);
+    assert.equal(e.pct, 100, "un pourcentage se plafonne à 100");
+    assert.equal(e.remis, 0);
+    assert.equal(e.remit_direction, null, "un sens inconnu ne s'écrit pas");
+    assert.equal(e.remit_amount, 0, "et sans sens, aucun montant");
+    assert.ok(Number.isFinite(e.net));
+  });
+
+  await t.test("un net négatif passe : elle a remis plus que son brut", async () => {
+    const rep = await corriger(coquille.id, { ventes: 1000, clients: 50, pct: 10, remis: 300 });
+    assert.equal((await rep.json()).entry.net, -200);
+  });
+
+  await t.test("une journée qui n'existe plus répond 404", async () => {
+    // Comme l'effacement : un double envoi ne doit pas se lire comme deux corrections.
+    assert.equal((await corriger("jamaisvu", { ventes: 1 })).status, 404);
+  });
+
+  await t.test("la porte reste fermée sans le mot de passe", async () => {
+    const r = await fetch(`${base}/api/admin/entries/${coquille.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ventes: 99999 }),
+    });
+    assert.equal(r.status, 401);
+    assert.notEqual((await journee(marie)).ventes, 99999, "et rien n'a été écrit");
+  });
+});
