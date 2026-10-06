@@ -1364,6 +1364,66 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`document.getElementById("customClear").click()`);
   });
 
+  await t.test("DEUX corrections d'affilée, et non une seule", async () => {
+    // Le bogue vécu, rapporté ainsi : « ça marchait pour un mais l'autre que j'ai voulu
+    // modifier ça s'enregistre pas quand j'appuie sur le piton ».
+    //
+    // L'enregistrement désactive le bouton le temps de l'aller-retour, et ne le réactivait
+    // que dans le `catch`. Une correction RÉUSSIE le laissait donc désactivé pour toujours :
+    // la fenêtre se rouvrait normalement, les champs se remplissaient, et taper
+    // « Enregistrer » ne faisait plus rien — sans un mot d'explication.
+    //
+    // D'où un test qui corrige DEUX journées de suite. Un test qui n'en corrige qu'une passe
+    // au vert sur le bogue même, ce qui est exactement ce qui s'est produit.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Corrections" }),
+    })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: "Carla Corrige", secteur: "salle" }),
+    })).json();
+    const declarer = (date, ventes) =>
+      fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, ventes, clients: 50, pct: 10, remis: 0 }),
+      }).then((r) => r.json());
+    await declarer("2026-10-02", 10000);
+    await declarer("2026-10-03", 20000);
+
+    await ouvrirAdmin();
+    await onglet.ev(`[...document.querySelectorAll('[data-action="toggleFiche"]')]
+      .find((b) => b.textContent.includes("Carla Corrige")).click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="editEntry"]')`), { quoi: "le crayon" });
+
+    const corriger = async (rang, montant) => {
+      await onglet.ev(`document.querySelectorAll('[data-action="editEntry"]')[${rang}].click()`);
+      await jusqua(() => onglet.ev(`document.getElementById("entryModalOverlay").style.display === "flex"`), { quoi: "la fenêtre" });
+      // Le cœur du test : le bouton doit être ARMÉ à chaque ouverture.
+      assert.equal(
+        await onglet.ev(`document.getElementById("entrySaveBtn").disabled`),
+        false,
+        `le bouton doit être actif à l'ouverture (correction ${rang + 1})`
+      );
+      await onglet.ev(`(() => { const c = document.getElementById("entryVentes");
+        c.value = "${montant}"; c.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`);
+      await onglet.ev(`document.getElementById("entrySaveBtn").click()`);
+      await jusqua(() => onglet.ev(`document.getElementById("entryModalOverlay").style.display === "none"`), { quoi: "la fermeture" });
+    };
+
+    await corriger(0, 1000);
+    // La fiche se referme au rechargement : on la rouvre pour atteindre la seconde journée.
+    await onglet.ev(`[...document.querySelectorAll('[data-action="toggleFiche"]')]
+      .find((b) => b.textContent.includes("Carla Corrige")).click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="editEntry"]')`), { quoi: "le crayon, encore" });
+    await corriger(1, 2000);
+
+    // On compare l'ENSEMBLE des montants plutôt que date par date : le tableau est trié du
+    // plus récent au plus ancien, et accrocher le test à cet ordre le ferait tomber le jour
+    // où le tri change — pour une raison qui n'a rien à voir avec ce qu'on vérifie ici.
+    const journees = await (await fetch(`${serveur.base}/api/employee/${emp.access_code}`)).json();
+    const montants = journees.entries.map((d) => d.ventes).sort((a, b) => a - b);
+    assert.deepEqual(montants, [1000, 2000], "les DEUX corrections sont passées, pas juste la première");
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
