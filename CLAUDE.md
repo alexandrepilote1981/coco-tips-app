@@ -671,6 +671,59 @@ journée, sinon un justificatif sans sa journée resterait sur le volume pour ri
 `test/effacer-journee.test.mjs` couvre les quatre bornes, dont celle qui compte le plus :
 la journée du MÊME JOUR d'un collègue ne bouge pas.
 
+### Corriger une journée déclarée
+
+Chaque ligne du détail par jour porte aussi un **crayon**, à gauche de la poubelle. Demandé
+ainsi : « j'aimerais savoir comment modifier la déclaration d'une fille ». Avant, pour une
+coquille — 1 240 $ tapé 12 400 — il fallait rejoindre l'employée et lui expliquer où taper sur
+sa page à elle, ou tout effacer et lui demander de recommencer.
+
+Le crayon est **gris au repos** comme la poubelle, et ne se colore qu'au survol : dans un
+tableau où chaque rangée porte deux boutons, une colonne de couleur se lirait comme une alerte.
+
+Une **fenêtre**, pas une édition dans le tableau : le tableau des journées glisse déjà
+latéralement sur un téléphone, taper dedans serait une misère. Elle reprend la boîte de la
+fenêtre de quart, que l'équipe connaît.
+
+Quatre champs seulement — ventes, clients, %, remis — parce que c'est tout ce que l'employée
+déclare. Le reste se calcule. Trois choses rendent la fenêtre sûre :
+
+- **le net se recalcule pendant la frappe, et le montant d'AVANT reste écrit en dessous.**
+  C'est ce qui dit si on corrige une coquille ou si on change vraiment quelque chose ;
+- un **net négatif rougit** — il est légitime (elle a remis plus que son brut) mais en vert il
+  se lirait comme une somme gagnée ;
+- un **avertissement rouge** quand le virement est déjà marqué réglé. On ne BLOQUE pas, c'est
+  son commerce, mais ça se lit avant la tape et pas après.
+
+Le calcul passe par `TipMath.computeEntry` — `admin.html` charge donc `tip-math.js`. Le
+recopier ici était exactement l'erreur d'origine de ce fichier : la page montrait un montant,
+la base en gardait un autre.
+
+**Trois différences avec la saisie de l'employée**, et ce sont elles qui comptent :
+
+| | sur sa page à elle | par le crayon du gérant |
+| --- | --- | --- |
+| `submitted_at` | remis à NULL — la journée repasse « à envoyer » | **ne bouge pas** |
+| `data_updated_at` | bouge | bouge — la trace « modifiée le … » vaut aussi pour le gérant |
+| `transferred` | ne bouge pas | ne bouge pas |
+
+La première est le vrai choix : « envoyée » doit désigner le contenu réellement transmis,
+donc quand ELLE corrige, la journée retourne dans sa pile. Quand c'est le GÉRANT qui corrige,
+elle n'a rien à renvoyer — la remettre dans sa liste lui ferait refaire un geste pour une
+faute qui n'est pas la sienne, et ferait monter la pastille rouge à chaque coquille réparée.
+
+**La date ne se modifie pas** depuis cette fenêtre : la déplacer changerait la semaine de la
+journée et pourrait créer un doublon avec une autre déjà déclarée. Effacer et refaire reste le
+chemin pour ça. La photo ne bouge pas non plus.
+
+Côté serveur, `PATCH /api/admin/entries/:id` répond **404 si la journée n'existe plus** — comme
+l'effacement, un double envoi ne doit pas se lire comme deux corrections. Les nombres passent
+par `TipMath.toNumber` et non `|| 0` : une saisie de travers vaut zéro et jamais NaN, qui se
+propagerait dans tous les totaux du restaurant sans rien afficher d'anormal. Les montants ne
+descendent pas sous zéro et le pourcentage se plafonne à 100 ; c'est le NET qui peut être
+négatif, et il se calcule. Les neuf bornes sont dans `test/effacer-journee.test.mjs`, dont
+celle qui compte le plus : **la journée du MÊME JOUR d'une collègue ne bouge pas**.
+
 **Effacer un restaurant laissait des orphelins** — les absences et les disponibilités de son
 monde survivaient, rattachées à des employés disparus. La route qui efface UN employé les
 effaçait depuis toujours ; celle du restaurant ne les avait jamais reprises. Le test de cette
@@ -1207,8 +1260,10 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   seulement quand l'archive a vraiment été produite, et qui survit à un redémarrage.
 - `test/effacer-journee.test.mjs` — ce que le gérant peut faire à une journée déclarée :
   l'effacer (la bonne et elle seule, un second effacement qui répond 404, la porte fermée
-  sans mot de passe, le restaurant qui ne laisse plus d'orphelins), et ranger ses pastilles
-  en lot sans mélanger les deux sortes ni toucher à `updated_at`.
+  sans mot de passe, le restaurant qui ne laisse plus d'orphelins), la CORRIGER (le net se
+  refait, « envoyée » survit, le virement réglé reste réglé, et la journée du même jour d'une
+  collègue ne bouge pas), et ranger ses pastilles en lot sans mélanger les deux sortes ni
+  toucher à `updated_at`.
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
   aucun Chrome/Chromium n'est installé.

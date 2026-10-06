@@ -16,7 +16,8 @@ const { guard, blocageSecondes, refuser, noteFailure, clearFailures, noteSuccess
 const Mdp = require("./mdp");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
-const { computeEntry } = require("./public/shared/tip-math.js");
+const TipMath = require("./public/shared/tip-math.js");
+const { computeEntry } = TipMath;
 const CoutMainOeuvre = require("./public/shared/cout-main-oeuvre.js");
 const { buildBackupZip } = require("./backup");
 
@@ -1491,6 +1492,58 @@ app.delete("/api/admin/entries/:entryId", requireAdmin, (req, res) => {
   // plus à rien et continuerait d'occuper le volume.
   deletePhotoFiles([entry]);
   res.json({ ok: true, date: entry.date });
+});
+
+// Corriger les chiffres d'une journée déclarée, depuis le tableau de bord.
+//
+// Ça n'existait nulle part : le gérant pouvait EFFACER une journée mais pas la réparer. Pour
+// une coquille — 1 240 $ tapé 12 400 — il fallait rejoindre l'employée et lui expliquer où
+// taper, ou tout effacer et lui demander de recommencer. Demandé ainsi : « j'aimerais savoir
+// comment modifier la déclaration d'une fille ».
+//
+// Trois décisions qui font la différence avec la saisie de l'employée :
+//
+// 1. `submitted_at` N'EST PAS remis à NULL. Sur sa page à elle, corriger un chiffre après
+//    avoir envoyé remet la journée « à envoyer » — « envoyée » doit désigner le contenu
+//    réellement transmis. Ici c'est le GÉRANT qui corrige : elle n'a rien à renvoyer, et la
+//    remettre dans sa pile lui ferait refaire un geste pour une faute qui n'est pas la sienne.
+// 2. `data_updated_at` BOUGE, donc la journée porte « modifiée le … ». C'est la trace que le
+//    chiffre a changé après la déclaration, et elle vaut autant quand c'est le gérant.
+// 3. `transferred` ne bouge pas. Si le virement était marqué reçu, il le reste — c'est un
+//    fait entre deux personnes, pas un calcul. La fenêtre le dit en rouge avant d'enregistrer.
+//
+// La date n'est pas modifiable ici : la déplacer changerait la semaine de la journée et
+// pourrait créer un doublon avec une autre déjà déclarée. Effacer et refaire reste le chemin
+// pour ça. La photo ne bouge pas non plus.
+app.patch("/api/admin/entries/:entryId", requireAdmin, (req, res) => {
+  const entry = db.prepare("SELECT id FROM entries WHERE id = ?").get(req.params.entryId);
+  // Comme pour l'effacement : un double envoi ne doit pas se lire comme deux corrections.
+  if (!entry) return res.status(404).json({ error: "Journée introuvable" });
+
+  // `TipMath.toNumber` et pas `|| 0` : un champ vidé ou une saisie de travers vaut zéro et
+  // jamais NaN, qui se propagerait ensuite dans tous les totaux. Les montants ne descendent
+  // pas sous zéro — c'est le NET qui peut être négatif, quand elle a remis plus que son
+  // pourboire brut, et il se calcule.
+  const positif = (v) => Math.max(0, TipMath.toNumber(v));
+  const ventes = positif(req.body.ventes);
+  const clients = positif(req.body.clients);
+  const pct = Math.min(100, positif(req.body.pct));
+  const remis = positif(req.body.remis);
+
+  const direction = ["employer_owes", "employee_owes"].includes(req.body.remit_direction)
+    ? req.body.remit_direction
+    : null;
+  const montant = direction ? positif(req.body.remit_amount) : 0;
+  const hotesse = req.body.is_hotesse ? 1 : 0;
+
+  db.prepare(
+    `UPDATE entries SET ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?,
+     is_hotesse=?, data_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?`
+  ).run(ventes, clients, pct, remis, direction, montant, hotesse, entry.id);
+
+  // On rend la journée recalculée : la page affiche le net neuf sans attendre un rechargement.
+  const apres = computeEntry(db.prepare("SELECT * FROM entries WHERE id = ?").get(entry.id));
+  res.json({ ok: true, entry: apres });
 });
 
 app.post("/api/admin/entries/:entryId/transferred", requireAdmin, (req, res) => {
