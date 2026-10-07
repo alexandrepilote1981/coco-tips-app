@@ -671,6 +671,32 @@ journée, sinon un justificatif sans sa journée resterait sur le volume pour ri
 `test/effacer-journee.test.mjs` couvre les quatre bornes, dont celle qui compte le plus :
 la journée du MÊME JOUR d'un collègue ne bouge pas.
 
+### Le relevé photo s'ouvre DANS la page
+
+La vignette d'un relevé était un lien `target="_blank"` vers l'image brute. Rapporté ainsi :
+« quand j'ouvre une photo pour valider dans mon admin il n'y a pas de bouton fermer sur mon
+cell ». Sur un téléphone, cet onglet affiche le fichier image tout seul — et quand l'app est
+ajoutée à l'écran d'accueil, ce que ce dépôt prévoit avec `apple-mobile-web-app-title`, il
+s'ouvre **sans barre de navigateur** : ni bouton fermer, ni flèche retour. On est coincé.
+
+La photo s'affiche donc dans une fenêtre de la page, qui se ferme de trois façons : un bouton
+**pleine largeur de 48 px** — le même raisonnement que le FERMER de l'alerte des fêtes, on le
+cherche d'une main sans viser —, une tape **à côté** de l'image, et la touche Échap sur un
+ordinateur.
+
+Une tape **sur l'image** ne ferme pas : on la perdrait en voulant la regarder de plus près.
+
+**La source se vide à la fermeture** (`removeAttribute("src")`). Sans ça, la prochaine
+ouverture montre une fraction de seconde la photo PRÉCÉDENTE, le temps que la nouvelle se
+charge — sur un relevé qu'on valide, voir brièvement celui de quelqu'un d'autre est franchement
+trompeur.
+
+Les **deux** pages sont corrigées, `admin.html` et `employee.html` : c'est le même défaut, et
+l'équipe est encore plus sur téléphone que le gérant. Le test (`test/ui-smoke.test.mjs`)
+vérifie d'abord qu'il ne reste **aucun** `a[href^="/api/photos"]`, puis que le bouton est
+visible à l'écran et assez haut pour le pouce — « présent dans le document » ne suffit pas,
+c'est exactement ce qui manquait.
+
 ### Corriger une journée déclarée
 
 Chaque ligne du détail par jour porte aussi un **crayon**, à gauche de la poubelle. Demandé

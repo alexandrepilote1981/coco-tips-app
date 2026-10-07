@@ -158,6 +158,29 @@
   }
   .report-table td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); white-space: nowrap; color: #D8D5CE; }
   .report-table tr:last-child td { border-bottom: none; }
+  /* La vignette ouvre une fenêtre DANS la page. Avant, c'était un lien target="_blank" vers
+     l'image brute : sur un téléphone, et surtout quand l'app est ajoutée à l'écran d'accueil
+     (apple-mobile-web-app-title), ça s'ouvre sans barre de navigateur — donc sans bouton
+     fermer ni flèche retour. Rapporté ainsi : « quand j'ouvre une photo pour valider dans mon
+     admin il n'y a pas de bouton fermer sur mon cell ». */
+  .photo-ouvre { background: none; border: 0; padding: 0; line-height: 0; cursor: pointer; }
+  #photoOverlay {
+    position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.92);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 16px;
+  }
+  #photoOverlay .photo-jour { font-size: 12px; color: #8993A4; font-weight: 700; }
+  #photoOverlay img {
+    max-width: 100%; max-height: 72vh; object-fit: contain;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);
+  }
+  /* Pleine largeur et 48 px de haut, comme le bouton de l'alerte des fêtes : on le cherche
+     d'une main, sur un téléphone, sans viser. */
+  #photoOverlay .photo-fermer {
+    width: 100%; max-width: 420px; height: 48px; border: 0; border-radius: 12px;
+    background: #6FBF93; color: #10151D; font-weight: 800; font-size: 15px;
+    letter-spacing: 0.04em; cursor: pointer;
+  }
   .report-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); vertical-align: middle; }
   .sent-badge {
     display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
@@ -811,6 +834,13 @@
 <!-- Corriger une journée déclarée. Une FENÊTRE et pas une édition dans le tableau : le
      tableau des journées glisse déjà de côté sur un téléphone, taper dedans serait une
      misère. Elle reprend la boîte de la fenêtre de quart, que l'équipe connaît déjà. -->
+<!-- Le relevé photo, en grand et DANS la page. -->
+<div id="photoOverlay" style="display:none;">
+  <div class="photo-jour" id="photoJour"></div>
+  <img id="photoGrande" alt="" />
+  <button class="photo-fermer" id="photoFermerBtn"></button>
+</div>
+
 <div id="entryModalOverlay" class="modal-overlay" style="display:none;">
   <div class="modal-box">
     <div class="modal-header-row">
@@ -1254,6 +1284,9 @@ const I18N = {
     confirmRetirerEmploye: "Retirer cet employé et ses données?",
     thEffacer: "",
     effacerJournee: "Effacer cette journée",
+    voirPhoto: "Voir le relevé",
+    photoFermer: "FERMER",
+    photoTitre: "Relevé",
     modifierJournee: "Corriger cette journée",
     corrigerTitre: "Corriger la journée",
     champVentes: "Ventes $",
@@ -1517,6 +1550,9 @@ const I18N = {
     confirmRetirerEmploye: "Remove this employee and their data?",
     thEffacer: "",
     effacerJournee: "Delete this day",
+    voirPhoto: "View receipt",
+    photoFermer: "CLOSE",
+    photoTitre: "Receipt",
     modifierJournee: "Correct this day",
     corrigerTitre: "Correct the day",
     champVentes: "Sales $",
@@ -2272,7 +2308,7 @@ function render() {
                     <td>${fmtMoney(d.remis)}</td>
                     <td style="color:#6FBF93; font-weight:700;">${fmtMoney(d.net)}</td>
                     <td>${fmtMoney(d.moyenne)}</td>
-                    <td>${d.photo_filename ? `<a href="/api/photos/${d.photo_filename}" target="_blank"><img class="report-thumb" src="/api/photos/${d.photo_filename}" /></a>` : "—"}</td>
+                    <td>${d.photo_filename ? `<button class="photo-ouvre" data-action="voirPhoto" data-photo="${d.photo_filename}" data-jour="${fmtDateShort(d.date)}" title="${t("voirPhoto")}" aria-label="${t("voirPhoto")}"><img class="report-thumb" src="/api/photos/${d.photo_filename}" alt="" /></button>` : "—"}</td>
                     <td>${virementCell}</td>
                     <td><button class="day-edit-btn" data-action="editEntry" data-entry="${d.id}" title="${t("modifierJournee")}" aria-label="${t("modifierJournee")}">${icon("edit", 13)}</button><button class="day-del-btn" data-action="delEntry" data-entry="${d.id}" data-date="${fmtDateShort(d.date)}" data-vire="${d.transferred ? fmtMoney(d.remit_amount) : ""}" title="${t("effacerJournee")}" aria-label="${t("effacerJournee")}">${icon("trash2", 13)}</button></td>
                   </tr>
@@ -2706,6 +2742,10 @@ function render() {
     });
   });
 
+  document.querySelectorAll('[data-action="voirPhoto"]').forEach((btn) => {
+    btn.addEventListener("click", () => ouvrirPhoto(btn.dataset.photo, btn.dataset.jour));
+  });
+
   document.querySelectorAll('[data-action="editEntry"]').forEach((btn) => {
     btn.addEventListener("click", () => ouvrirCorrection(btn.dataset.entry));
   });
@@ -2970,6 +3010,31 @@ async function downloadBackup(btn) {
 // La moyenne par client est donc calculée partout comme `Math.moyenne` le fait dans
 // tip-math.js — ventes ÷ clients. C'est la définition qui a cours dans tout le reste de
 // l'app ; en avoir une deuxième ici était l'erreur.
+// ---------------------------------------------------------------- voir un relevé photo
+//
+// La vignette ouvrait l'image brute dans un nouvel onglet (`target="_blank"`). Sur un
+// téléphone — surtout quand l'app est ajoutée à l'écran d'accueil, ce que ce dépôt prévoit
+// avec `apple-mobile-web-app-title` — cet onglet s'affiche sans barre de navigateur : ni
+// bouton fermer, ni flèche retour. « Quand j'ouvre une photo pour valider dans mon admin il
+// n'y a pas de bouton fermer sur mon cell. »
+//
+// La fenêtre vit donc DANS la page, et se ferme de trois façons : le gros bouton, une tape à
+// côté de l'image, et la touche Échap sur un ordinateur.
+function ouvrirPhoto(fichier, jour) {
+  document.getElementById("photoJour").textContent = jour ? `${t("photoTitre")} · ${jour}` : t("photoTitre");
+  document.getElementById("photoGrande").src = `/api/photos/${fichier}`;
+  document.getElementById("photoFermerBtn").textContent = t("photoFermer");
+  document.getElementById("photoOverlay").style.display = "flex";
+}
+
+function fermerPhoto() {
+  document.getElementById("photoOverlay").style.display = "none";
+  // On vide la source : sans ça, l'image reste en mémoire et la prochaine ouverture montre
+  // brièvement la PRÉCÉDENTE, le temps que la nouvelle se charge. Sur un relevé qu'on valide,
+  // voir une seconde la photo de quelqu'un d'autre est franchement trompeur.
+  document.getElementById("photoGrande").removeAttribute("src");
+}
+
 // ---------------------------------------------------------------- corriger une journée
 //
 // Le gérant pouvait effacer une journée déclarée mais pas la réparer. Pour une coquille —
@@ -3401,6 +3466,15 @@ ScheduleUI.bindShiftModal();
 // La fenêtre de correction vit hors de #app, comme celle des quarts : ses écouteurs se
 // posent UNE fois. Les rebrancher dans render() en empilerait un de plus à chaque
 // rafraîchissement, et un enregistrement partirait en double.
+document.getElementById("photoFermerBtn").addEventListener("click", fermerPhoto);
+document.getElementById("photoOverlay").addEventListener("click", (e) => {
+  // Une tape À CÔTÉ ferme ; une tape SUR l'image ne ferme pas, sinon on la perd en voulant
+  // la regarder de plus près.
+  if (e.target.id === "photoOverlay") fermerPhoto();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.getElementById("photoOverlay").style.display === "flex") fermerPhoto();
+});
 document.getElementById("entryModalCloseX").addEventListener("click", fermerCorrection);
 document.getElementById("entryCancelBtn").addEventListener("click", fermerCorrection);
 document.getElementById("entrySaveBtn").addEventListener("click", enregistrerCorrection);
