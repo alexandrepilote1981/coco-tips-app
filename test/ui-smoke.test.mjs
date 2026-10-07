@@ -1424,6 +1424,69 @@ test("interface", optionsDuTest, async (t) => {
     assert.deepEqual(montants, [1000, 2000], "les DEUX corrections sont passées, pas juste la première");
   });
 
+  await t.test("le relevé photo s'ouvre DANS la page, avec un bouton pour fermer", async () => {
+    // Rapporté ainsi : « quand j'ouvre une photo pour valider dans mon admin il n'y a pas de
+    // bouton fermer sur mon cell ». La vignette était un lien `target="_blank"` vers l'image
+    // brute : sur un téléphone — surtout quand l'app est ajoutée à l'écran d'accueil, ce que
+    // ce dépôt prévoit avec `apple-mobile-web-app-title` — cet onglet s'affiche sans barre de
+    // navigateur. Ni bouton fermer, ni flèche retour.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Photo" }),
+    })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: "Paula Photo", secteur: "salle" }),
+    })).json();
+    const jour = await (await fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: "2026-10-05", ventes: 800, clients: 40, pct: 10, remis: 0 }),
+    })).json();
+    // Un PNG rouge d'un pixel : il suffit, on vérifie le comportement et pas l'image.
+    const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const envoi = await fetch(`${serveur.base}/api/employee/${emp.access_code}/entries/${jour.id}/photo`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoBase64: `data:image/png;base64,${pixel}` }),
+    });
+    assert.equal(envoi.status, 200, "le relevé est bien téléversé");
+
+    await ouvrirAdmin();
+    await onglet.ev(`[...document.querySelectorAll('[data-action="toggleFiche"]')]
+      .find((b) => b.textContent.includes("Paula Photo")).click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-action="voirPhoto"]')`), { quoi: "la vignette" });
+
+    // Le cœur du correctif : plus AUCUN lien qui emmène hors de la page.
+    assert.equal(
+      await onglet.ev(`document.querySelectorAll('a[href^="/api/photos"]').length`),
+      0,
+      "aucune vignette ne doit ouvrir l'image brute dans un onglet"
+    );
+
+    await onglet.ev(`document.querySelector('[data-action="voirPhoto"]').click()`);
+    await jusqua(() => onglet.ev(`document.getElementById("photoOverlay").style.display === "flex"`), { quoi: "la fenêtre" });
+
+    // Le bouton doit être VISIBLE à l'écran, pas seulement présent dans le document : c'est
+    // tout le problème qu'on répare.
+    const bouton = await onglet.ev(`(() => {
+      const b = document.getElementById("photoFermerBtn");
+      const r = b.getBoundingClientRect();
+      return JSON.stringify({ texte: b.textContent.trim(), hauteur: Math.round(r.height),
+        dansEcran: r.top >= 0 && r.bottom <= window.innerHeight && r.width > 100 });
+    })()`);
+    const vu = JSON.parse(bouton);
+    assert.ok(vu.texte.length > 0, "le bouton porte un libellé");
+    assert.ok(vu.hauteur >= 44, `un bouton qu'on tape du pouce : ${vu.hauteur} px`);
+    assert.equal(vu.dansEcran, true, "et il est visible sans défiler");
+
+    // Une tape SUR l'image ne ferme pas — sinon on la perd en voulant la regarder.
+    await onglet.ev(`document.getElementById("photoGrande").click()`);
+    assert.equal(await onglet.ev(`document.getElementById("photoOverlay").style.display`), "flex");
+
+    await onglet.ev(`document.getElementById("photoFermerBtn").click()`);
+    await jusqua(() => onglet.ev(`document.getElementById("photoOverlay").style.display === "none"`), { quoi: "la fermeture" });
+    // La source se vide : sinon la prochaine ouverture montre une seconde la photo
+    // PRÉCÉDENTE, ce qui est trompeur sur un relevé qu'on valide.
+    assert.equal(await onglet.ev(`!document.getElementById("photoGrande").getAttribute("src")`), true);
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

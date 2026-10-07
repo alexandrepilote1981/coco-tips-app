@@ -138,6 +138,25 @@
   .day-summary b { color: #D8D5CE; }
   .day-summary .net b { color: #6FBF93; }
   .photo-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.07); }
+  /* Même correctif que dans le tableau de bord : la vignette ouvrait l'image brute dans un
+     nouvel onglet, qui n'a ni bouton fermer ni flèche retour quand l'app est ajoutée à
+     l'écran d'accueil. La fenêtre vit donc dans la page. */
+  .photo-ouvre { background: none; border: 0; padding: 0; line-height: 0; cursor: pointer; }
+  #photoOverlay {
+    position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.92);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 16px;
+  }
+  #photoOverlay .photo-jour { font-size: 12px; color: #8993A4; font-weight: 700; }
+  #photoOverlay img {
+    max-width: 100%; max-height: 72vh; object-fit: contain;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);
+  }
+  #photoOverlay .photo-fermer {
+    width: 100%; max-width: 420px; height: 48px; border: 0; border-radius: 12px;
+    background: #6FBF93; color: #10151D; font-weight: 800; font-size: 15px;
+    letter-spacing: 0.04em; cursor: pointer;
+  }
   .photo-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); }
   .photo-empty { font-size: 11px; color: #6B7280; flex: 1; }
   .photo-btn {
@@ -330,6 +349,8 @@ const I18N = {
     pourboires: "Pourboires",
     net: "Net",
     aucunePhoto: "Aucune photo",
+    photoFermer: "FERMER",
+    photoTitre: "Mon relevé",
     remitLabel: "Montant à remettre (selon mon relevé)",
     remitNone: "Aucun",
     remitEmployerOwes: "Vous me devez",
@@ -412,6 +433,8 @@ const I18N = {
     pourboires: "Tips",
     net: "Net",
     aucunePhoto: "No photo",
+    photoFermer: "CLOSE",
+    photoTitre: "My receipt",
     remitLabel: "Amount to remit (per my statement)",
     remitNone: "None",
     remitEmployerOwes: "You owe me",
@@ -877,7 +900,7 @@ function buildCardElement(e) {
     ${formHtml}
     <div class="photo-row">
       ${e.photo_filename
-        ? `<a href="/api/photos/${e.photo_filename}" target="_blank"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="receipt" /></a>`
+        ? `<button class="photo-ouvre" data-photo="${e.photo_filename}" aria-label="${t("photoTitre")}"><img class="photo-thumb" src="/api/photos/${e.photo_filename}" alt="" /></button>`
         : `<span class="photo-empty">${t("aucunePhoto")}</span>`}
       <label class="photo-btn">
         ${icon("camera", 14)} ${e.photo_filename ? t("remplacer") : t("ajouterMot")} ${t("releve")}
@@ -1188,6 +1211,12 @@ function render() {
       }
     </div>
 
+    <div id="photoOverlay" style="display:none;">
+      <div class="photo-jour">${t("photoTitre")}</div>
+      <img id="photoGrande" alt="" />
+      <button class="photo-fermer" id="photoFermerBtn">${t("photoFermer")}</button>
+    </div>
+
     <div id="messageModalOverlay" class="modal-overlay" style="display:none;">
       <div class="modal-box">
         <div class="modal-header-row">
@@ -1308,6 +1337,27 @@ function render() {
         dispoSave.disabled = false;
       }
     });
+  }
+
+  // Le relevé en grand. Les nœuds sont neufs à chaque render(), donc les écouteurs aussi.
+  const photoOverlay = document.getElementById("photoOverlay");
+  if (photoOverlay) {
+    const grande = document.getElementById("photoGrande");
+    const fermerPhoto = () => {
+      photoOverlay.style.display = "none";
+      // On vide la source : sinon la prochaine ouverture montre brièvement la précédente.
+      grande.removeAttribute("src");
+    };
+    for (const bouton of document.querySelectorAll(".photo-ouvre")) {
+      bouton.addEventListener("click", () => {
+        grande.src = `/api/photos/${bouton.dataset.photo}`;
+        photoOverlay.style.display = "flex";
+      });
+    }
+    document.getElementById("photoFermerBtn").addEventListener("click", fermerPhoto);
+    // Une tape à côté ferme ; une tape SUR l'image ne ferme pas, sinon on la perd en voulant
+    // la regarder de plus près.
+    photoOverlay.addEventListener("click", (ev) => { if (ev.target === photoOverlay) fermerPhoto(); });
   }
 
   const messageOverlay = document.getElementById("messageModalOverlay");
