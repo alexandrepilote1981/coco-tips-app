@@ -105,6 +105,21 @@ CREATE TABLE IF NOT EXISTS absences (
   date_fin TEXT NOT NULL,
   type TEXT DEFAULT 'conge',
   note TEXT,
+  -- L'état d'une absence, depuis que l'employé peut en DEMANDER une.
+  --
+  --   accepte    : elle vaut, et la grille la marque. C'est le défaut, donc tout ce que le
+  --                gérant inscrit lui-même compte immédiatement — comme avant cette colonne.
+  --   en_attente : l'employé l'a demandée, personne n'a répondu. Elle ne marque RIEN dans la
+  --                grille : une journée qui s'affiche « Congé » pendant que le gérant hésite
+  --                encore se lirait comme un congé accordé.
+  --   refuse     : la réponse est non. On la garde pour que l'employé la voie, au lieu de la
+  --                faire disparaître sans un mot.
+  --
+  -- Une demande acceptée DEVIENT l'absence : rien n'est recopié d'une table à l'autre, donc
+  -- il n'y a pas deux vérités à tenir d'accord.
+  statut TEXT DEFAULT 'accepte',
+  reponse TEXT,
+  repondu_at TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -227,6 +242,21 @@ function makeAccessCode() {
   for (let i = 0; i < 6; i++) code += alphabet[crypto.randomInt(alphabet.length)];
   return code;
 }
+
+// Les colonnes d'état des absences, pour les bases créées avant les demandes de congé. Le
+// défaut « accepte » fait que TOUT ce qui existe déjà reste valide : une installation qui
+// tourne ne voit pas ses congés passer en attente du jour au lendemain.
+for (const col of ["statut TEXT DEFAULT 'accepte'", "reponse TEXT", "repondu_at TEXT"]) {
+  try {
+    db.exec(`ALTER TABLE absences ADD COLUMN ${col};`);
+  } catch (e) {
+    // colonne déjà présente — rien à faire
+  }
+}
+// ALTER TABLE ne remplit pas les lignes existantes avec le défaut : elles reçoivent NULL.
+// Sans cette ligne, les absences déjà en base auraient `statut = NULL` et ne seraient ni
+// acceptées ni en attente — elles disparaîtraient de la grille.
+db.exec("UPDATE absences SET statut = 'accepte' WHERE statut IS NULL OR statut = ''");
 
 // Migration défensive : ajoute la colonne schedule_code si la table restaurants existait déjà sans elle,
 // puis donne un code à tout restaurant qui n'en a pas encore (ex: restaurants créés avant cette mise à jour).

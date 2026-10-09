@@ -190,6 +190,82 @@ app.post("/api/employee/:code/disponibilites", (req, res) => {
   res.json({ disponibilites: lignes, aRepondu: Disponibilites.aRepondu(lignes) });
 });
 
+// ---------- Demandes de congé, du côté de l'employé ----------
+//
+// Jusqu'ici, un employé n'avait AUCUN moyen de demander une journée : seul le gérant pouvait
+// inscrire un congé, et l'employé ne voyait même pas celui qu'on avait noté pour lui. Sa page
+// le disait elle-même sous ses disponibilités — « pour une semaine différente, écris au
+// gérant » — et le gérant retranscrivait le message à la main dans sa grille.
+//
+// Demandé ainsi : « un employé n'est pas disponible, comment il fait pour placer sa demande
+// dans l'horaire ? Je vois les demandes de mon côté mais quand je regarde côté employé je
+// vois rien. » Ce qu'il voyait de son côté, c'était ce qu'il avait tapé lui-même.
+//
+// Une demande est une absence avec `statut = 'en_attente'`. Accepter ne fait que changer le
+// statut : la journée devient alors une absence ordinaire, marquée dans la grille et
+// signalée si on cédule quelqu'un par-dessus. Rien n'est recopié.
+
+// Deux types seulement se demandent : un congé et des vacances. `maladie` et `cnesst` se
+// constatent après coup — personne ne demande la permission d'être malade la semaine
+// prochaine —, et le gérant les inscrit lui-même comme avant.
+const TYPES_DEMANDABLES = ["conge", "vacances"];
+
+function employeParCode(code) {
+  return db.prepare("SELECT * FROM employees WHERE access_code = ?").get(String(code || "").toUpperCase());
+}
+
+// Ce que l'employé voit : ses demandes et ses congés à venir, plus les réponses récentes.
+//
+// On remonte un peu dans le passé exprès. Une demande refusée hier doit rester lisible : la
+// faire disparaître le lendemain donnerait l'impression qu'elle n'a jamais existé, et c'est
+// le genre de silence qui fait rappeler le gérant pour rien.
+app.get("/api/employee/:code/conges", (req, res) => {
+  const emp = employeParCode(req.params.code);
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+  const depuis = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const conges = db
+    .prepare("SELECT * FROM absences WHERE employee_id = ? AND date_fin >= ? ORDER BY date_debut ASC")
+    .all(emp.id, depuis);
+  res.json({ conges });
+});
+
+app.post("/api/employee/:code/conges", (req, res) => {
+  const emp = employeParCode(req.params.code);
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+
+  const propre = Absences.normaliser(req.body);
+  if (!propre) return res.status(400).json({ error: "date_debut requise (AAAA-MM-JJ)" });
+  // Le type passe par la liste blanche ET par le validateur partagé : sans ça, quelqu'un
+  // pourrait se déclarer un accident de travail depuis son téléphone.
+  const type = TYPES_DEMANDABLES.includes(propre.type) ? propre.type : "conge";
+
+  const id = nanoid(10);
+  db.prepare(`
+    INSERT INTO absences (id, employee_id, date_debut, date_fin, type, note, statut)
+    VALUES (?,?,?,?,?,?,'en_attente')
+  `).run(id, emp.id, propre.date_debut, propre.date_fin, type, propre.note.slice(0, 120));
+  res.json({ id, ...propre, type, statut: "en_attente", employee_id: emp.id });
+});
+
+// Annuler SA demande. Seulement tant qu'elle attend : une fois répondue, elle appartient à
+// l'horaire du gérant — effacer un congé accepté la veille lui retirerait de sous les pieds
+// une journée sur laquelle il a bâti sa semaine.
+app.delete("/api/employee/:code/conges/:id", (req, res) => {
+  const emp = employeParCode(req.params.code);
+  if (!emp) return res.status(404).json({ error: "Code inconnu" });
+  // Le `employee_id` dans la requête, et pas seulement l'identifiant de la demande : sans
+  // lui, n'importe quel code valide effacerait la demande de n'importe qui.
+  const demande = db
+    .prepare("SELECT * FROM absences WHERE id = ? AND employee_id = ?")
+    .get(req.params.id, emp.id);
+  if (!demande) return res.status(404).json({ error: "Demande introuvable" });
+  if (demande.statut !== "en_attente") {
+    return res.status(409).json({ error: "Cette demande a déjà reçu une réponse" });
+  }
+  db.prepare("DELETE FROM absences WHERE id = ?").run(demande.id);
+  res.json({ ok: true });
+});
+
 app.post("/api/employee/:code/entries", (req, res) => {
   const emp = db
     .prepare("SELECT * FROM employees WHERE access_code = ?")
@@ -443,10 +519,56 @@ function absencesDuRestaurant(restaurantId, secteur) {
     .prepare(`
       SELECT a.* FROM absences a
       JOIN employees e ON e.id = a.employee_id
-      WHERE e.restaurant_id = ?${conditionSecteur}
+      WHERE e.restaurant_id = ?${conditionSecteur} AND a.statut = 'accepte'
       ORDER BY a.date_debut ASC
     `)
     .all(...params);
+}
+
+// Les demandes de congé qui attendent une réponse, pour la porte qui peut y répondre.
+//
+// Elles vivent dans la MÊME table que les absences, avec `statut = 'en_attente'` — accepter
+// une demande ne fait que changer son statut, donc il n'y a jamais deux vérités à tenir
+// d'accord. Mais elles sortent par une requête séparée, et c'est voulu : tant que personne
+// n'a répondu, une demande ne doit marquer aucune journée dans la grille. Une case qui
+// afficherait « Congé » pendant que le gérant hésite encore se lirait comme un congé accordé.
+function demandesEnAttente(restaurantId, secteur) {
+  const equipe = secteur ? Secteurs.conditionEmployeSQL(secteur, "e.secteur") : null;
+  const conditionSecteur = equipe ? ` AND ${equipe.sql}` : "";
+  const params = equipe ? [restaurantId, ...equipe.params] : [restaurantId];
+  return db
+    .prepare(`
+      SELECT a.*, e.name AS employee_name FROM absences a
+      JOIN employees e ON e.id = a.employee_id
+      WHERE e.restaurant_id = ?${conditionSecteur} AND a.statut = 'en_attente'
+      ORDER BY a.date_debut ASC
+    `)
+    .all(...params);
+}
+
+// Accepter ou refuser. La réponse ne se donne qu'UNE fois : une demande déjà répondue ne se
+// rouvre pas d'un second clic, sinon un refus envoyé deviendrait une acceptation sans que
+// l'employé sache laquelle des deux vaut.
+function repondreDemande(req, res, restaurantId, secteur) {
+  const equipe = secteur ? Secteurs.conditionEmployeSQL(secteur, "e.secteur") : null;
+  const conditionSecteur = equipe ? ` AND ${equipe.sql}` : "";
+  const params = equipe ? [req.params.id, restaurantId, ...equipe.params] : [req.params.id, restaurantId];
+  const demande = db
+    .prepare(`
+      SELECT a.* FROM absences a JOIN employees e ON e.id = a.employee_id
+      WHERE a.id = ? AND e.restaurant_id = ?${conditionSecteur}
+    `)
+    .get(...params);
+  if (!demande) return res.status(404).json({ error: "Demande introuvable" });
+  if (demande.statut !== "en_attente") {
+    return res.status(409).json({ error: "Cette demande a déjà reçu une réponse" });
+  }
+
+  const accepte = !!req.body.accepte;
+  const mot = String(req.body.reponse || "").trim().slice(0, 200);
+  db.prepare("UPDATE absences SET statut=?, reponse=?, repondu_at=datetime('now') WHERE id=?")
+    .run(accepte ? "accepte" : "refuse", mot, demande.id);
+  res.json({ ok: true, id: demande.id, statut: accepte ? "accepte" : "refuse" });
 }
 
 // Une absence n'existe que pour un employé de CE restaurant, et de CE secteur quand la porte
@@ -509,10 +631,15 @@ app.get("/api/admin/absences", requireScheduleAccess, (req, res) => {
   const restaurantId = req.query.restaurant_id;
   if (restaurantId) return res.json({ absences: absencesDuRestaurant(restaurantId, null) });
   res.json({
+    // `statut = 'accepte'` ici AUSSI, et pas seulement dans absencesDuRestaurant : cette
+    // branche sert le tableau de bord quand il affiche tous les restaurants. Sans le filtre,
+    // une demande encore en attente marquerait des journées dans la grille — un congé qui
+    // s'affiche avant d'avoir été accordé, c'est exactement ce qu'on veut éviter.
     absences: db
       .prepare(`
         SELECT a.* FROM absences a
         JOIN employees e ON e.id = a.employee_id
+        WHERE a.statut = 'accepte'
         ORDER BY a.date_debut ASC
       `)
       .all(),
@@ -523,6 +650,29 @@ app.post("/api/admin/absences", requireScheduleAccess, (req, res) => {
   const restaurantId = req.body.restaurant_id;
   if (!restaurantId) return res.status(400).json({ error: "restaurant_id requis" });
   creerAbsence(req, res, restaurantId, null);
+});
+
+app.get("/api/admin/demandes-conge", requireScheduleAccess, (req, res) => {
+  const restaurantId = req.query.restaurant_id;
+  if (restaurantId) return res.json({ demandes: demandesEnAttente(restaurantId, null) });
+  // Sans restaurant_id : toutes, comme la route des absences. Le tableau de bord peut porter
+  // plusieurs restaurants, et la grille de chacun filtrera sur ses propres employés.
+  res.json({
+    demandes: db
+      .prepare(`
+        SELECT a.*, e.name AS employee_name FROM absences a
+        JOIN employees e ON e.id = a.employee_id
+        WHERE a.statut = 'en_attente'
+        ORDER BY a.date_debut ASC
+      `)
+      .all(),
+  });
+});
+
+app.post("/api/admin/demandes-conge/:id/reponse", requireScheduleAccess, (req, res) => {
+  const restaurantId = req.body.restaurant_id;
+  if (!restaurantId) return res.status(400).json({ error: "restaurant_id requis" });
+  repondreDemande(req, res, restaurantId, null);
 });
 
 app.delete("/api/admin/absences/:id", requireScheduleAccess, (req, res) => {
@@ -874,6 +1024,22 @@ app.post("/api/schedule/by-code/:code/absences", (req, res) => {
   if (!porte) return res.status(404).json({ error: "Lien invalide" });
   if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
   creerAbsence(req, res, porte.restaurant.id, porte.secteur);
+});
+
+// Les demandes de congé par un lien d'horaire. Mêmes bornes que les absences : il faut
+// pouvoir modifier, et la porte ne voit que SON secteur — le lien de la cuisine ne répond
+// pas à la demande d'une serveuse.
+app.get("/api/schedule/by-code/:code/demandes-conge", (req, res) => {
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  res.json({ demandes: porte.peutModifier ? demandesEnAttente(porte.restaurant.id, porte.secteur) : [] });
+});
+
+app.post("/api/schedule/by-code/:code/demandes-conge/:id/reponse", (req, res) => {
+  const porte = porteParCode(req.params.code);
+  if (!porte) return res.status(404).json({ error: "Lien invalide" });
+  if (!porte.peutModifier) return res.status(403).json({ error: "Ce lien est en lecture seule" });
+  repondreDemande(req, res, porte.restaurant.id, porte.secteur);
 });
 
 app.delete("/api/schedule/by-code/:code/absences/:id", (req, res) => {

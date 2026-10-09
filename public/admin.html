@@ -666,6 +666,34 @@
   .conges-toggle.ouvert { background: rgba(212,168,87,0.1); border-color: rgba(212,168,87,0.25); }
   .conges-fleche { color: #D4A857; font-size: 11px; }
   .conges-body { padding: 2px 2px 14px; }
+  /* Les demandes en attente : en tête de la section des congés, parce que c'est ce qui
+     demande une action. L'or les distingue sans ajouter de couleur à la GRILLE — le fond des
+     cases appartient aux alertes rouges, et une cinquième teinte là-dedans en ferait un
+     arbre de Noël. */
+  .demandes-bloc {
+    border: 1px solid rgba(212,168,87,0.35); background: rgba(212,168,87,0.08);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+  }
+  .demandes-titre { font-size: 11px; font-weight: 800; color: #D4A857; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .demande-ligne {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .demande-ligne:first-of-type { border-top: 0; }
+  .demande-qui { min-width: 0; }
+  .demande-boutons { display: flex; gap: 6px; flex: 0 0 auto; }
+  /* 36 px : on répond du pouce, et les deux boutons ne se tapent pas l'un pour l'autre. */
+  .demande-boutons button { height: 36px; padding: 0 12px; font-size: 12px; font-weight: 700; border: 0; border-radius: 8px; cursor: pointer; }
+  .demande-oui { background: #6FBF93; color: #10151D; }
+  .demande-non { background: rgba(226,104,90,0.15); color: #E2685A; }
+  .demandes-pastille {
+    margin-left: 8px; font-size: 10px; font-weight: 800; color: #10151D;
+    background: #D4A857; border-radius: 999px; padding: 2px 7px;
+  }
+  .demandes-manquantes {
+    font-size: 11.5px; color: #D4A857; background: rgba(212,168,87,0.1);
+    border-radius: 8px; padding: 7px 10px; margin: 8px 0; line-height: 1.4;
+  }
   .conges-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
   .conges-form label { display: flex; flex-direction: column; gap: 3px; }
   .conges-form select, .conges-form input {
@@ -977,6 +1005,9 @@ let TOKEN = lireStockage("sessionStorage", "adminToken") || "";
 let overview = null;
 let messages = [];
 let absences = [];
+// Les demandes de congé en attente. Elles vivent à part des absences parce qu'elles ne
+// marquent rien dans la grille tant que personne n'a répondu.
+let demandesConge = [];
 // Les disponibilités déclarées par les employés. Lecture seule ici : c'est chacun qui
 // remplit les siennes, par son lien personnel.
 let disponibilites = [];
@@ -1166,6 +1197,12 @@ const I18N = {
     congeType: "Type",
     congeAjouter: "Ajouter",
     congeRetirer: "Retirer",
+    demandesTitre: (n) => `${n} demande${n > 1 ? "s" : ""} de congé en attente`,
+    demandesPastille: (n) => `${n} en attente`,
+    demandesEnAttenteLigne: (n) => `${n} demande${n > 1 ? "s" : ""} de congé en attente — déplie « Congés et absences » pour répondre.`,
+    demandeAccepter: "Accepter",
+    demandeRefuser: "Refuser",
+    demandeRaisonRefus: "Pourquoi ? (ton employé va le lire)",
     congeAucun: "Aucune absence à venir.",
     congeJours: (n) => `${n} jour${n > 1 ? "s" : ""}`,
     congeIncomplet: "Choisis un employé et une date de début.",
@@ -1175,7 +1212,7 @@ const I18N = {
     dispoConflit: (texte) => `Attention : hors de ses disponibilités (${texte})`,
     dispoCourt: "Pas dispo",
     disposManquantes: (n, noms) =>
-      `${n} personne${n > 1 ? "s n'ont" : " n'a"} pas rempli ses disponibilités : ${noms}`,
+      `${n} personne${n > 1 ? "s n'ont pas rempli leurs" : " n'a pas rempli ses"} disponibilités : ${noms}`,
     confirmMalgreConge: (nom, type, periode) =>
       `${nom} est en « ${type} » (${periode}).\n\nL'ajouter quand même ?`,
     confirmDejaCeduleAilleurs: (nom, date, heures) =>
@@ -1435,6 +1472,12 @@ const I18N = {
     congeType: "Type",
     congeAjouter: "Add",
     congeRetirer: "Remove",
+    demandesTitre: (n) => `${n} time-off request${n > 1 ? "s" : ""} waiting`,
+    demandesPastille: (n) => `${n} waiting`,
+    demandesEnAttenteLigne: (n) => `${n} time-off request${n > 1 ? "s" : ""} waiting — open "Time off" to answer.`,
+    demandeAccepter: "Approve",
+    demandeRefuser: "Decline",
+    demandeRaisonRefus: "Why? (your employee will read it)",
     congeAucun: "No upcoming absences.",
     congeJours: (n) => `${n} day${n > 1 ? "s" : ""}`,
     congeIncomplet: "Pick an employee and a start date.",
@@ -1746,6 +1789,11 @@ async function load() {
       absences = (await api("/api/admin/absences")).absences;
     } catch (e) {
       absences = [];
+    }
+    try {
+      demandesConge = (await api("/api/admin/demandes-conge")).demandes;
+    } catch (e) {
+      demandesConge = [];
     }
     try {
       disponibilites = (await api("/api/admin/disponibilites")).disponibilites;
@@ -3453,6 +3501,9 @@ ScheduleUI.init({
   absences: () => absences,
   setAbsences: (a) => { absences = a; },
   reloadAbsences: async () => (await api("/api/admin/absences")).absences,
+  demandes: () => demandesConge,
+  setDemandes: (d) => { demandesConge = d; },
+  reloadDemandes: async () => (await api("/api/admin/demandes-conge")).demandes,
   disponibilites: () => disponibilites,
   shiftApi: (path, opts) => api(`/api/admin${path}`, opts),
   pdfRequest: (restaurantId, weekISO, langue, secteur) => ({

@@ -462,6 +462,67 @@ en vacances n'est un secret pour personne dans un restaurant.
 
 Une période déjà commencée mais pas terminée reste « à venir » — on est en plein dedans.
 
+### L'employé demande, le gérant répond
+
+Jusqu'ici, seul le gérant pouvait inscrire un congé, et l'employé ne voyait même pas celui
+qu'on avait noté pour lui. Sa page le disait elle-même sous ses disponibilités — « pour une
+semaine différente, écris au gérant » — et le gérant retranscrivait le message à la main dans
+sa grille. Rapporté ainsi : « un employé n'est pas disponible comment il fait pour placer sa
+demande dans horaire, je vois les demandes de mon côté mais quand je regarde côté employé je
+vois rien ». Ce qu'il voyait de son côté, c'était ce qu'il avait tapé lui-même.
+
+**Une demande EST une absence**, avec `statut = 'en_attente'` (plus `reponse` et `repondu_at`).
+Accepter ne change que le statut : la journée devient alors une absence ordinaire, marquée
+dans la grille et signalée si on cédule quelqu'un par-dessus. Rien n'est recopié, donc il n'y a
+jamais deux vérités à tenir d'accord — et la ligne garde son identifiant d'origine, ce qu'un
+test vérifie.
+
+Le prix de ce choix : **chaque requête d'absences doit porter `statut = 'accepte'`**. Il y en a
+deux, `absencesDuRestaurant()` et la branche « tous les restaurants » de
+`GET /api/admin/absences` ; j'ai oublié la seconde en écrivant la première, et une demande
+encore en attente marquait des journées dans la grille. Les deux sont couvertes.
+
+**Une demande en attente ne marque RIEN dans la grille**, et c'est délibéré : une case qui
+afficherait « Congé » pendant que le gérant hésite encore se lirait comme un congé accordé, et
+il bâtirait sa semaine autour d'une journée qu'il n'a pas donnée. CLAUDE.md interdit par
+ailleurs une cinquième couleur dans la grille. Elle se signale donc par trois choses qui ne
+coûtent aucune teinte : un **bloc or en tête de la section Congés**, une **pastille sur l'en-tête
+de la section** (sinon, repliée, elle ne dirait rien), et une **ligne de texte au-dessus de la
+grille** — c'est celle-là qu'on voit sans rien déplier.
+
+**Deux types seulement se demandent** : `conge` et `vacances` (`TYPES_DEMANDABLES`). `maladie` et
+`cnesst` se constatent après coup — personne ne demande la permission d'être malade la semaine
+prochaine — et ils changent la paie ; le gérant les inscrit lui-même comme avant. Un type
+refusé ne lève pas : il **retombe sur `conge`**, parce qu'une demande rejetée en silence
+disparaîtrait sans que personne ne le voie.
+
+**Une réponse ne se donne qu'une fois** (409 au second envoi). Sans ça, un refus déjà envoyé
+deviendrait une acceptation d'un double clic, et l'employé ne saurait pas laquelle des deux
+vaut. Le mot du gérant est facultatif, se garde dans `reponse`, et s'affiche en italique sur la
+page de la personne — un refus sans un mot fait rappeler le gérant pour rien.
+
+Côté employé, `GET /api/employee/:code/conges` remonte **30 jours dans le passé** : une demande
+refusée hier doit rester lisible, la faire disparaître le lendemain donnerait l'impression
+qu'elle n'a jamais existé. Il peut **annuler la sienne tant qu'elle attend**, et plus après
+(409) : le gérant a bâti sa semaine autour d'un congé accepté, le lui retirer d'un clic la
+veille le lui enlèverait sous les pieds sans qu'il l'apprenne. L'effacement cherche sur
+`(id, employee_id)` et pas sur l'id seul — sans ça, n'importe quel code valide effacerait la
+demande de n'importe qui.
+
+Les demandes passent par les **mêmes bornes que les absences** : il faut `peutModifier`, et une
+porte ne voit que son secteur. Le lien de LECTURE des cuisiniers n'en reçoit donc aucune et
+reçoit 403 s'il tente de répondre — c'est le lien qu'on envoie dans le groupe, et y laisser
+répondre, c'est laisser un cuisinier s'accorder son propre congé. Tout est dans
+`test/demandes-conge.test.mjs`.
+
+Le refus se tape dans un `prompt()`, et **annuler ce prompt n'est pas un refus** : `null` veut
+dire « j'ai changé d'idée », une chaîne vide veut dire « refusé sans un mot ».
+
+Sur **sa page à lui**, une carte « Mes congés » porte le bouton « Demander un congé » et la liste
+de ses demandes avec leur état — en attente, accepté, refusé — plus le mot du gérant. Le
+bouton « Retirer la demande » ne s'affiche que tant qu'elle attend : un bouton qui répondrait
+409 se lirait comme un bouton brisé.
+
 ## Disponibilités
 
 `public/shared/disponibilites.js`. Ce que ça répond : « le lundi je peux rentrer à 5h30, le
@@ -1280,6 +1341,10 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   moment où l'alerte de commande sort.
 - `test/disponibilites.test.js` — le défaut, la détection d'accroc, et la différence entre
   « a dit oui à tout » et « n'a jamais répondu ».
+- `test/demandes-conge.test.mjs` — le trajet complet d'une demande de congé sur le vrai
+  serveur : en attente elle ne marque rien dans la grille, un `cnesst` demandé depuis un
+  téléphone retombe sur `conge`, une seconde réponse est refusée, une collègue ne retire pas
+  la demande d'une autre, et le lien de lecture des cuisiniers n'en reçoit aucune.
 - `test/portes-horaire.test.mjs` — les cinq portes sur le vrai serveur HTTP. C'est ici qu'on
   vérifie qu'aucun salaire ne sort vers une porte qui n'y a pas droit.
 - `test/code-acces.test.js` — chaque façon dont un lien s'abîme en chemin, et la limite

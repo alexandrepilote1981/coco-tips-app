@@ -425,3 +425,24 @@ test("les listes de tâches récentes ne se mélangent pas entre les deux équip
   // Et chacune ne voit que SES gens : le quart de l'autre équipe n'est pas dans sa liste.
   assert.deepEqual(UI.tachesRecentes("salle", [{ id: "cuis1" }]), []);
 });
+
+test("une grille ne voit que les demandes de congé de SES gens", () => {
+  // Une demande de serveuse qui apparaîtrait dans la grille de cuisine, c'est le gérant de
+  // cuisine qui accorde un congé à quelqu'un dont il ne monte pas l'horaire.
+  UI.init({
+    demandes: () => [
+      { id: "d1", employee_id: "salle1", date_debut: "2026-11-10" },
+      { id: "d2", employee_id: "cuis1", date_debut: "2026-11-12" },
+    ],
+  });
+  assert.deepEqual(UI.demandesDuSecteur([{ id: "salle1" }]).map((d) => d.id), ["d1"]);
+  assert.deepEqual(UI.demandesDuSecteur([{ id: "cuis1" }]).map((d) => d.id), ["d2"]);
+  assert.deepEqual(UI.demandesDuSecteur([]), [], "une équipe vide ne ramasse rien");
+});
+
+test("un hôte qui ne porte pas de demandes n'en invente pas", () => {
+  // La page d'horaire en lecture seule n'en reçoit aucune : la fonction doit rendre une liste
+  // vide, pas lever — sinon toute la grille cesse de s'afficher pour une section repliée.
+  UI.init({ shifts: () => [] });
+  assert.deepEqual(UI.demandesDuSecteur([{ id: "salle1" }]), []);
+});

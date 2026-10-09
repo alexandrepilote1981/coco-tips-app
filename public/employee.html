@@ -40,6 +40,31 @@
   /* Disponibilités. Le tableau se remplit au pouce, sur un téléphone : les cases à cocher
      sont larges, et les menus d'heures ne s'affichent que quand ils servent vraiment. */
   .dispo-card { margin-top: 12px; }
+  .conges-card { margin-top: 12px; }
+  .conge-ligne {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .conge-quand { font-size: 13px; color: #F1EFEA; font-weight: 600; }
+  .conge-detail { font-size: 11px; color: #8993A4; margin-top: 2px; }
+  /* Trois états, trois teintes — et le refus porte le mot du gérant juste en dessous :
+     « refusé » tout court fait rappeler pour demander pourquoi. */
+  .conge-etat { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; flex: 0 0 auto; }
+  .conge-etat.attente { color: #D4A857; }
+  .conge-etat.accepte { color: #6FBF93; }
+  .conge-etat.refuse { color: #E2685A; }
+  .conge-mot { font-size: 11px; color: #8993A4; font-style: italic; margin-top: 3px; }
+  .conge-form { margin-top: 10px; display: grid; gap: 8px; }
+  .conge-form .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .conge-form label { font-size: 11px; color: #8993A4; }
+  .conge-form input, .conge-form select {
+    width: 100%; margin-top: 3px; padding: 9px 10px; font-size: 14px;
+    background: #10151D; color: #F1EFEA; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  }
+  .conge-retirer {
+    background: none; border: 0; color: #8993A4; font-size: 11px; cursor: pointer;
+    padding: 2px 0; text-decoration: underline;
+  }
   .dispo-entete { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
   .dispo-jamais {
     font-size: 10.5px; font-weight: 700; color: #D4A857; margin: -6px 0 0;
@@ -262,6 +287,9 @@
 <!-- Même fichier que celui utilisé par le serveur : une seule définition du calcul. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/code-acces.js"></script>
+<!-- Les congés : libellés des types et mise en forme des périodes. Le même module que
+     la grille du gérant, pour que « Congé du 14 au 15 octobre » s'écrive pareil des deux bords. -->
+<script src="/shared/absences.js"></script>
 <script src="/shared/disponibilites.js"></script>
 <script src="/shared/secteurs.js"></script>
 <script src="/shared/tip-math.js"></script>
@@ -295,6 +323,11 @@ let currentEntries = []; // liste actuellement affichée (filtrée par période)
 // Les disponibilités déclarées : l'habitude de la personne, pas sa semaine. Sept lignes,
 // même si elle n'en a rempli qu'une — le module complète le reste par « toute la journée ».
 let disponibilites = [];
+// Ses congés : ceux qu'elle a demandés, et ceux que le gérant a inscrits pour elle. Avant,
+// elle ne voyait NI les uns ni les autres — un congé noté par le gérant n'apparaissait nulle
+// part sur sa page, donc elle ne savait pas qu'il était pris en note.
+let conges = [];
+let demandeOuverte = false;
 let dispoOuvert = false;
 let dispoConfirme = false;
 // Les journées déjà envoyées sont repliées par défaut. Replié = non construit : c'est ce qui
@@ -349,6 +382,25 @@ const I18N = {
     pourboires: "Pourboires",
     net: "Net",
     aucunePhoto: "Aucune photo",
+    mesConges: "Mes congés",
+    congesSous: "Une journée où tu ne peux pas rentrer ? Demande-la ici — le gérant répond.",
+    demanderConge: "Demander un congé",
+    congeDu: "Du",
+    congeAu: "Au (optionnel)",
+    congeType: "Type",
+    congeTypeConge: "Congé",
+    congeTypeVacances: "Vacances",
+    congeRaison: "Raison (optionnel)",
+    congeRaisonEx: "Ex. : rendez-vous médical",
+    congeEnvoyer: "Envoyer la demande",
+    congeAnnulerForm: "Annuler",
+    congeRetirer: "Retirer la demande",
+    congeAucun: "Aucun congé demandé ni inscrit.",
+    congeEnAttente: "En attente",
+    congeAccepte: "Accepté",
+    congeRefuse: "Refusé",
+    congeDateRequise: "Choisis au moins une date de début.",
+    congeRetirerSur: "Retirer cette demande ?",
     photoFermer: "FERMER",
     photoTitre: "Mon relevé",
     remitLabel: "Montant à remettre (selon mon relevé)",
@@ -433,6 +485,25 @@ const I18N = {
     pourboires: "Tips",
     net: "Net",
     aucunePhoto: "No photo",
+    mesConges: "My time off",
+    congesSous: "A day you can't come in? Ask here — the manager answers.",
+    demanderConge: "Request time off",
+    congeDu: "From",
+    congeAu: "To (optional)",
+    congeType: "Type",
+    congeTypeConge: "Day off",
+    congeTypeVacances: "Vacation",
+    congeRaison: "Reason (optional)",
+    congeRaisonEx: "e.g. doctor's appointment",
+    congeEnvoyer: "Send request",
+    congeAnnulerForm: "Cancel",
+    congeRetirer: "Withdraw request",
+    congeAucun: "No time off requested or recorded.",
+    congeEnAttente: "Pending",
+    congeAccepte: "Approved",
+    congeRefuse: "Declined",
+    congeDateRequise: "Pick at least a start date.",
+    congeRetirerSur: "Withdraw this request?",
     photoFermer: "CLOSE",
     photoTitre: "My receipt",
     remitLabel: "Amount to remit (per my statement)",
@@ -659,6 +730,11 @@ async function load() {
     } catch (e) {
       myShifts = [];
       fichesJumelees = 1;
+    }
+    try {
+      conges = (await api(`/api/employee/${CODE}/conges`)).conges || [];
+    } catch (e) {
+      conges = [];
     }
     try {
       const resDispo = await api(`/api/employee/${CODE}/disponibilites`);
@@ -1045,6 +1121,65 @@ function attachCardListeners(card, e) {
 // disponible, toute la journée, ou une plage d'heures. La case « toute la journée » existe
 // parce que c'est le cas de la majorité du monde : sans elle, il faudrait choisir deux
 // heures sept fois pour dire « je suis toujours là ».
+// Ses congés. Deux choses dans la même carte, parce qu'elles répondent à la même question
+// (« est-ce que je travaille ce jour-là ? ») : ce qu'elle a demandé, et ce que le gérant a
+// inscrit pour elle. Avant, aucune des deux n'apparaissait nulle part sur sa page.
+// La raison et la réponse sont du texte libre, tapé par une personne : elles passent par là
+// avant d'entrer dans un gabarit. Le reste du fichier fait pareil, à la main.
+function echapperTexte(valeur) {
+  return String(valeur == null ? "" : valeur).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function congesCardHTML() {
+  const A = window.Absences;
+  const etat = (c) => (c.statut === "en_attente" ? "attente" : c.statut === "refuse" ? "refuse" : "accepte");
+  const motEtat = { attente: t("congeEnAttente"), accepte: t("congeAccepte"), refuse: t("congeRefuse") };
+
+  const lignes = conges.length === 0
+    ? `<p class="dispo-sous" style="margin:8px 0 0;">${t("congeAucun")}</p>`
+    : conges.map((c) => {
+        const e = etat(c);
+        return `
+        <div class="conge-ligne">
+          <div>
+            <div class="conge-quand">${A.libelleType(c.type, lang)} · ${A.fmtPeriode(c, lang)}</div>
+            ${c.note ? `<div class="conge-detail">${echapperTexte(c.note)}</div>` : ""}
+            ${c.reponse ? `<div class="conge-mot">« ${echapperTexte(c.reponse)} »</div>` : ""}
+            ${e === "attente" ? `<button class="conge-retirer" data-retirer="${c.id}">${t("congeRetirer")}</button>` : ""}
+          </div>
+          <div class="conge-etat ${e}">${motEtat[e]}</div>
+        </div>`;
+      }).join("");
+
+  return `
+  <div class="card conges-card">
+    <div class="dispo-entete">
+      <div class="section-label-sm">${icon("calendar", 14)} ${t("mesConges")}</div>
+      <button class="dispo-toggle" id="congeToggle">${demandeOuverte ? t("congeAnnulerForm") : t("demanderConge")}</button>
+    </div>
+    <p class="dispo-sous">${t("congesSous")}</p>
+    ${
+      demandeOuverte
+        ? `<div class="conge-form">
+             <div class="deux">
+               <label>${t("congeDu")}<input type="date" id="congeDebut" /></label>
+               <label>${t("congeAu")}<input type="date" id="congeFin" /></label>
+             </div>
+             <label>${t("congeType")}
+               <select id="congeTypeSel">
+                 <option value="conge">${t("congeTypeConge")}</option>
+                 <option value="vacances">${t("congeTypeVacances")}</option>
+               </select>
+             </label>
+             <label>${t("congeRaison")}<input type="text" id="congeNote" maxlength="120" placeholder="${t("congeRaisonEx")}" /></label>
+             <button class="dispo-save" id="congeEnvoyer">${t("congeEnvoyer")}</button>
+           </div>`
+        : ""
+    }
+    ${lignes}
+  </div>`;
+}
+
 function dispoCardHTML() {
   const D = window.Disponibilites;
   const semaine = D.semaine(disponibilites);
@@ -1191,6 +1326,7 @@ function render() {
       </div>` : ""}
 
       ${dispoCardHTML()}
+      ${congesCardHTML()}
 
       ${estCuisine ? "" : `
       <div class="section-title">
@@ -1336,6 +1472,58 @@ function render() {
       } catch (e) {
         dispoSave.disabled = false;
       }
+    });
+  }
+
+  // Les congés : ouvrir le formulaire, envoyer la demande, retirer une demande en attente.
+  const congeToggle = document.getElementById("congeToggle");
+  if (congeToggle) {
+    congeToggle.addEventListener("click", () => {
+      demandeOuverte = !demandeOuverte;
+      render();
+    });
+  }
+  const congeEnvoyer = document.getElementById("congeEnvoyer");
+  if (congeEnvoyer) {
+    congeEnvoyer.addEventListener("click", async () => {
+      const debut = document.getElementById("congeDebut").value;
+      // On refuse À L'ÉCRAN plutôt que d'envoyer : le serveur répondrait 400, et « erreur »
+      // sans dire quoi faire ne vaut rien quand il manque juste une date.
+      if (!debut) return alert(t("congeDateRequise"));
+      congeEnvoyer.disabled = true;
+      try {
+        await api(`/api/employee/${CODE}/conges`, {
+          method: "POST",
+          body: JSON.stringify({
+            date_debut: debut,
+            date_fin: document.getElementById("congeFin").value || "",
+            type: document.getElementById("congeTypeSel").value,
+            note: document.getElementById("congeNote").value,
+          }),
+        });
+      } catch (e) {
+        // On ne referme pas et on ne vide rien : elle vient de taper sa demande, et laisser
+        // croire qu'elle est partie serait pire. Même règle que pour une journée déclarée.
+        congeEnvoyer.disabled = false;
+        alert(e.message || "Erreur");
+        return;
+      }
+      demandeOuverte = false;
+      conges = (await api(`/api/employee/${CODE}/conges`)).conges || [];
+      render();
+    });
+  }
+  for (const bouton of document.querySelectorAll("[data-retirer]")) {
+    bouton.addEventListener("click", async () => {
+      if (!confirm(t("congeRetirerSur"))) return;
+      try {
+        await api(`/api/employee/${CODE}/conges/${bouton.dataset.retirer}`, { method: "DELETE" });
+      } catch (e) {
+        alert(e.message || "Erreur");
+        return;
+      }
+      conges = (await api(`/api/employee/${CODE}/conges`)).conges || [];
+      render();
     });
   }
 
