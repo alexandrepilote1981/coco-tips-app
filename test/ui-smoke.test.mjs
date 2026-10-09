@@ -1487,6 +1487,92 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(await onglet.ev(`!document.getElementById("photoGrande").getAttribute("src")`), true);
   });
 
+  await t.test("elle demande un congé, le gérant répond, et elle lit la réponse", async () => {
+    // Le trajet complet dans un vrai navigateur. Ce que ça verrouille : avant, l'employée
+    // n'avait AUCUN moyen de demander une journée, et ne voyait même pas celle qu'on avait
+    // notée pour elle. Rapporté ainsi : « je vois les demandes de mon côté mais quand je
+    // regarde côté employé je vois rien ».
+    const { employe, restoId, lien } = await creerEmploye("Noémie Demande");
+
+    await onglet.aller(lien, ".conges-card");
+    assert.equal(
+      await onglet.ev(`!!document.getElementById("congeToggle")`),
+      true,
+      "le bouton « Demander un congé » doit exister sur sa page"
+    );
+    // Le formulaire est replié au départ : une page qui s'ouvre sur un formulaire de congé
+    // donne à croire qu'il faut en remplir un.
+    assert.equal(await onglet.ev(`!!document.getElementById("congeDebut")`), false);
+
+    await onglet.ev(`document.getElementById("congeToggle").click()`);
+    await jusqua(async () => onglet.ev(`!!document.getElementById("congeEnvoyer")`), {
+      quoi: "l'ouverture du formulaire de congé",
+    });
+    await onglet.ev(`(() => {
+      document.getElementById("congeDebut").value = "2026-11-10";
+      document.getElementById("congeNote").value = "Rendez-vous médical";
+      return true;
+    })()`);
+    await onglet.ev(`document.getElementById("congeEnvoyer").click()`);
+
+    await jusqua(async () => onglet.ev(`!!document.querySelector(".conge-etat.attente")`), {
+      quoi: "l'affichage de la demande en attente",
+    });
+    const ligne = await onglet.ev(`document.querySelector(".conge-ligne").innerText`);
+    assert.match(ligne, /Rendez-vous médical/, "sa raison doit rester lisible");
+    assert.match(ligne, /10 novembre 2026/, "la journée demandée");
+    assert.equal(
+      await onglet.ev(`!!document.querySelector("[data-retirer]")`),
+      true,
+      "tant qu'elle attend, elle peut la retirer"
+    );
+
+    // --- Côté gérant : la demande attend, et elle ne marque RIEN dans la grille.
+    const demandes = (await (await api(`/api/admin/demandes-conge?restaurant_id=${restoId}`)).json()).demandes;
+    assert.equal(demandes.length, 1, "le gérant voit la demande");
+    assert.equal(demandes[0].employee_name, "Noémie Demande");
+    const absencesAvant = (await (await api(`/api/admin/absences?restaurant_id=${restoId}`)).json()).absences;
+    assert.equal(absencesAvant.length, 0, "une demande en attente ne marque aucune journée");
+
+    await api(`/api/admin/demandes-conge/${demandes[0].id}/reponse`, {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: restoId, accepte: true }),
+    });
+
+    // --- Et elle le voit : accepté, et plus rien à retirer.
+    await onglet.aller(lien, ".conges-card");
+    await jusqua(async () => onglet.ev(`!!document.querySelector(".conge-etat.accepte")`), {
+      quoi: "l'état « accepté » sur sa page",
+    });
+    assert.equal(
+      await onglet.ev(`!!document.querySelector("[data-retirer]")`),
+      false,
+      "un bouton qui répondrait 409 se lirait comme un bouton brisé"
+    );
+
+    // --- Un refus porte le mot du gérant jusqu'à sa page.
+    const refusee = await (
+      await fetch(`${serveur.base}/api/employee/${employe.access_code}/conges`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date_debut: "2026-11-20", date_fin: "2026-11-22", type: "vacances" }),
+      })
+    ).json();
+    await api(`/api/admin/demandes-conge/${refusee.id}/reponse`, {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: restoId, accepte: false, reponse: "Trop de monde cette semaine-là" }),
+    });
+
+    await onglet.aller(lien, ".conges-card");
+    await jusqua(async () => onglet.ev(`!!document.querySelector(".conge-etat.refuse")`), {
+      quoi: "l'état « refusé » sur sa page",
+    });
+    const texteRefus = await onglet.ev(
+      `[...document.querySelectorAll(".conge-ligne")].find((l) => l.querySelector(".conge-etat.refuse")).innerText`
+    );
+    assert.match(texteRefus, /Trop de monde cette semaine-là/, "un refus sans un mot fait rappeler le gérant");
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.

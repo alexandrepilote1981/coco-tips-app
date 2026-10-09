@@ -258,6 +258,18 @@ window.ScheduleUI = (function () {
 
   // Posés d'avance pour ne pas les oublier. La liste ne suffit pas — personne ne va la relire
   // à chaque quart — d'où le marquage dans la grille elle-même, plus bas.
+  // Les demandes de congé en attente, pour les gens de CETTE grille.
+  //
+  // Elles vivent dans la même table que les absences mais sortent par un autre chemin, et
+  // c'est voulu : tant que personne n'a répondu, une demande ne marque AUCUNE journée. Une
+  // case qui afficherait « Congé » pendant que le gérant hésite encore se lirait comme un
+  // congé accordé, et il bâtirait sa semaine autour d'une journée qu'il n'a pas donnée.
+  function demandesDuSecteur(employees) {
+    if (!host.demandes) return [];
+    const ids = new Set((employees || []).map((e) => e.id));
+    return (host.demandes() || []).filter((d) => ids.has(d.employee_id));
+  }
+
   function blocCongesHTML(restaurantId, secteur, employees, peutModifier) {
     const t = host.t;
     const icon = host.icon;
@@ -267,13 +279,16 @@ window.ScheduleUI = (function () {
     const ouvert = congesOuverts.has(cleSection);
     const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
     const aVenir = A.prochaines(absencesDuSecteur(employees), todayISO());
+    const enAttente = peutModifier ? demandesDuSecteur(employees).length : 0;
 
     return `
     <button class="conges-toggle ${ouvert ? "ouvert" : ""}" data-action="toggleConges" ${marque}>
       <span class="conges-fleche">${ouvert ? "▾" : "▸"}</span>
       ${icon("calendar", 13)} ${t("congesTitre", aVenir.length)}
+      ${enAttente > 0 ? `<span class="demandes-pastille">${t("demandesPastille", enAttente)}</span>` : ""}
     </button>
     <div class="conges-body" style="display:${ouvert ? "block" : "none"};">
+      ${blocDemandesHTML(restaurantId, secteur, employees, peutModifier)}
       ${
         peutModifier
           ? `<div class="conges-form">
@@ -322,6 +337,40 @@ window.ScheduleUI = (function () {
               )
               .join("")}</div>`
       }
+    </div>`;
+  }
+
+  // Les demandes en attente, en TÊTE de la section des congés : c'est ce qui demande une
+  // action, le reste est une liste qu'on consulte. Deux boutons, et le refus demande un mot —
+  // « refusé » tout court fait rappeler le gérant pour savoir pourquoi.
+  function blocDemandesHTML(restaurantId, secteur, employees, peutModifier) {
+    if (!peutModifier) return "";
+    const demandes = demandesDuSecteur(employees);
+    if (demandes.length === 0) return "";
+    const t = host.t;
+    const lang = host.lang();
+    const A = window.Absences;
+    const marque = `data-resto="${restaurantId}" data-secteur="${secteur}"`;
+
+    return `
+    <div class="demandes-bloc">
+      <div class="demandes-titre">${t("demandesTitre", demandes.length)}</div>
+      ${demandes
+        .map(
+          (d) => `
+      <div class="demande-ligne">
+        <div class="demande-qui">
+          <div class="conge-nom">${echapper(d.employee_name || nomDeEmploye(employees, d.employee_id))}</div>
+          <div class="conge-dates">${A.libelleType(d.type, lang)} · ${A.fmtPeriode(d, lang)} · ${t("congeJours", A.nombreDeJours(d))}</div>
+          ${d.note ? `<div class="conge-note">${echapper(d.note)}</div>` : ""}
+        </div>
+        <div class="demande-boutons">
+          <button class="demande-oui" data-action="repondreConge" data-id="${d.id}" data-oui="1" ${marque}>${t("demandeAccepter")}</button>
+          <button class="demande-non" data-action="repondreConge" data-id="${d.id}" data-oui="" ${marque}>${t("demandeRefuser")}</button>
+        </div>
+      </div>`
+        )
+        .join("")}
     </div>`;
   }
 
@@ -380,6 +429,11 @@ window.ScheduleUI = (function () {
         <button data-action="nextWeek" ${marque}>›</button>
       </div>
     </div>
+    ${
+      peutModifier && demandesDuSecteur(employees).length > 0
+        ? `<div class="demandes-manquantes">${host.t("demandesEnAttenteLigne", demandesDuSecteur(employees).length)}</div>`
+        : ""
+    }
     ${
       peutModifier && jamaisRepondu(employees).length > 0
         ? `<div class="dispo-manquantes">${host.t(
@@ -1265,6 +1319,30 @@ window.ScheduleUI = (function () {
     }
   }
 
+  // Répondre à une demande. Un refus demande un mot : l'employé verra « Refusé » sur sa page,
+  // et sans la raison il rappelle le gérant pour la demander. Le mot est facultatif — on ne
+  // bloque pas un refus parce que personne n'a envie d'écrire.
+  async function repondreConge(restaurantId, secteur, id, accepte) {
+    const mot = accepte ? "" : prompt(host.t("demandeRaisonRefus")) ;
+    // `prompt` rend null quand on ferme la fenêtre : c'est une annulation, pas un refus sans
+    // mot. Sans cette distinction, fermer la boîte par erreur refuserait la demande.
+    if (!accepte && mot === null) return;
+    congesOuverts.add(cle(restaurantId, secteur));
+    try {
+      await host.shiftApi(`/demandes-conge/${id}/reponse`, {
+        method: "POST",
+        body: JSON.stringify({ restaurant_id: restaurantId, accepte, reponse: mot || "" }),
+      });
+      // Les DEUX listes se rechargent : une demande acceptée quitte les demandes et devient
+      // une absence. N'en recharger qu'une laisserait la ligne à deux endroits à la fois.
+      if (host.reloadDemandes) host.setDemandes(await host.reloadDemandes());
+      host.setAbsences(await host.reloadAbsences());
+      host.rerender();
+    } catch (err) {
+      alert((err && err.message) || host.t("congeErreur"));
+    }
+  }
+
   // ---------- branchement des boutons ----------
 
   // À rappeler après chaque rendu : les boutons sont recréés à chaque fois.
@@ -1353,6 +1431,9 @@ window.ScheduleUI = (function () {
     document.querySelectorAll('[data-action="retirerConge"]').forEach((btn) => {
       btn.addEventListener("click", () => retirerConge(btn.dataset.resto, btn.dataset.secteur, btn.dataset.id));
     });
+    document.querySelectorAll('[data-action="repondreConge"]').forEach((btn) => {
+      btn.addEventListener("click", () => repondreConge(btn.dataset.resto, btn.dataset.secteur, btn.dataset.id, !!btn.dataset.oui));
+    });
     document.querySelectorAll('[data-action="photoWeek"]').forEach((btn) => {
       btn.addEventListener("click", () => downloadWeekImage(btn.dataset.resto, btn, btn.dataset.secteur));
     });
@@ -1411,6 +1492,7 @@ window.ScheduleUI = (function () {
     echapper,
     tachesRecentes,
     tacheDuQuart,
+    demandesDuSecteur,
     COLONNE_MIN,
     downloadWeekImage,
     downloadWeekPdf,
