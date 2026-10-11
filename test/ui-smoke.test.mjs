@@ -1970,6 +1970,88 @@ test("interface", optionsDuTest, async (t) => {
     );
   });
 
+  await t.test("un montant à remettre reste visible tant qu'on ne l'a pas réglé", async () => {
+    // Demandé ainsi : « ils doivent rester tant que je les règle pas manuel, c'est
+    // important ». Le défaut : ces montants vivaient dans `entries`, donc filtrés par la
+    // période affichée. Une serveuse qui doit 75 $ depuis cinq semaines disparaissait du
+    // bandeau rouge dès qu'on regardait la paye en cours — ET le bouton « marquer viré »
+    // avec elle, puisqu'il vit dans la rangée du tableau. Le montant devenait impossible à
+    // régler sans penser à repasser en « Tout ».
+    const resto = await (await api("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Resto Dû" }) })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Dûe Marie", secteur: "salle" }),
+    })).json();
+    const ilYA = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const poster = (corps) =>
+      fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corps),
+      });
+    // 75 $ qu'elle doit depuis 40 jours, jamais réglés — bien en dehors des 2 dernières
+    // semaines. Plus une journée récente ordinaire, pour les totaux.
+    await poster({ date: ilYA(40), ventes: 1000, clients: 60, pct: 12, remis: 0, is_hotesse: false, remit_direction: "employee_owes", remit_amount: 75 });
+    await poster({ date: ilYA(2), ventes: 1200, clients: 80, pct: 15, remis: 0, is_hotesse: false });
+
+    await ouvrirAdmin(); // repart sur « 2 dernières semaines »
+    const sonBandeau = () =>
+      onglet.ev(`(function () {
+        var b = [...document.querySelectorAll(".pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); });
+        return b ? b.textContent.trim() : "";
+      })()`);
+
+    await jusqua(async () => /75/.test(await sonBandeau()), {
+      quoi: "le montant dû dans le bandeau, malgré la période de 2 semaines",
+    });
+
+    // La pastille doit MENER quelque part : une fiche ouverte, une rangée, et un bouton.
+    await onglet.ev(`[...document.querySelectorAll(".pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); }).click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector("tr.row-hors-periode")`), {
+      quoi: "la rangée de la journée hors période",
+    });
+    assert.match(
+      await onglet.ev(`document.querySelector(".marque-hors-periode").textContent`),
+      /hors période|outside period/,
+      "la rangée doit se distinguer : elle n'est dans aucun total"
+    );
+    assert.equal(
+      await onglet.ev(`!!document.querySelector("tr.row-hors-periode [data-action='markTransferred']")`),
+      true,
+      "sans ce bouton, le bandeau réclamerait un argent qu'on ne peut pas régler"
+    );
+    // Et les totaux de la période ne bougent PAS : la vieille journée n'y entre pas, sinon
+    // elle fausserait la paye qu'on compare à un talon.
+    const netPeriode = await onglet.ev(`(function () {
+      var c = [...document.querySelectorAll(".fiche-nom")].find(function (n) { return /Dûe Marie/.test(n.textContent); }).closest(".employee-card-block");
+      return [...c.querySelectorAll(".employee-stat-value")].map(function (v) { return v.textContent; })[1];
+    })()`);
+    assert.match(netPeriode, /180,00|180\.00/, "1200 × 15 % = 180 $ — la journée d'il y a 40 jours n'y est pas");
+
+    // --- on règle, et là seulement ça disparaît
+    await onglet.ev(`document.querySelector("tr.row-hors-periode [data-action='markTransferred']").click()`);
+    await jusqua(() => onglet.ev(`document.getElementById("modalOverlay").style.display === "flex"`), {
+      quoi: "la fenêtre de confirmation du virement",
+    });
+    await onglet.ev(`document.getElementById("modalConfirm").click()`);
+    await jusqua(async () => (await sonBandeau()) === "", { quoi: "la disparition de la pastille" });
+
+    // Et ça tient au rechargement : c'est réglé pour de bon, pas juste à l'écran.
+    await onglet.aller(`${serveur.base}/admin`, ".period-bar");
+    await jusqua(async () => (await sonBandeau()) === "", { quoi: "le règlement, après rechargement" });
+    // Scopé à SA fiche : d'autres employés des tests précédents ont eux aussi de l'argent
+    // dû, et leurs rangées hors période doivent rester — c'est exactement le comportement
+    // qu'on vient d'ajouter. Une assertion sur toute la page échouerait sur du code juste.
+    assert.equal(
+      await onglet.ev(`(function () {
+        var n = [...document.querySelectorAll(".fiche-nom")].find(function (x) { return /Dûe Marie/.test(x.textContent); });
+        return n ? !!n.closest(".employee-card-block").querySelector("tr.row-hors-periode") : true;
+      })()`),
+      false,
+      "sa rangée à elle doit avoir disparu une fois réglée"
+    );
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
