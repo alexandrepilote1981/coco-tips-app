@@ -649,6 +649,45 @@ Une journée envoyée ou modifiée pendant la visite **ne saute pas** d'une sect
 sous le doigt : le déplacement se fait au prochain rendu. Une carte qui disparaît à l'instant
 où on tape « Envoyer » est désorientante.
 
+### Et chaque journée est repliée, elle aussi
+
+Demandé ainsi : « un moyen de rapetisser ça en laissant juste une ligne, et quand on clique ça
+ouvre, pour que le lien serveuse et hôtesse soit moins lourd ». Une carte dépliée fait **510 px**
+— plus d'un demi-écran de téléphone à elle seule. Mesuré sur cinq midis déclarés dans la
+semaine, ce qui est une semaine ordinaire : la page passait de **4,0 écrans à 1,5**.
+
+Chaque journée ne montre donc qu'une ligne : la **date** à gauche, le **net** à droite. Les
+chiffres ne rétrécissent jamais (`flex: 0 0 auto`), une date longue s'ellipse plutôt que de les
+pousser hors de l'écran — même règle que les fiches du tableau de bord.
+
+Trois marques s'ajoutent au net, et ce sont elles qui rendent le repli tenable :
+
+- **l'argent pas réglé** (« 75 $ à remettre ») — sans elle, il faudrait ouvrir les trois cents
+  journées de l'année pour retrouver celle où il reste quelque chose à régler ;
+- **« à renvoyer »**, quand un montant a changé depuis l'envoi ;
+- **« Hôtesse »**, parce que ce jour-là le net ne veut pas dire la même chose.
+
+**Replié veut dire non construit** — le corps de la carte n'existe pas tant qu'on n'a pas
+ouvert. C'est la même raison que la section « déjà envoyées », mais d'un cran plus fin : cette
+section dépliée bâtissait d'un coup trois cents formulaires complets avec leurs champs et leurs
+écouteurs. Elle bâtit maintenant trois cents lignes.
+
+**Une fois ouvert, le corps est CACHÉ et non effacé** (`display: none`). Un montant tapé dont le
+`change` n'est pas encore parti ne doit pas disparaître parce qu'on a refermé la carte.
+
+**« + Ajouter » ouvre d'elle-même la journée qu'elle vient de créer** : un bouton qui poserait
+une ligne repliée se lirait comme un bouton qui ne fait rien, et c'est précisément la journée
+qu'elle doit remplir tout de suite.
+
+L'état vit dans `joursOuverts` au niveau du module, comme `envoyeesOuvert` : `render()`
+reconstruit toute la page, et un attribut posé sur un nœud ne survivrait pas au premier
+rafraîchissement — la journée qu'on venait d'ouvrir se refermerait toute seule.
+
+Ce que ça coûte, et c'est assumé : **une tape de plus pour déclarer sa journée**, y compris
+quand il n'y en a qu'une. Une règle « ouverte s'il n'y en a qu'une » donnerait deux écrans
+différents pour la même page, et c'est exactement ce qu'on a refusé pour la largeur des colonnes
+de la grille de salle.
+
 ### Un enregistrement qui rate doit se voir
 
 Tout ce qui enregistre une journée passe par `enregistrer()` dans `employee.html`. Un seul
@@ -1369,6 +1408,12 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/ui-smoke.test.mjs` — démarre le serveur sur une base jetable et pilote les pages dans
   un vrai navigateur (voir l'en-tête du fichier). Se saute tout seul, sans échouer, quand
   aucun Chrome/Chromium n'est installé.
+
+  Son ménage de fin efface le profil Chrome avec `maxRetries`, et n'échoue pas s'il n'y
+  arrive pas : Chrome écrit encore dans son dossier à l'instant où on le tue, et le `rmSync`
+  levait alors `ENOTEMPTY`. Ça faisait rougir TOUT le fichier environ une fois sur six, sans
+  aucun rapport avec ce qui est testé — le genre d'échec qui apprend à ne plus lire les
+  rouges.
 
 Une modification dans `admin.html` ou `employee.html` mérite d'être vérifiée dans un vrai
 navigateur, pas seulement relue : c'est là que vit l'essentiel de la logique, et rien d'autre

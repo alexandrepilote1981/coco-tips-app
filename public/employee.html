@@ -152,6 +152,31 @@
     background: rgba(226,104,90,0.16); color: #E2685A; font-size: 12px; font-weight: 700;
     padding: 8px 10px; border-radius: 10px; margin-bottom: 10px; line-height: 1.35;
   }
+  /* Les journées sont repliées : une ligne chacune, qu'on ouvre d'une tape. Une carte
+     dépliée fait près d'un écran de téléphone à elle seule — une serveuse qui déclare cinq
+     midis par semaine se retrouvait à défiler sa propre page pour retrouver une journée.
+     C'est le même raisonnement que les fiches repliées du tableau de bord : ce qu'on vient
+     chercher ici, c'est presque toujours UNE journée. */
+  .jour-tete {
+    width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px;
+    background: none; border: 0; padding: 0; margin: 0; color: inherit; font: inherit;
+    text-align: left; cursor: pointer;
+  }
+  .jour-fleche { flex: 0 0 auto; color: #8993A4; font-size: 11px; }
+  .jour-date {
+    flex: 1 1 auto; font-weight: 700; color: #6FBF93; font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Les chiffres ne rétrécissent JAMAIS : c'est ce qu'on parcourt du pouce, et un nom de
+     journée un peu long ne doit pas les pousser hors de l'écran. */
+  .jour-chiffres { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; }
+  .jour-net { font-weight: 700; font-size: 14px; color: #6FBF93; }
+  .jour-net.vide { color: #8993A4; }
+  .jour-marque { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
+  .jour-marque.du { background: rgba(226,104,90,0.16); color: #E2685A; }
+  .jour-marque.hotesse { background: rgba(111,159,222,0.16); color: #8FB4E8; }
+  .jour-marque.renvoi { background: rgba(212,168,87,0.18); color: #D4A857; }
+  .day-body { margin-top: 12px; }
   .day-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .day-head input[type=date] { border: none; background: transparent; font-weight: 700; color: #6FBF93; font-size: 14px; }
   .del-btn { background: none; border: none; color: #6B7280; font-size: 16px; cursor: pointer; padding: 4px; }
@@ -333,6 +358,10 @@ let dispoConfirme = false;
 // Les journées déjà envoyées sont repliées par défaut. Replié = non construit : c'est ce qui
 // garde la page légère même après un an de déclarations.
 let envoyeesOuvert = false;
+// Quelles journées sont dépliées. Au niveau du module, comme `envoyeesOuvert` : render()
+// reconstruit toute la page, donc un attribut posé sur un nœud ne survivrait pas au premier
+// rafraîchissement et la journée qu'on venait d'ouvrir se refermerait toute seule.
+const joursOuverts = new Set();
 
 // ---------- Traductions ----------
 const I18N = {
@@ -356,6 +385,10 @@ const I18N = {
     envoyeeLe: (quand) => `Envoyée le ${quand}`,
     modifieeDepuisEnvoi: "Tu as changé un montant depuis l'envoi.",
     renvoyer: "Renvoyer ma déclaration",
+    aRenvoyer: "À renvoyer",
+    hotesseCourt: "Hôtesse",
+    remitCourtRecevoir: "à recevoir",
+    remitCourtRemettre: "à remettre",
     hello: "Salut",
     ventesTotal: "Ventes totales",
     pourboiresNets: "Pourboires nets",
@@ -459,6 +492,10 @@ const I18N = {
     envoyeeLe: (quand) => `Sent on ${quand}`,
     modifieeDepuisEnvoi: "You changed an amount after sending.",
     renvoyer: "Send again",
+    aRenvoyer: "Resend",
+    hotesseCourt: "Host",
+    remitCourtRecevoir: "to receive",
+    remitCourtRemettre: "to hand in",
     hello: "Hi",
     ventesTotal: "Total sales",
     pourboiresNets: "Net tips",
@@ -905,6 +942,8 @@ function marquerNonEnregistree(card, oui) {
 }
 
 function refreshSubmitRow(card, entry) {
+  // Le résumé d'abord : « à renvoyer » naît ici, et il doit se voir sur la ligne repliée.
+  rafraichirResume(entry);
   const row = card.querySelector(".submit-row");
   if (!row) return;
   row.innerHTML = submitRowHtml(entry);
@@ -923,6 +962,7 @@ function refreshCardSummary(entry) {
     if (pou) pou.textContent = fmtMoney(entry.pourboireBrut);
     if (net) net.textContent = fmtMoney(entry.net);
   }
+  rafraichirResume(entry);
 }
 
 function flashSaved() {
@@ -935,9 +975,57 @@ function flashSaved() {
 // Construit un item de type "carte" (jour) complet, avec tous ses écouteurs déjà attachés.
 // Utilisé autant pour la construction initiale de la liste que pour remplacer UNE seule carte
 // (ex: quand on bascule le mode hôtesse, qui change la mise en page du formulaire).
-function buildCardElement(e) {
-  const card = document.createElement("div");
-  card.className = "card day-card";
+// Ce qu'on lit sur la ligne repliée. Pas décoratif : c'est ce qu'on vient chercher d'un coup
+// de pouce — combien j'ai fait ce jour-là, et est-ce qu'il reste quelque chose à régler.
+function resumeJourHTML(e) {
+  const marques = [];
+  if (e.is_hotesse) marques.push(`<span class="jour-marque hotesse">${t("hotesseCourt")}</span>`);
+  // « Modifiée depuis l'envoi » doit se voir SANS ouvrir : sinon, dans une section de trois
+  // cents journées repliées, la seule qu'il faut renvoyer est invisible.
+  if (e.modifieeDepuisEnvoi) marques.push(`<span class="jour-marque renvoi">${t("aRenvoyer")}</span>`);
+  if (!e.transferred && e.remit_direction && e.remit_amount > 0) {
+    const sens = e.remit_direction === "employer_owes" ? t("remitCourtRecevoir") : t("remitCourtRemettre");
+    marques.push(`<span class="jour-marque du">${fmtMoney(e.remit_amount)} ${sens}</span>`);
+  }
+  return `${marques.join("")}<span class="jour-net${e.net ? "" : " vide"}">${fmtMoney(e.net)}</span>`;
+}
+
+function rafraichirResume(entry) {
+  const resume = document.getElementById(`resume-${entry.id}`);
+  if (resume) resume.innerHTML = resumeJourHTML(entry);
+}
+
+// Replier, déplier. Le corps est CACHÉ et non effacé : un montant tapé dont le `change` n'est
+// pas encore parti ne doit pas disparaître parce qu'on a refermé la carte.
+function basculerJour(card, e) {
+  const ouvert = !joursOuverts.has(e.id);
+  if (ouvert) joursOuverts.add(e.id);
+  else joursOuverts.delete(e.id);
+
+  const fleche = card.querySelector(".jour-fleche");
+  if (fleche) fleche.textContent = ouvert ? "▾" : "▸";
+  const tete = card.querySelector(".jour-tete");
+  if (tete) tete.setAttribute("aria-expanded", String(ouvert));
+
+  if (ouvert) construireCorps(card, e);
+  const corps = card.querySelector(".day-body");
+  if (corps) corps.style.display = ouvert ? "" : "none";
+}
+
+// Le corps n'est bâti qu'à la PREMIÈRE ouverture. C'est ce qui rend la section « déjà
+// envoyées » tenable : après un an elle porte trois cents journées, et trois cents
+// formulaires complets avec leurs champs et leurs écouteurs rendent l'app lente sur un
+// téléphone. Trois cents lignes, non.
+function construireCorps(card, e) {
+  if (card.querySelector(".day-body")) return;
+  const corps = document.createElement("div");
+  corps.className = "day-body";
+  corps.innerHTML = corpsJourHTML(e);
+  card.appendChild(corps);
+  attachCardListeners(card, e);
+}
+
+function corpsJourHTML(e) {
   const dayIsHotesse = !!e.is_hotesse;
   const formHtml = dayIsHotesse ? `
     <div class="field-grid" style="grid-template-columns: 1fr;">
@@ -964,7 +1052,7 @@ function buildCardElement(e) {
       <span class="net">${t("net")} <b id="sum-net-${e.id}">${fmtMoney(e.net)}</b></span>
     </div>
   `;
-  card.innerHTML = `
+  return `
     <div class="day-head">
       <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
       <button class="del-btn" data-id="${e.id}" data-action="del">${icon("trash", 15)}</button>
@@ -1005,7 +1093,21 @@ function buildCardElement(e) {
     </div>
     <div class="submit-row">${submitRowHtml(e)}</div>
   `;
-  attachCardListeners(card, e);
+}
+
+function buildCardElement(e) {
+  const card = document.createElement("div");
+  card.className = "card day-card";
+  const ouvert = joursOuverts.has(e.id);
+  card.innerHTML = `
+    <button type="button" class="jour-tete" aria-expanded="${ouvert}">
+      <span class="jour-fleche">${ouvert ? "▾" : "▸"}</span>
+      <span class="jour-date">${fmtDateShort(e.date)}</span>
+      <span class="jour-chiffres" id="resume-${e.id}">${resumeJourHTML(e)}</span>
+    </button>
+  `;
+  card.querySelector(".jour-tete").addEventListener("click", () => basculerJour(card, e));
+  if (ouvert) construireCorps(card, e);
   return card;
 }
 
@@ -1040,6 +1142,8 @@ function attachCardListeners(card, e) {
         e.pct = 100; e.remis = 0; e.clients = 0;
       } else if (field === "date") {
         e.date = ev.target.value; // pas de recalcul de montants, juste la date
+        const quand = card.querySelector(".jour-date");
+        if (quand) quand.textContent = fmtDateShort(e.date);
       } else {
         e[field] = parseFloat(ev.target.value) || 0;
       }
@@ -1050,7 +1154,8 @@ function attachCardListeners(card, e) {
     });
   });
 
-  card.querySelector('.hotesse-checkbox').addEventListener("change", async (ev) => {
+  const caseHotesse = card.querySelector('.hotesse-checkbox');
+  if (caseHotesse) caseHotesse.addEventListener("change", async (ev) => {
     e.is_hotesse = ev.target.checked;
     if (ev.target.checked) {
       // en entrant en mode hôtesse : ventes = montant reçu, le reste n'a pas de sens, on force à des valeurs neutres
@@ -1066,7 +1171,8 @@ function attachCardListeners(card, e) {
     await enregistrer(e, newCard);
   });
 
-  card.querySelector('[data-action="del"]').addEventListener("click", async () => {
+  const boutonEffacer = card.querySelector('[data-action="del"]');
+  if (boutonEffacer) boutonEffacer.addEventListener("click", async () => {
     if (!confirm(t("confirmDelete"))) return;
     card.remove();
     currentEntries = currentEntries.filter((x) => x.id !== e.id);
@@ -1635,6 +1741,9 @@ function render() {
     const newEntry = { ...payload, id: res.id, pourboireBrut: 0, net: 0, moyenne: 0, photo_filename: null, remit_direction: null, remit_amount: 0, transferred: 0, transfer_date: null };
     state.entries.push(newEntry);
     currentEntries.unshift(newEntry);
+    // Elle s'ouvre : « + Ajouter » qui poserait une ligne repliée se lirait comme un bouton
+    // qui ne fait rien, et c'est justement la journée qu'elle doit remplir tout de suite.
+    joursOuverts.add(newEntry.id);
     document.getElementById("daysList").prepend(buildCardElement(newEntry));
     refreshTotals();
   });
