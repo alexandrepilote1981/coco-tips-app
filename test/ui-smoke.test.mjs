@@ -1931,6 +1931,7 @@ test("interface", optionsDuTest, async (t) => {
     // semaines. Plus une journée récente ordinaire, pour les totaux.
     await poster({ date: ilYA(40), ventes: 1000, clients: 60, pct: 12, remis: 0, is_hotesse: false, remit_direction: "employee_owes", remit_amount: 75 });
     await poster({ date: ilYA(2), ventes: 1200, clients: 80, pct: 15, remis: 0, is_hotesse: false });
+    await poster({ date: ilYA(5), ventes: 900, clients: 40, pct: 15, remis: 0, is_hotesse: false });
 
     await ouvrirAdmin();
     // Une fenêtre qui EXCLUT la journée d'il y a 40 jours — c'est tout l'enjeu. Les
@@ -1940,18 +1941,24 @@ test("interface", optionsDuTest, async (t) => {
     await saisirDates(ilYA14, aujourdhui);
     await onglet.ev(`document.getElementById("customApply").click()`);
     await jusqua(async () => (await periodeActive()) === null, { quoi: "la plage personnalisée" });
+    // On vise le bandeau de l'ARGENT et pas n'importe quelle pastille : celui des RETARDS,
+    // juste au-dessus, en porte une au même nom dès qu'une journée date de plus de trois
+    // jours — et les DEUX bandeaux réutilisent les mêmes classes de pastille. Le test a
+    // attrapé la mauvaise et cherchait « 75 » dans « Dûe Marie · 1 ». C'est le bandeau qui
+    // les sépare (`banner-delay`), pas la pastille.
     const sonBandeau = () =>
       onglet.ev(`(function () {
-        var b = [...document.querySelectorAll(".pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); });
+        var b = [...document.querySelectorAll(".pending-banner:not(.banner-delay) .pending-chip")]
+          .find(function (c) { return /Dûe Marie/.test(c.textContent); });
         return b ? b.textContent.trim() : "";
       })()`);
 
     await jusqua(async () => /75/.test(await sonBandeau()), {
-      quoi: "le montant dû dans le bandeau, malgré la période de 2 semaines",
+      quoi: "le montant dû dans le bandeau, malgré la période choisie",
     });
 
     // La pastille doit MENER quelque part : une fiche ouverte, une rangée, et un bouton.
-    await onglet.ev(`[...document.querySelectorAll(".pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); }).click()`);
+    await onglet.ev(`[...document.querySelectorAll(".pending-banner:not(.banner-delay) .pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); }).click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector("tr.row-hors-periode")`), {
       quoi: "la rangée de la journée hors période",
     });
@@ -1965,13 +1972,43 @@ test("interface", optionsDuTest, async (t) => {
       true,
       "sans ce bouton, le bandeau réclamerait un argent qu'on ne peut pas régler"
     );
+
+    // L'ordre du tableau : du PLUS RÉCENT au plus vieux. Ce qu'on vient chercher, c'est hier
+    // ou aujourd'hui, pas le premier lundi de la période. Rien ne gardait cet ordre, et il
+    // s'est inversé quelques heures en ajoutant les rangées hors période — signalé tout de
+    // suite : « pourquoi la date la plus récente est en bas, c'est pas super pratique ».
+    const dates = await onglet.ev(`(function () {
+      var c = [...document.querySelectorAll(".fiche-nom")].find(function (n) { return /Dûe Marie/.test(n.textContent); }).closest(".employee-card-block");
+      return [...c.querySelectorAll(".report-table tbody tr")].map(function (tr) {
+        return tr.querySelector("td").textContent.trim();
+      });
+    })()`);
+    assert.equal(dates.length, 3, `trois rangées attendues, obtenu ${dates.length}`);
+    const jours = dates.map((d) => parseInt(d.match(/(\d+)/)[1], 10));
+    assert.ok(
+      new Date(ilYA(2)).getDate() === jours[0],
+      `la plus récente doit être EN HAUT : obtenu ${dates.join(" / ")}`
+    );
+    // Et la journée hors période, la plus vieille, se range naturellement en dernier.
+    assert.equal(
+      await onglet.ev(`(function () {
+        var c = [...document.querySelectorAll(".fiche-nom")].find(function (n) { return /Dûe Marie/.test(n.textContent); }).closest(".employee-card-block");
+        var rangees = [...c.querySelectorAll(".report-table tbody tr")];
+        return rangees[rangees.length - 1].classList.contains("row-hors-periode");
+      })()`),
+      true,
+      "un seul ordre pour tout le tableau : la plus vieille en bas, marquée ou non"
+    );
     // Et les totaux de la période ne bougent PAS : la vieille journée n'y entre pas, sinon
     // elle fausserait la paye qu'on compare à un talon.
     const netPeriode = await onglet.ev(`(function () {
       var c = [...document.querySelectorAll(".fiche-nom")].find(function (n) { return /Dûe Marie/.test(n.textContent); }).closest(".employee-card-block");
       return [...c.querySelectorAll(".employee-stat-value")].map(function (v) { return v.textContent; })[1];
     })()`);
-    assert.match(netPeriode, /180,00|180\.00/, "1200 × 15 % = 180 $ — la journée d'il y a 40 jours n'y est pas");
+    // 1200 × 15 % + 900 × 15 % = 315 $. Avec la journée d'il y a 40 jours (1000 × 12 % =
+    // 120 $) on serait à 435 $ : c'est l'écart qui prouve qu'elle n'entre pas dans les
+    // totaux de la période, même si sa rangée est affichée en dessous.
+    assert.match(netPeriode, /315,00|315\.00/, "la journée d'il y a 40 jours ne doit pas entrer dans le total");
 
     // --- on règle, et là seulement ça disparaît
     await onglet.ev(`document.querySelector("tr.row-hors-periode [data-action='markTransferred']").click()`);
