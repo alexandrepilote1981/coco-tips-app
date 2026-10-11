@@ -275,6 +275,9 @@ test("interface", optionsDuTest, async (t) => {
     // localStorage. Un test qui finit sur une paye décide de ce que le suivant voit, et le
     // suivant échoue sur du code juste. On repart de « tout l'historique », qui ne cache
     // rien ; les tests qui ont besoin d'une fenêtre la choisissent eux-mêmes.
+    // `all` n'a plus de bouton — le propriétaire ne veut que la paye et la saisie de dates —
+    // mais le mode existe toujours en interne, et c'est ce qui donne aux tests une fenêtre
+    // qui ne cache rien. On l'écrit donc directement.
     await onglet.ev(`localStorage.setItem("coco-period-admin", JSON.stringify({ mode: "all" }))`);
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
   }
@@ -368,15 +371,23 @@ test("interface", optionsDuTest, async (t) => {
   });
 
   await t.test("la période choisie survit au rechargement", async () => {
-    await onglet.ev(`document.querySelector('[data-period="month"]').click()`);
-    await jusqua(async () => (await periodeActive()) === "month", { quoi: "le changement de période" });
-    assert.equal(
-      await onglet.ev(`JSON.parse(localStorage.getItem("coco-period-admin")).mode`),
-      "month"
+    // Les raccourcis ont été retirés de la barre : il ne reste que la paye et la saisie de
+    // dates. C'est donc une plage à la main qu'on vérifie ici.
+    await saisirDates("2026-07-01", "2026-07-31");
+    await onglet.ev(`document.getElementById("customApply").click()`);
+    await jusqua(
+      async () => (await onglet.ev(`JSON.parse(localStorage.getItem("coco-period-admin")).mode`)) === "custom",
+      { quoi: "l'enregistrement de la plage" }
     );
 
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
-    assert.equal(await periodeActive(), "month", "la période devrait être relue au chargement");
+    assert.equal(
+      await onglet.ev(`document.getElementById("customStart").value`),
+      "2026-07-01",
+      "la plage devrait être relue au chargement"
+    );
+    await onglet.ev(`document.getElementById("customClear").click()`);
+    await jusqua(async () => (await periodeActive()) === "paye", { quoi: "le retour au défaut" });
   });
 
   await t.test("une valeur de période abîmée retombe sur le défaut", async () => {
@@ -391,16 +402,22 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
     assert.equal(await periodeActive(), "paye");
 
-    // Et l'ancien mode glissant bascule sur la paye plutôt que de repartir à zéro : le
-    // gérant ne doit pas avoir à recliquer sur chacun de ses appareils.
-    await onglet.ev(`localStorage.setItem("coco-period-admin", JSON.stringify({ mode: "2w" }))`);
-    await onglet.aller(`${serveur.base}/admin`, ".period-bar");
-    assert.equal(await periodeActive(), "paye", "« 2 dernières semaines » enregistré doit devenir la paye");
-    assert.equal(
-      await onglet.ev(`!!document.querySelector('[data-period="2w"]')`),
-      false,
-      "le bouton glissant ne doit plus exister"
-    );
+    // Les trois raccourcis retirés de la barre reviennent sur la paye plutôt que de laisser
+    // la page sans pastille allumée : le gérant ne doit pas avoir à recliquer sur chacun de
+    // ses appareils, et surtout pas rester sur une période qu'aucun bouton ne nomme.
+    for (const disparu of ["2w", "month", "all"]) {
+      await onglet.ev(`localStorage.setItem("coco-period-admin", JSON.stringify({ mode: "${disparu}" }))`);
+      await onglet.aller(`${serveur.base}/admin`, ".period-bar");
+      assert.equal(await periodeActive(), "paye", `« ${disparu} » enregistré doit devenir la paye`);
+      assert.equal(
+        await onglet.ev(`!!document.querySelector('[data-period="${disparu}"]')`),
+        false,
+        `le bouton « ${disparu} » ne doit plus exister`
+      );
+    }
+    // Il ne reste que la paye, et la planche pour entrer des dates.
+    assert.equal(await onglet.ev(`document.querySelectorAll("[data-period]").length`), 1);
+    assert.equal(await onglet.ev(`!!document.getElementById("customStart") && !!document.getElementById("customApply")`), true);
   });
 
   await t.test("rien ne déborde sur un écran de téléphone", async () => {
@@ -713,8 +730,11 @@ test("interface", optionsDuTest, async (t) => {
       false,
       "et elle ne doit pas rester en double dans les déclarations"
     );
-    await onglet.ev(`document.querySelector('[data-period="month"]').click()`);
-    await jusqua(() => onglet.ev(`!!document.querySelector('[data-period="month"].active')`), {
+    // Le seul bouton de période qui reste, depuis que les raccourcis sont partis. Ce qu'on
+    // vérifie n'a pas changé : les écouteurs des déclarations sont sous un garde, et sans
+    // lui la page revient à moitié branchée après un passage par un horaire.
+    await onglet.ev(`document.querySelector('[data-period="paye"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-period="paye"].active')`), {
       quoi: "le bouton de période qui répond après un changement d'onglet",
     });
 
@@ -1910,9 +1930,13 @@ test("interface", optionsDuTest, async (t) => {
     await poster({ date: ilYA(2), ventes: 1200, clients: 80, pct: 15, remis: 0, is_hotesse: false });
 
     await ouvrirAdmin();
-    // Une fenêtre qui EXCLUT la journée d'il y a 40 jours — c'est tout l'enjeu.
-    await onglet.ev(`document.querySelector('[data-period="month"]').click()`);
-    await jusqua(async () => (await periodeActive()) === "month", { quoi: "les 30 derniers jours" });
+    // Une fenêtre qui EXCLUT la journée d'il y a 40 jours — c'est tout l'enjeu. Les
+    // raccourcis sont partis de la barre, on la saisit donc à la main.
+    const ilYA14 = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+    await saisirDates(ilYA14, aujourdhui);
+    await onglet.ev(`document.getElementById("customApply").click()`);
+    await jusqua(async () => (await periodeActive()) === null, { quoi: "la plage personnalisée" });
     const sonBandeau = () =>
       onglet.ev(`(function () {
         var b = [...document.querySelectorAll(".pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); });
