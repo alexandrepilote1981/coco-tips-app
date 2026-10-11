@@ -1348,6 +1348,30 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
         }
         query += " ORDER BY date DESC, updated_at DESC, rowid DESC";
         const entries = db.prepare(query).all(...params).map(computeEntry);
+        // Les montants à remettre PAS ENCORE RÉGLÉS sortent toujours, quelle que soit la
+        // période demandée. Demandé ainsi : « ils doivent rester tant que je les règle pas
+        // manuel, c'est important ».
+        //
+        // Le défaut que ça ferme : ces montants vivaient dans `entries`, donc filtrés comme
+        // le reste. Une serveuse qui te doit 75 $ depuis cinq semaines disparaissait du
+        // bandeau rouge dès qu'on regardait la paye en cours — et le bouton « marquer viré »
+        // avec elle, puisqu'il vit dans la rangée du tableau. Le montant devenait
+        // impossible à régler sans penser à passer en « Tout ».
+        //
+        // Ils sortent À PART et pas dans `entries` : les totaux de la période (ventes, net,
+        // % moyen) doivent rester ceux de la période. Une vieille journée qui s'y glisserait
+        // fausserait la paye qu'on est en train de comparer à un talon.
+        const remisDus = db
+          .prepare(`
+            SELECT * FROM entries
+            WHERE employee_id = ?
+              AND remit_direction IS NOT NULL AND remit_direction != ''
+              AND COALESCE(transferred, 0) = 0
+              AND COALESCE(remit_amount, 0) > 0
+            ORDER BY date ASC
+          `)
+          .all(emp.id);
+
         const totals = entries.reduce(
           (acc, e) => {
             acc.ventes += e.ventes;
@@ -1359,7 +1383,7 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
           { ventes: 0, clients: 0, net: 0, brut: 0 }
         );
         totals.pctMoyen = totals.ventes > 0 ? totals.brut / totals.ventes : 0;
-        return { ...emp, entries, totals };
+        return { ...emp, entries, totals, remisDus };
       });
     // L'empreinte du mot de passe ne sort pas d'ici. Elle partait toute seule, parce que la
     // requête fait SELECT * — le même piège que les taux horaires sur la page employé : toute

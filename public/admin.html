@@ -379,6 +379,14 @@
   }
   .period-error { font-size: 12px; color: #E2685A; margin: -8px 0 12px; }
   .period-bar.is-busy { opacity: 0.5; pointer-events: none; }
+  /* Une journée venue d'avant la période, qui n'est là que parce que son montant à remettre
+     n'est pas réglé. Elle se distingue pour qu'on ne la croie pas dans les totaux — elle
+     n'y est pas. */
+  .report-table tr.row-hors-periode { opacity: 0.78; }
+  .marque-hors-periode {
+    display: inline-block; font-size: 9px; font-weight: 700; white-space: nowrap;
+    padding: 2px 5px; border-radius: 999px; background: rgba(226,104,90,0.16); color: #E2685A;
+  }
   /* La paye : régler son lundi de départ, puis passer d'une paye à l'autre. Une paye ne
      roule pas comme « les 2 dernières semaines » — elle tombe à date fixe, et c'est ce
      qu'on compare à un talon. */
@@ -1300,6 +1308,7 @@ const I18N = {
     pdfEnCours: "Génération…",
     erreurPdf: "Impossible de générer le PDF. Réessaie.",
     enAttenteLabel: "En attente",
+    horsPeriode: "hors période — pas réglé",
     messagesTitle: "Messages des employés",
     messageTab: "Message",
     aucunMessage: "Aucun message pour l'instant.",
@@ -1581,6 +1590,7 @@ const I18N = {
     pdfEnCours: "Generating…",
     erreurPdf: "Could not generate the PDF. Try again.",
     enAttenteLabel: "Pending",
+    horsPeriode: "outside period — unsettled",
     messagesTitle: "Messages from employees",
     messageTab: "Message",
     aucunMessage: "No messages yet.",
@@ -1766,6 +1776,26 @@ function fmtMoney(n) { n = isFinite(n) ? n : 0; return n.toLocaleString(t("local
 
 // Un vrai petit graphique (pas juste des chiffres) : les pourboires nets des derniers jours,
 // en ordre chronologique, pour repérer une tendance d'un coup d'œil.
+// Les rangées du détail d'une personne : sa période, PLUS les montants à remettre d'avant
+// qui ne sont toujours pas réglés.
+//
+// Sans ça, le bandeau réclamerait un argent qu'on ne peut pas régler : le bouton « marquer
+// viré » vit dans la rangée du tableau, et la rangée n'existait que si la journée tombait
+// dans la période affichée. On voyait 75 $ en rouge, on ouvrait la fiche, et il n'y avait
+// rien à cocher. Un bandeau qui réclame de l'argent doit toujours mener quelque part —
+// c'est la même règle que la pastille qui pointait vers une fiche disparue.
+//
+// Elles sont MARQUÉES (`horsPeriode`) et ne comptent dans aucun total : les chiffres de la
+// période restent ceux de la période, sinon une vieille journée fausserait la paye qu'on
+// est en train de comparer à un talon.
+function lignesDuTableau(e) {
+  const dansLaPeriode = new Set((e.entries || []).map((d) => d.id));
+  const dehors = (e.remisDus || [])
+    .filter((d) => !dansLaPeriode.has(d.id))
+    .map((d) => ({ ...d, horsPeriode: true }));
+  return [...(e.entries || []), ...dehors].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
 function renderSparkline(entries) {
   if (!entries || entries.length < 2) return "";
   const recent = entries.slice(0, 8).slice().reverse(); // entries arrive déjà triées DESC -> on remet en ordre chronologique
@@ -2052,7 +2082,11 @@ function render() {
     r.employees.forEach((e) => {
       let empPending = 0; // net signé : positif = on lui doit, négatif = il nous doit
       let empDirection = null;
-      e.entries.forEach((d) => {
+      // `remisDus` et PAS `e.entries` : un montant à remettre ne se périme pas avec la
+      // période affichée. Demandé ainsi — « ils doivent rester tant que je les règle pas
+      // manuel ». Le serveur l'envoie sur tout l'historique, donc le bandeau dit la vérité
+      // même quand on regarde la paye en cours.
+      (e.remisDus || []).forEach((d) => {
         if (d.remit_direction === "employer_owes" && !d.transferred) {
           owedByMeCount++; owedByMeAmount += d.remit_amount || 0;
           empPending += d.remit_amount || 0;
@@ -2414,9 +2448,9 @@ function render() {
             </div>` : ""}
           </div>
           ${renderSparkline(e.entries)}
-          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${icon("chart", 13)} ${t("voirDetail", e.entries.length)}</button>
+          <button class="report-toggle" data-action="toggleReport" data-emp="${e.id}">${icon("chart", 13)} ${t("voirDetail", lignesDuTableau(e).length)}</button>
           <div class="report-table-wrap" id="report-${e.id}" style="display:none;">
-            ${e.entries.length === 0 ? `<p style="font-size:12px; color:#8993A4; padding:8px 0;">${t("aucuneJournee")}</p>` : `
+            ${lignesDuTableau(e).length === 0 ? `<p style="font-size:12px; color:#8993A4; padding:8px 0;">${t("aucuneJournee")}</p>` : `
             <table class="report-table">
               <thead>
                 <tr>
@@ -2424,10 +2458,10 @@ function render() {
                 </tr>
               </thead>
               <tbody>
-                ${e.entries.map(d => {
-                  const rowClass = d.remit_direction && !d.transferred
+                ${lignesDuTableau(e).map(d => {
+                  const rowClass = (d.remit_direction && !d.transferred
                     ? (d.remit_direction === "employer_owes" ? "row-flagged-owed-employee" : "row-flagged-owed-employer")
-                    : "";
+                    : "") + (d.horsPeriode ? " row-hors-periode" : "");
                   let virementCell = "—";
                   if (d.remit_direction) {
                     const isEmployerOwes = d.remit_direction === "employer_owes";
@@ -2460,7 +2494,7 @@ function render() {
                     : "";
                   return `
                   <tr class="${rowClass}" id="row-${d.id}">
-                    <td>${fmtDateShort(d.date)}${d.is_hotesse ? ` <span style="color:#D4A857; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}${sentBadge}</td>
+                    <td>${fmtDateShort(d.date)}${d.horsPeriode ? ` <span class="marque-hors-periode">${t("horsPeriode")}</span>` : ""}${d.is_hotesse ? ` <span style="color:#D4A857; font-size:9px; font-weight:700;">${icon("tag", 10)}${t("roleHotesse")}</span>` : ""}${modifiedBadge}${sentBadge}</td>
                     <td>${delayCell}</td>
                     <td>${fmtMoney(d.ventes)}</td>
                     <td>${d.clients}</td>
