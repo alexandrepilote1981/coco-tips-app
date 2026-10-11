@@ -271,6 +271,11 @@ test("interface", optionsDuTest, async (t) => {
     // sur une grille d'horaire décide de l'écran d'entrée du suivant. On repart donc des
     // déclarations, qui sont ce que `.period-bar` ci-dessous attend.
     await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
+    // Même piège que l'onglet, et il vient de nous mordre : la période aussi vit dans
+    // localStorage. Un test qui finit sur une paye décide de ce que le suivant voit, et le
+    // suivant échoue sur du code juste. On repart de « tout l'historique », qui ne cache
+    // rien ; les tests qui ont besoin d'une fenêtre la choisissent eux-mêmes.
+    await onglet.ev(`localStorage.setItem("coco-period-admin", JSON.stringify({ mode: "all" }))`);
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
   }
 
@@ -339,9 +344,12 @@ test("interface", optionsDuTest, async (t) => {
     assert.match(await onglet.ev(`document.querySelector(".period-label").textContent`), /juillet|july/i);
   });
 
-  await t.test("le bouton d'effacement ramène aux 2 dernières semaines", async () => {
+  await t.test("le bouton d'effacement ramène au défaut", async () => {
+    // Le défaut était « 2 dernières semaines », une fenêtre glissante. C'est maintenant la
+    // période de paye : le propriétaire a demandé de décoller le 2 semaines sur un lundi
+    // fixe, pas d'en ajouter un à côté.
     await onglet.ev(`document.getElementById("customClear").click()`);
-    await jusqua(async () => (await periodeActive()) === "2w", { quoi: "le retour au raccourci" });
+    await jusqua(async () => (await periodeActive()) === "paye", { quoi: "le retour au défaut" });
     assert.equal(await onglet.ev(`!!document.getElementById("customClear")`), false);
     assert.equal(await onglet.ev(`document.getElementById("customApply").disabled`), true);
   });
@@ -374,14 +382,25 @@ test("interface", optionsDuTest, async (t) => {
   await t.test("une valeur de période abîmée retombe sur le défaut", async () => {
     await onglet.ev(`localStorage.setItem("coco-period-admin", "{ pas du json")`);
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
-    assert.equal(await periodeActive(), "2w");
+    assert.equal(await periodeActive(), "paye");
 
     // Une plage personnalisée sans ses deux bornes est inutilisable : même repli attendu.
     await onglet.ev(
       `localStorage.setItem("coco-period-admin", JSON.stringify({ mode: "custom", start: null, end: null }))`
     );
     await onglet.aller(`${serveur.base}/admin`, ".period-bar");
-    assert.equal(await periodeActive(), "2w");
+    assert.equal(await periodeActive(), "paye");
+
+    // Et l'ancien mode glissant bascule sur la paye plutôt que de repartir à zéro : le
+    // gérant ne doit pas avoir à recliquer sur chacun de ses appareils.
+    await onglet.ev(`localStorage.setItem("coco-period-admin", JSON.stringify({ mode: "2w" }))`);
+    await onglet.aller(`${serveur.base}/admin`, ".period-bar");
+    assert.equal(await periodeActive(), "paye", "« 2 dernières semaines » enregistré doit devenir la paye");
+    assert.equal(
+      await onglet.ev(`!!document.querySelector('[data-period="2w"]')`),
+      false,
+      "le bouton glissant ne doit plus exister"
+    );
   });
 
   await t.test("rien ne déborde sur un écran de téléphone", async () => {
@@ -1862,10 +1881,8 @@ test("interface", optionsDuTest, async (t) => {
     });
     assert.match(await datesPaye(), /5 octobre 2026|October 5, 2026/);
 
-    // On remet la période d'avant : elle vit dans localStorage, et un test qui finit sur
-    // « Paye » déciderait de l'écran d'entrée du suivant. Même piège que l'onglet actif.
-    await onglet.ev(`document.querySelector('[data-period="2w"]').click()`);
-    await jusqua(() => onglet.ev(`!document.querySelector(".paye-dates")`), { quoi: "le retour aux 2 semaines" });
+    // Pas besoin de remettre la période : `ouvrirAdmin()` repart de « tout l'historique »
+    // pour chaque test, justement parce qu'elle fuit par localStorage.
   });
 
   await t.test("un montant à remettre reste visible tant qu'on ne l'a pas réglé", async () => {
@@ -1892,7 +1909,10 @@ test("interface", optionsDuTest, async (t) => {
     await poster({ date: ilYA(40), ventes: 1000, clients: 60, pct: 12, remis: 0, is_hotesse: false, remit_direction: "employee_owes", remit_amount: 75 });
     await poster({ date: ilYA(2), ventes: 1200, clients: 80, pct: 15, remis: 0, is_hotesse: false });
 
-    await ouvrirAdmin(); // repart sur « 2 dernières semaines »
+    await ouvrirAdmin();
+    // Une fenêtre qui EXCLUT la journée d'il y a 40 jours — c'est tout l'enjeu.
+    await onglet.ev(`document.querySelector('[data-period="month"]').click()`);
+    await jusqua(async () => (await periodeActive()) === "month", { quoi: "les 30 derniers jours" });
     const sonBandeau = () =>
       onglet.ev(`(function () {
         var b = [...document.querySelectorAll(".pending-chip")].find(function (c) { return /Dûe Marie/.test(c.textContent); });
