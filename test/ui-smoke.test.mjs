@@ -1658,8 +1658,21 @@ test("interface", optionsDuTest, async (t) => {
     );
     assert.match(
       await onglet.ev(`document.querySelector(".date-indice").textContent`),
-      /Changer|Change/,
+      /Modifier|Edit/,
       "le mot est l'indication ; l'icône seule ne suffit pas"
+    );
+    // Et la rangée tient sur le plus petit téléphone encore en service (320 px). Mesuré :
+    // « Modifier » coûte 208 px, « Modifier date » en coûte 239 et déborde la carte là —
+    // c'est ce qui a tranché entre les deux, pas le goût.
+    assert.equal(
+      await onglet.ev(`(function () {
+        var t = document.querySelector(".day-head").getBoundingClientRect();
+        var p = document.querySelector(".date-champ").getBoundingClientRect();
+        var b = document.querySelector(".del-btn").getBoundingClientRect();
+        return p.right <= b.left + 1 && b.right <= t.right + 1;
+      })()`),
+      true,
+      "la puce de date et la poubelle doivent tenir côte à côte, sans déborder"
     );
     const puce = JSON.parse(
       await onglet.ev(`JSON.stringify((function () {

@@ -687,7 +687,14 @@ rafraîchissement — la journée qu'on venait d'ouvrir se refermerait toute seu
 posé là — rien ne disait qu'on peut appuyer dessus. Signalé en regardant une vraie carte :
 « ajoute une indication à côté pour qu'il sache qu'il faut appuyer là pour modifier la date ».
 Elle porte donc le fond d'un champ, comme VENTES et CLIENTS, une icône de calendrier et le mot
-« Changer ».
+« Modifier » — le même mot que le bouton des fiches du tableau de bord.
+
+**Le mot est mesuré, pas choisi au goût.** La question posée était « ça rentre-tu, "modifier
+date" ? ». Sur son téléphone (390 px) les quatre candidats rentrent, et même à 360 px. Mais à
+**320 px** — un vieux SE, le plus petit encore en service — « Modifier date » coûte 239 px et
+« Modifier la date » 256 px : les deux débordent la carte. « Modifier » en coûte 208, soit
+exactement le prix de « Changer », et tient partout. Le test vérifie que la puce et la
+poubelle tiennent côte à côte sans déborder.
 
 C'est une **étiquette qui enveloppe le champ** : taper n'importe où dans la puce ouvre le
 calendrier par le comportement natif du navigateur, sans une ligne de JavaScript. Chrome,
