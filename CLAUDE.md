@@ -1068,6 +1068,14 @@ octobre appartient à la paye précédente, le 18 à celle en cours.
 
 ### Le bandeau des retards
 
+**Les DEUX bandeaux réutilisent les mêmes classes de pastille** (`chip-owed-employee` /
+`chip-owed-employer`) — celui des retards s'en sert pour dire « en retard » contre « modifiée
+après coup », celui des virements pour dire qui doit à qui. C'est le BANDEAU qui les sépare
+(`banner-delay`), pas la pastille. Un test qui vise `.pending-chip` tout court attrape la
+mauvaise dès que la même personne figure dans les deux, et cherche un montant dans « Marie ·
+1 ».
+
+
 **Une pastille par PERSONNE, pas par journée** — `regrouperParPersonne()` dans `admin.html`.
 Mesuré sur une équipe de douze : le bandeau faisait **3 486 px**, quatre écrans de téléphone,
 57 % de l'onglet, avec 104 pastilles et 104 petites croix. Regroupé : **325 px**, 12
@@ -1125,6 +1133,20 @@ l'historique** — à côté de `entries`. Deux listes et pas une :
   de comparer à un talon ;
 - `remisDus` ignore la période. Le bandeau, les pastilles et le « En attente » d'une fiche se
   calculent sur elle, donc ils disent toujours la vérité.
+
+**Le tableau va du PLUS RÉCENT au plus vieux**, comme le serveur renvoie déjà les journées
+(`ORDER BY date DESC`) et comme la page d'un employé les montre. Ce qu'on vient y chercher,
+c'est hier ou aujourd'hui, pas le premier lundi de la période.
+
+Cet ordre s'est inversé quelques heures en ajoutant les rangées hors période — il fallait
+bien les ranger quelque part, et l'ordre croissant est tombé sous les doigts. Rien ne le
+gardait, d'où le silence. Signalé tout de suite : « pourquoi la date la plus récente est en
+bas, c'est pas super pratique ». Un test le verrouille maintenant, et vérifie du même coup
+que la rangée hors période, la plus vieille, se range en dernier — **un seul ordre pour tout
+le tableau**, marquée ou non.
+
+Le graphique en barres n'est pas touché : il reçoit `e.entries` et les remet lui-même en
+ordre chronologique.
 
 Dans le détail d'une personne, `lignesDuTableau()` ajoute les journées dues venues d'avant,
 **marquées « hors période — pas réglé »** et en retrait. Elles portent leur bouton, donc on

@@ -1850,7 +1850,15 @@ function lignesDuTableau(e) {
   const dehors = (e.remisDus || [])
     .filter((d) => !dansLaPeriode.has(d.id))
     .map((d) => ({ ...d, horsPeriode: true }));
-  return [...(e.entries || []), ...dehors].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  // Du PLUS RÉCENT au plus vieux, comme le serveur les renvoie déjà (`ORDER BY date DESC`)
+  // et comme la page d'un employé les montre. Ce qu'on vient chercher, c'est hier ou
+  // aujourd'hui — pas le premier lundi de la période.
+  //
+  // Ce tri a existé à l'envers quelques heures, le temps que les rangées hors période soient
+  // ajoutées : il fallait bien les ranger quelque part, et l'ordre croissant est tombé sous
+  // les doigts. Signalé tout de suite : « pourquoi la date la plus récente est en bas, c'est
+  // pas super pratique ».
+  return [...(e.entries || []), ...dehors].sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : 0));
 }
 
 function renderSparkline(entries) {
