@@ -60,6 +60,7 @@ public/shared/disponibilites.js  l'habitude déclarée par chaque employé, et s
 public/shared/feries.js    fériés du Québec et grosses journées de restaurant — calculés, pas saisis
 public/shared/periode-paye.js  les payes aux deux semaines, ancrées à un lundi
 public/shared/alerte-ferie.js  la fenêtre qui rappelle la commande avant un férié
+public/shared/nouvelle-version.js  la bande « une nouvelle version est prête »
 public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
 test/                     tests node:test
 ```
@@ -981,6 +982,21 @@ seul (`readPeriod`) : le gérant ne doit pas avoir à recliquer sur chacun de se
 Tant qu'aucun lundi n'est réglé, le libellé dit « Tout l'historique » — c'est ce que les
 chiffres couvrent, et laisser la ligne vide laisserait croire qu'ils cadrent une paye.
 
+### Et une journée à la fois
+
+Demandé en pointant la barre, juste après : « retire ça et ajoute journée ». Une paye répond à
+« combien je dois pour cette quinzaine » ; une **journée** répond à « comment ça a marché
+hier », et c'est la question qu'on se pose le matin en prenant son café.
+
+Le bouton **Journée** passe AVANT celui de la paye — on lit du plus court au plus long — et il
+porte la **même rangée de navigation** que la paye : `◂`, la date, `▸`. Deux rangées qui font
+la même chose doivent se manœuvrer pareil, donc elles partagent leurs styles.
+
+« Jour suivant » est **éteint sur aujourd'hui**, exactement comme « Paye suivante » : demain
+n'a aucune déclaration, et le bouton donnerait un écran vide qui se lirait comme une perte de
+données. Et revenir sur le bouton repart d'AUJOURD'HUI — garder le décalage ferait rouvrir
+l'app sur une journée de la semaine passée sans que rien ne dise pourquoi.
+
 **« 30 derniers jours » et « Tout l'historique » sont partis eux aussi.** Demandé ainsi, en
 pointant la barre : « retire ce que j'ai biffé en rouge, je veux la période de paye et la
 planche pour rentrer les dates ». Il ne reste donc que deux choses dans la barre — le bouton
@@ -1285,6 +1301,47 @@ tout** — ni rappels, ni avis de férié. C'est pourtant ce lien-là qu'on envo
 `horaire.html` ouvre la fenêtre **après le rendu**, pas au chargement du script : la porte
 n'est connue qu'une fois interrogée, et avant ça on aurait ouvert la mauvaise une fois sur
 deux.
+
+## Une nouvelle version doit se signaler
+
+**Le problème, vécu :** le propriétaire a passé une heure à regarder une vieille page. Il
+envoyait des captures d'un écran que j'avais déjà changé deux fois, et on a cherché le bogue
+dans le code alors qu'il n'y en avait pas — son bouton s'appelait encore « Paye » alors qu'il
+s'appelait « 2 semaines de paye » depuis deux déploiements.
+
+Trois choses se combinent pour produire ça, et aucune n'est un bogue :
+
+1. l'app est **ajoutée à l'écran d'accueil** (`apple-mobile-web-app-title`). iOS garde alors
+   la page vivante dans sa vue web : rouvrir l'icône ne redemande rien au serveur ;
+2. il n'y a donc **pas de barre de navigateur**, donc aucun bouton « recharger » ;
+3. **« tirer pour actualiser » ne recharge que les DONNÉES**, pas la page — c'est une décision
+   assumée (voir `tirer-pour-actualiser.js`), mais elle veut dire que le JavaScript, lui, ne
+   change jamais.
+
+Les en-têtes `no-cache` du serveur **n'y peuvent rien** : le navigateur ne redemande pas la
+page, donc il ne lit pas ses en-têtes. C'est le piège à comprendre avant de toucher à ça.
+
+Le serveur calcule donc au démarrage une empreinte de ses fichiers servis (`VERSION_APP`,
+sha1 des quatre pages plus tout `public/shared/`) et l'expose sur `GET /api/version`, sans
+jeton — ce n'est qu'une empreinte de fichiers publics, et l'écran de connexion doit pouvoir
+se mettre à jour lui aussi. Au démarrage et pas à la demande : `public/` ne bouge pas pendant
+qu'un serveur tourne.
+
+Chaque page retient l'empreinte au premier chargement et la redemande à chaque actualisation.
+Quand elle change, une bande apparaît en bas.
+
+**Une bande, pas un rechargement automatique.** Le gérant peut être en train de taper un
+montant ou de monter un horaire ; recharger sous ses doigts lui ferait perdre sa saisie, et
+c'est exactement la perte qu'on passe le reste de ce dépôt à éviter. Il tape quand il est
+prêt. Le bouton fait 44 px, comme tout ce qu'on cherche d'une main.
+
+Pas de réponse du serveur — hors ligne, ou serveur qui redémarre — ne veut PAS dire nouvelle
+version : on ne montre rien plutôt que d'inventer.
+
+Le test fait mentir `/api/version` plutôt que de redémarrer le vrai serveur au milieu du
+fichier, ce qui casserait tous les tests suivants. Ce qu'on vérifie est la réaction de la
+page : rien tant que l'empreinte ne bouge pas, la bande dès qu'elle change, et surtout
+qu'elle soit VUE et TAPABLE — une bande hors écran ne sortirait personne de sa vieille page.
 
 ## Le tableau de bord, en trois onglets
 

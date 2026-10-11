@@ -415,8 +415,11 @@ test("interface", optionsDuTest, async (t) => {
         `le bouton « ${disparu} » ne doit plus exister`
       );
     }
-    // Il ne reste que la paye, et la planche pour entrer des dates.
-    assert.equal(await onglet.ev(`document.querySelectorAll("[data-period]").length`), 1);
+    // Il ne reste que la journée, la paye, et la planche pour entrer des dates.
+    assert.deepEqual(
+      await onglet.ev(`[...document.querySelectorAll("[data-period]")].map(function (b) { return b.dataset.period; })`),
+      ["jour", "paye"]
+    );
     assert.equal(await onglet.ev(`!!document.getElementById("customStart") && !!document.getElementById("customApply")`), true);
   });
 
@@ -1992,6 +1995,115 @@ test("interface", optionsDuTest, async (t) => {
       false,
       "sa rangée à elle doit avoir disparu une fois réglée"
     );
+  });
+
+  await t.test("une journée à la fois, et on recule jour par jour", async () => {
+    // Demandé en pointant la barre, après la paye : « retire ça et ajoute journée ». Une
+    // paye répond à « combien je dois pour cette quinzaine » ; une journée répond à
+    // « comment ça a marché hier », et c'est la question du matin en prenant son café.
+    const resto = await (await api("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Resto Jour" }) })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Jour Marie", secteur: "salle" }),
+    })).json();
+    const ilYA = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const decl = (n, ventes) =>
+      fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: ilYA(n), ventes, clients: 50, pct: 10, remis: 0, is_hotesse: false }),
+      });
+    await decl(0, 1000); // aujourd'hui → 100 $
+    await decl(1, 3000); // hier        → 300 $
+    await decl(2, 7000); // avant-hier  → 700 $
+
+    await ouvrirAdmin();
+    const sonNet = () =>
+      onglet.ev(`(function () {
+        var n = [...document.querySelectorAll(".fiche-nom")].find(function (x) { return /Jour Marie/.test(x.textContent); });
+        return n ? n.closest(".fiche-entete").querySelector(".fiche-resume b").textContent : "";
+      })()`);
+
+    await onglet.ev(`document.querySelector('[data-period="jour"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.getElementById("jourPrecedent")`), { quoi: "la rangée du jour" });
+    await jusqua(async () => /100,00|100\.00/.test(await sonNet()), { quoi: "le net d'aujourd'hui" });
+    assert.match(
+      await onglet.ev(`document.querySelector(".paye-marque").textContent`),
+      /Aujourd'hui|Today/
+    );
+    // Demain n'a aucune déclaration : le bouton donnerait un écran vide qui se lirait comme
+    // une perte de données. Même règle que « Paye suivante ».
+    assert.equal(await onglet.ev(`document.getElementById("jourSuivant").disabled`), true);
+
+    await onglet.ev(`document.getElementById("jourPrecedent").click()`);
+    await jusqua(async () => /300,00|300\.00/.test(await sonNet()), { quoi: "hier" });
+    assert.equal(await onglet.ev(`document.getElementById("jourSuivant").disabled`), false);
+    await onglet.ev(`document.getElementById("jourPrecedent").click()`);
+    await jusqua(async () => /700,00|700\.00/.test(await sonNet()), { quoi: "avant-hier" });
+    // Une seule journée à la fois : les trois montants ne se mélangent jamais.
+    await onglet.ev(`document.getElementById("jourSuivant").click()`);
+    await jusqua(async () => /300,00|300\.00/.test(await sonNet()), { quoi: "le retour sur hier" });
+
+    // Revenir sur le bouton repart d'AUJOURD'HUI : garder le décalage ferait rouvrir l'app
+    // sur une journée de la semaine passée sans que rien ne dise pourquoi.
+    await onglet.ev(`document.querySelector('[data-period="paye"]').click()`);
+    await jusqua(() => onglet.ev(`!document.getElementById("jourPrecedent")`), { quoi: "le passage à la paye" });
+    await onglet.ev(`document.querySelector('[data-period="jour"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".paye-marque")`), { quoi: "le retour sur aujourd'hui" });
+  });
+
+  await t.test("une nouvelle version se signale, au lieu de laisser la page vieillir", async () => {
+    // Pourquoi ce test existe : le propriétaire a passé une heure à regarder une vieille
+    // page. L'app ajoutée à l'écran d'accueil n'a pas de bouton « recharger », iOS garde sa
+    // vue web vivante, et « tirer pour actualiser » ne recharge que les DONNÉES. Les
+    // en-têtes `no-cache` n'y peuvent rien : le navigateur ne redemande pas la page, donc
+    // il ne lit pas ses en-têtes.
+    await ouvrirAdmin();
+    assert.equal(
+      await onglet.ev(`!!document.querySelector(".nouvelle-version-bande")`),
+      false,
+      "rien ne doit s'afficher tant que le code servi n'a pas changé"
+    );
+    // Deux vérifications d'affilée sans changement ne doivent rien déclencher non plus.
+    await onglet.ev(`NouvelleVersion.verifier()`);
+    await onglet.ev(`NouvelleVersion.verifier()`);
+    assert.equal(await onglet.ev(`!!document.querySelector(".nouvelle-version-bande")`), false);
+
+    // On simule un déploiement en faisant mentir l'empreinte. Redémarrer le vrai serveur au
+    // milieu du fichier casserait tous les tests suivants ; ce qu'on vérifie ici, c'est la
+    // RÉACTION de la page à une empreinte différente.
+    await onglet.ev(`(function () {
+      var vrai = window.fetch;
+      window.fetch = function (url, opts) {
+        if (String(url).indexOf("/api/version") !== -1) {
+          return Promise.resolve(new Response(JSON.stringify({ version: "unedeploiement" }), {
+            headers: { "Content-Type": "application/json" },
+          }));
+        }
+        return vrai(url, opts);
+      };
+      return true;
+    })()`);
+    await onglet.ev(`NouvelleVersion.verifier()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".nouvelle-version-bande")`), {
+      quoi: "la bande de nouvelle version",
+    });
+    assert.match(
+      await onglet.ev(`document.querySelector(".nouvelle-version-bande").innerText`),
+      /nouvelle version|new version/i
+    );
+    // Elle doit être VUE et TAPABLE : une bande hors écran ou un bouton de 20 px ne
+    // sortiraient personne de sa vieille page.
+    const bande = JSON.parse(await onglet.ev(`JSON.stringify((function () {
+      var r = document.querySelector(".nouvelle-version-bande").getBoundingClientRect();
+      var b = document.querySelector(".nv-bouton").getBoundingClientRect();
+      return { vue: r.top < window.innerHeight && r.bottom > 0 && r.width > 0, bouton: Math.round(b.height) };
+    })())`));
+    assert.equal(bande.vue, true, "la bande doit être visible à l'écran");
+    assert.ok(bande.bouton >= 44, `le bouton fait ${bande.bouton} px : trop petit pour un pouce`);
+
+    // On remet le vrai fetch, sinon les tests suivants héritent du mensonge.
+    await onglet.aller(`${serveur.base}/admin`, ".period-bar");
   });
 
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
