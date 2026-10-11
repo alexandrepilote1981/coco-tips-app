@@ -178,7 +178,32 @@
   .jour-marque.renvoi { background: rgba(212,168,87,0.18); color: #D4A857; }
   .day-body { margin-top: 12px; }
   .day-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .day-head input[type=date] { border: none; background: transparent; font-weight: 700; color: #6FBF93; font-size: 14px; }
+  /* La date ressemblait à du texte posé là : rien ne disait qu'on peut appuyer dessus pour
+     la changer. Signalé en regardant une vraie carte — « ajoute une indication à côté pour
+     qu'il sache qu'il faut appuyer là pour modifier la date ». Elle porte donc le fond d'un
+     champ, comme VENTES et CLIENTS, une icône de calendrier et le mot.
+     C'est une ÉTIQUETTE qui enveloppe le champ : taper n'importe où dedans ouvre le
+     calendrier, par le comportement natif du navigateur et sans une ligne de JavaScript —
+     un `showPicker()` fait à la main ne marche pas partout et ouvrirait deux fois là où il
+     marche. */
+  .date-champ {
+    display: inline-flex; align-items: center; gap: 7px; min-height: 40px;
+    padding: 6px 10px; border-radius: 10px; cursor: pointer;
+    background: rgba(111,191,147,0.13); color: #6FBF93;
+  }
+  .date-champ input[type=date] {
+    border: none; background: transparent; padding: 0;
+    font-weight: 700; color: #6FBF93; font-size: 14px;
+  }
+  /* Chrome dessine sa PROPRE icône de calendrier dans le champ, Safari non. Sans ça, la
+     puce en portait deux sur un ordinateur et une seule sur l'iPhone de l'équipe. On garde
+     la nôtre, qui est la même partout — et `ouvrirCalendrier()` plus bas rend le clic
+     fonctionnel là où c'est cette icône-là qui ouvrait le calendrier. */
+  .date-champ input[type=date]::-webkit-calendar-picker-indicator { display: none; }
+  .date-indice {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: #8993A4; white-space: nowrap;
+  }
   .del-btn { background: none; border: none; color: #6B7280; font-size: 16px; cursor: pointer; padding: 4px; }
   .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .field label { display:block; font-size:10px; font-weight:700; text-transform:uppercase; color: #8993A4; margin-bottom: 4px; }
@@ -386,6 +411,7 @@ const I18N = {
     modifieeDepuisEnvoi: "Tu as changé un montant depuis l'envoi.",
     renvoyer: "Renvoyer ma déclaration",
     aRenvoyer: "À renvoyer",
+    changerDate: "Changer",
     hotesseCourt: "Hôtesse",
     remitCourtRecevoir: "à recevoir",
     remitCourtRemettre: "à remettre",
@@ -493,6 +519,7 @@ const I18N = {
     modifieeDepuisEnvoi: "You changed an amount after sending.",
     renvoyer: "Send again",
     aRenvoyer: "Resend",
+    changerDate: "Change",
     hotesseCourt: "Host",
     remitCourtRecevoir: "to receive",
     remitCourtRemettre: "to hand in",
@@ -1054,7 +1081,11 @@ function corpsJourHTML(e) {
   `;
   return `
     <div class="day-head">
-      <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
+      <label class="date-champ">
+        ${icon("calendar", 14)}
+        <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
+        <span class="date-indice">${t("changerDate")}</span>
+      </label>
       <button class="del-btn" data-id="${e.id}" data-action="del">${icon("trash", 15)}</button>
     </div>
     <label class="hotesse-toggle ${dayIsHotesse ? "active" : ""}">
@@ -1180,6 +1211,25 @@ function attachCardListeners(card, e) {
     refreshTotals();
     await deleteEntry(e.id);
   });
+
+  // Taper n'importe où dans la puce ouvre le calendrier. L'étiquette donne déjà le focus au
+  // champ, ce qui suffit sur iPhone ; sur Chrome c'est l'icône native qui ouvrait le
+  // calendrier et on vient de la cacher, d'où `showPicker()`. On ne l'appelle PAS quand le
+  // doigt a touché le champ lui-même : le navigateur s'en occupe, et le rouvrir par-dessus
+  // lève une erreur.
+  const puceDate = card.querySelector('.date-champ');
+  if (puceDate) {
+    puceDate.addEventListener("click", (ev) => {
+      const champ = puceDate.querySelector('input[type=date]');
+      if (!champ || ev.target === champ) return;
+      try {
+        champ.showPicker();
+      } catch (err) {
+        // Navigateur qui ne connaît pas showPicker, ou calendrier déjà ouvert : le focus de
+        // l'étiquette a déjà fait le travail.
+      }
+    });
+  }
 
   const photoInput = card.querySelector('.photo-input');
   if (photoInput) {

@@ -683,6 +683,24 @@ L'état vit dans `joursOuverts` au niveau du module, comme `envoyeesOuvert` : `r
 reconstruit toute la page, et un attribut posé sur un nœud ne survivrait pas au premier
 rafraîchissement — la journée qu'on venait d'ouvrir se refermerait toute seule.
 
+**La date, dans la carte ouverte, se donne pour ce qu'elle est.** Elle ressemblait à du texte
+posé là — rien ne disait qu'on peut appuyer dessus. Signalé en regardant une vraie carte :
+« ajoute une indication à côté pour qu'il sache qu'il faut appuyer là pour modifier la date ».
+Elle porte donc le fond d'un champ, comme VENTES et CLIENTS, une icône de calendrier et le mot
+« Changer ».
+
+C'est une **étiquette qui enveloppe le champ** : taper n'importe où dans la puce ouvre le
+calendrier par le comportement natif du navigateur, sans une ligne de JavaScript. Chrome,
+lui, dessine sa PROPRE icône dans le champ — la puce en portait donc deux sur un ordinateur
+contre une seule sur l'iPhone de l'équipe. On cache la sienne
+(`::-webkit-calendar-picker-indicator`), et comme c'était elle qui ouvrait le calendrier au
+clic, un `showPicker()` prend le relais — jamais quand le doigt a touché le champ lui-même,
+sinon on rouvre par-dessus un calendrier déjà ouvert.
+
+Le test regarde la **règle CSS** et non le rendu : `getComputedStyle` sur un pseudo-élément de
+la zone d'ombre de WebKit rend « block » même quand la règle s'applique bel et bien. Un test
+qui croit cette mesure échoue sur du code juste.
+
 Ce que ça coûte, et c'est assumé : **une tape de plus pour déclarer sa journée**, y compris
 quand il n'y en a qu'une. Une règle « ouverte s'il n'y en a qu'une » donnerait deux écrans
 différents pour la même page, et c'est exactement ce qu'on a refusé pour la largeur des colonnes

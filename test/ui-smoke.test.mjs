@@ -1647,6 +1647,45 @@ test("interface", optionsDuTest, async (t) => {
 
     const ouvert = await onglet.ev(`document.body.scrollHeight`);
     assert.ok(ouvert > replie, "ouvrir doit allonger la page, sinon le repli ne sert à rien");
+
+    // La date doit se donner pour ce qu'elle est : un champ. Demandé ainsi, en regardant une
+    // vraie carte — « ajoute une indication à côté pour qu'il sache qu'il faut appuyer là
+    // pour modifier la date ». Elle ressemblait à du texte posé là.
+    assert.equal(
+      await onglet.ev(`!!document.querySelector("label.date-champ > input[type=date]")`),
+      true,
+      "l'étiquette doit ENVELOPPER le champ : c'est ce qui ouvre le calendrier d'une tape, sans JavaScript"
+    );
+    assert.match(
+      await onglet.ev(`document.querySelector(".date-indice").textContent`),
+      /Changer|Change/,
+      "le mot est l'indication ; l'icône seule ne suffit pas"
+    );
+    const puce = JSON.parse(
+      await onglet.ev(`JSON.stringify((function () {
+        var b = document.querySelector(".date-champ").getBoundingClientRect();
+        return { h: Math.round(b.height), l: Math.round(b.width), vu: b.width > 0 && b.height > 0 };
+      })())`)
+    );
+    assert.equal(puce.vu, true, "la puce de date doit être visible à l'écran");
+    assert.ok(puce.h >= 40, `la puce fait ${puce.h} px de haut : trop petit pour un pouce`);
+    // Une seule icône de calendrier : Chrome dessine la sienne dans le champ, et la puce en
+    // portait deux sur un ordinateur contre une seule sur l'iPhone de l'équipe.
+    //
+    // On regarde la RÈGLE et non le rendu : `getComputedStyle` sur un pseudo-élément de la
+    // zone d'ombre de WebKit rend « block » même quand la règle s'applique bel et bien —
+    // mesuré ici, et l'icône était pourtant bien partie à l'écran. Un test qui croit cette
+    // mesure échoue sur du code juste.
+    assert.equal(
+      await onglet.ev(`[...document.styleSheets]
+        .flatMap(function (f) { try { return [...f.cssRules]; } catch (e) { return []; } })
+        .some(function (r) {
+          return /-webkit-calendar-picker-indicator/.test(r.selectorText || "")
+            && r.style && r.style.display === "none";
+        })`),
+      true,
+      "l'icône native de Chrome doit rester cachée, sinon la puce en porte deux"
+    );
     console.log(`      trois journées : ${replie} px repliées, ${ouvert} px avec UNE seule ouverte`);
 
     // --- une tape referme, et ce qui était tapé ne se perd pas
