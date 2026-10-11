@@ -1091,14 +1091,19 @@ function cuisineOuverte(rid) {
 }
 let shifts = [];
 const PERIOD_KEY = "coco-period-admin";
-const PERIOD_DEFAUT = { mode: "2w", start: null, end: null, payeDecalage: 0 }; // mode: '2w' | 'month' | 'all' | 'custom' | 'paye'
+const PERIOD_DEFAUT = { mode: "paye", start: null, end: null, payeDecalage: 0 }; // mode: 'paye' | 'month' | 'all' | 'custom'
 
 // La période choisie survit au rechargement de la page : sinon on retombe toujours sur
 // « 2 dernières semaines », même quand on consulte le même mois plusieurs fois de suite.
 function readPeriod() {
   try {
     const saved = JSON.parse(lireStockage("localStorage", PERIOD_KEY));
-    if (!saved || !["2w", "month", "all", "custom", "paye"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    // L'ancien mode « 2 dernières semaines » glissait : aujourd'hui moins treize jours. Il a
+    // été REMPLACÉ par la période de paye, qui couvre les mêmes quatorze jours mais à date
+    // fixe. On fait basculer les réglages déjà enregistrés plutôt que de les renvoyer au
+    // défaut : le gérant ne doit pas avoir à recliquer sur chacun de ses appareils.
+    if (saved && saved.mode === "2w") return { ...PERIOD_DEFAUT };
+    if (!saved || !["month", "all", "custom", "paye"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
     if (saved.mode === "custom" && !(saved.start && saved.end)) return { ...PERIOD_DEFAUT };
     // Le décalage de paye est de la navigation, pas un réglage : il vit avec le reste de la
     // période, par appareil. L'ANCRE, elle, est en base — voir `payeDebut` plus bas.
@@ -1134,10 +1139,9 @@ const I18N = {
     entrer: "Entrer",
     motDePasseIncorrect: "Mot de passe incorrect",
     periodeAffichee: "Période affichée",
-    p2Semaines: "2 dernières semaines",
     p30Jours: "30 derniers jours",
     pTout: "Tout l'historique",
-    pPaye: "Paye",
+    pPaye: "2 semaines de paye",
     payeRegler: "À quel lundi commence une paye ?",
     payeReglerAide: "Choisis le lundi d'une paye, n'importe laquelle — les autres se calculent toutes seules, aux deux semaines.",
     payeEnregistrer: "Enregistrer",
@@ -1419,10 +1423,9 @@ const I18N = {
     entrer: "Enter",
     motDePasseIncorrect: "Incorrect password",
     periodeAffichee: "Period shown",
-    p2Semaines: "Last 2 weeks",
     p30Jours: "Last 30 days",
     pTout: "All history",
-    pPaye: "Pay period",
+    pPaye: "Pay period (2 weeks)",
     payeRegler: "Which Monday does a pay period start on?",
     payeReglerAide: "Pick the Monday of any pay period — the others follow on their own, every two weeks.",
     payeEnregistrer: "Save",
@@ -1757,7 +1760,6 @@ function resolvePeriod() {
     // demande la date à la place.
     return p ? { start: p.debut, end: p.fin } : { start: null, end: null };
   }
-  if (period.mode === "2w") return { start: isoDaysAgo(13), end: todayISO() };
   if (period.mode === "month") return { start: isoDaysAgo(29), end: todayISO() };
   if (period.mode === "all") return { start: null, end: null };
   return { start: period.start, end: period.end }; // custom
@@ -2069,7 +2071,10 @@ function render() {
     period.mode === "all" ? t("toutesLesDonnees") :
     // En mode paye, la rangée au-dessus porte déjà les dates : les répéter ferait deux fois
     // la même phrase à deux lignes d'écart.
-    period.mode === "paye" ? "" :
+    // Tant qu'aucun lundi n'est réglé, la paye ne cadre rien : les chiffres couvrent tout
+    // l'historique, et il faut le DIRE. Une fois l'ancre posée, la rangée au-dessus porte
+    // les dates et les répéter ferait deux fois la même phrase.
+    period.mode === "paye" ? (payeDebut ? "" : t("toutesLesDonnees")) :
     start && end ? t("duAu", fmtDateLong(start), fmtDateLong(end)) : t("choisisDate");
   const isCustom = period.mode === "custom";
 
@@ -2192,10 +2197,10 @@ function render() {
       <div class="card">
         <div class="section-label" id="periodeAfficheeLabel">${t("periodeAffichee")}</div>
         <div class="period-bar" role="group" aria-labelledby="periodeAfficheeLabel">
-          <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w" aria-pressed="${period.mode === "2w"}">${t("p2Semaines")}</button>
+          <button class="period-btn ${period.mode === "paye" ? "active" : ""}" data-period="paye" aria-pressed="${period.mode === "paye"}">${t("pPaye")}</button>
           <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month" aria-pressed="${period.mode === "month"}">${t("p30Jours")}</button>
           <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all" aria-pressed="${period.mode === "all"}">${t("pTout")}</button>
-          <button class="period-btn ${period.mode === "paye" ? "active" : ""}" data-period="paye" aria-pressed="${period.mode === "paye"}">${t("pPaye")}</button>
+
           <div class="period-dates ${isCustom ? "active" : ""}">
             <input type="date" id="customStart" aria-label="${t("dateDebut")}" title="${t("dateDebut")}" value="${isCustom ? period.start || "" : ""}" />
             <span aria-hidden="true">${t("a")}</span>

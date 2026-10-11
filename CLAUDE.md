@@ -968,9 +968,18 @@ aux 2 semaines et commence un lundi ». Une paye ne roule pas, elle **tombe** : 
 dimanche 18, puis du 19 au 1er, et ainsi de suite. Un total pris sur une fenêtre glissante ne
 se compare à aucun talon.
 
-Un quatrième bouton, **Paye**, à côté des trois autres. Les trois anciens restent : « 2
-dernières semaines » ne sert plus à grand-chose une fois la paye réglée, mais retirer un
-bouton dont quelqu'un a l'habitude coûte plus cher que de le laisser.
+Le bouton **« 2 semaines de paye » REMPLACE « 2 dernières semaines »**, il ne s'ajoute pas à
+côté. La première version gardait les deux, en se disant que retirer un bouton dont quelqu'un
+a l'habitude coûte plus cher que de le laisser. C'était mal lire la demande — « décoller le 2
+semaines à partir d'un lundi précis » veut dire changer CE bouton-là, pas en poser un second.
+Rapporté ainsi, capture à l'appui, le lendemain : « t'as pas fait la modif pour les 2 semaines
+de paye ». Deux boutons de quatorze jours côte à côte, dont un seul correspond à la paye,
+c'est un piège à chaque ouverture.
+
+C'est maintenant le **défaut**, et un réglage déjà enregistré en mode glissant bascule tout
+seul (`readPeriod`) : le gérant ne doit pas avoir à recliquer sur chacun de ses appareils.
+Tant qu'aucun lundi n'est réglé, le libellé dit « Tout l'historique » — c'est ce que les
+chiffres couvrent, et laisser la ligne vide laisserait croire qu'ils cadrent une paye.
 
 **Tout tient dans une ancre** — le lundi d'une paye, n'importe laquelle — et une division
 (`public/shared/periode-paye.js`). Les périodes d'AVANT l'ancre se calculent aussi bien que
