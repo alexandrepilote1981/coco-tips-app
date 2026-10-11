@@ -1048,6 +1048,45 @@ détection « modifiée après coup » et la pastille ne se fermerait jamais.
 Ranger **n'efface rien** — la journée et ses montants restent intacts. Seule la pastille
 disparaît.
 
+### Un montant à remettre ne se périme pas
+
+Demandé ainsi : « ils doivent rester tant que je les règle pas manuel, c'est important ».
+
+Le défaut : ces montants vivaient dans `entries`, donc **filtrés par la période affichée**
+comme les ventes et les pourboires. Une serveuse qui te doit 75 $ depuis cinq semaines
+disparaissait du bandeau rouge dès qu'on regardait la paye en cours — mesuré : 0,00 $ en
+« 2 dernières semaines », 75,00 $ en « Tout ». Et le bandeau devenait vert alors qu'il
+restait de l'argent à recevoir.
+
+Pire : **le bouton « marquer viré » vit dans la rangée du tableau**, et la rangée n'existait
+que si la journée tombait dans la période. Le montant devenait donc impossible à régler sans
+penser à repasser en « Tout » — un bandeau qui réclame de l'argent sans mener nulle part,
+exactement le défaut qu'on avait déjà réparé pour la pastille pointant vers une fiche
+disparue.
+
+Le serveur renvoie donc `remisDus` — les montants à remettre **pas encore réglés, sur tout
+l'historique** — à côté de `entries`. Deux listes et pas une :
+
+- `entries` reste **filtrée par la période** : les totaux (ventes, net, % moyen) doivent
+  rester ceux de la période, sinon une vieille journée fausserait la paye qu'on est en train
+  de comparer à un talon ;
+- `remisDus` ignore la période. Le bandeau, les pastilles et le « En attente » d'une fiche se
+  calculent sur elle, donc ils disent toujours la vérité.
+
+Dans le détail d'une personne, `lignesDuTableau()` ajoute les journées dues venues d'avant,
+**marquées « hors période — pas réglé »** et en retrait. Elles portent leur bouton, donc on
+peut régler sans changer de période ; et comme elles sont marquées, on ne les croit pas dans
+les totaux — elles n'y sont pas.
+
+Ce qui n'a PAS changé, et c'est délibéré : les deux exports CSV restent sur la période
+choisie, comme leur sous-ligne le dit. « Résumé pour paye » doit couvrir la paye, pas
+l'historique.
+
+Couvert par `test/ui-smoke.test.mjs` : en « 2 dernières semaines », un 75 $ vieux de 40 jours
+reste dans le bandeau, sa pastille ouvre une fiche qui porte la rangée ET son bouton, les
+totaux de la période ne bougent pas, et le montant ne disparaît qu'une fois réglé — y compris
+après un rechargement.
+
 ### Corriger un nom ou un numéro
 
 Chaque fiche porte un bouton **Modifier** qui ouvre deux champs : le nom et le numéro
