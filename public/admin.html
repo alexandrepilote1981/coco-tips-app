@@ -379,6 +379,28 @@
   }
   .period-error { font-size: 12px; color: #E2685A; margin: -8px 0 12px; }
   .period-bar.is-busy { opacity: 0.5; pointer-events: none; }
+  /* La paye : régler son lundi de départ, puis passer d'une paye à l'autre. Une paye ne
+     roule pas comme « les 2 dernières semaines » — elle tombe à date fixe, et c'est ce
+     qu'on compare à un talon. */
+  .paye-reglage { background: rgba(111,191,147,0.09); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .paye-question { font-size: 13px; font-weight: 700; color: #F1EFEA; }
+  .paye-aide { font-size: 12px; color: #8993A4; margin: 4px 0 10px; line-height: 1.4; }
+  .paye-reglage-ligne { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .paye-reglage-ligne input[type=date] {
+    flex: 1 1 150px; min-height: 40px; border: none; border-radius: 10px; padding: 8px 10px;
+    background: rgba(111,159,222,0.14); color: #E8EEFA; font-size: 14px; font-weight: 600;
+  }
+  .paye-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  /* 44 px : on tape ces deux flèches souvent, et d'une main. */
+  .paye-fleche {
+    flex: 0 0 auto; width: 44px; height: 44px; border: 0; border-radius: 12px; cursor: pointer;
+    background: rgba(111,191,147,0.14); color: #6FBF93; font-size: 18px; line-height: 1;
+  }
+  .paye-fleche:disabled { opacity: 0.3; cursor: default; }
+  .paye-centre { flex: 1 1 auto; text-align: center; min-width: 0; }
+  .paye-dates { font-size: 13px; font-weight: 700; color: #F1EFEA; }
+  .paye-marque { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #6FBF93; margin-top: 2px; }
+  .paye-changer { background: none; border: 0; padding: 6px 0; color: #8993A4; font-size: 11px; text-decoration: underline; cursor: pointer; }
   @media (max-width: 560px) {
     .period-bar > .period-dates { flex: 1 1 100%; }
     .period-dates input { flex: 1 1 40%; }
@@ -920,6 +942,7 @@
 <!-- Le calcul des pourboires, le même que côté serveur. La fenêtre de correction montre
      le net pendant qu'on tape : le recopier ici le ferait diverger en silence. -->
 <script src="/shared/tip-math.js"></script>
+<script src="/shared/periode-paye.js"></script>
 <script src="/shared/tirer-pour-actualiser.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/absences.js"></script>
@@ -1060,16 +1083,18 @@ function cuisineOuverte(rid) {
 }
 let shifts = [];
 const PERIOD_KEY = "coco-period-admin";
-const PERIOD_DEFAUT = { mode: "2w", start: null, end: null }; // mode: '2w' | 'month' | 'all' | 'custom'
+const PERIOD_DEFAUT = { mode: "2w", start: null, end: null, payeDecalage: 0 }; // mode: '2w' | 'month' | 'all' | 'custom' | 'paye'
 
 // La période choisie survit au rechargement de la page : sinon on retombe toujours sur
 // « 2 dernières semaines », même quand on consulte le même mois plusieurs fois de suite.
 function readPeriod() {
   try {
     const saved = JSON.parse(lireStockage("localStorage", PERIOD_KEY));
-    if (!saved || !["2w", "month", "all", "custom"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    if (!saved || !["2w", "month", "all", "custom", "paye"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
     if (saved.mode === "custom" && !(saved.start && saved.end)) return { ...PERIOD_DEFAUT };
-    return { mode: saved.mode, start: saved.start || null, end: saved.end || null };
+    // Le décalage de paye est de la navigation, pas un réglage : il vit avec le reste de la
+    // période, par appareil. L'ANCRE, elle, est en base — voir `payeDebut` plus bas.
+    return { mode: saved.mode, start: saved.start || null, end: saved.end || null, payeDecalage: Number(saved.payeDecalage) || 0 };
   } catch (e) {
     return { ...PERIOD_DEFAUT };
   }
@@ -1079,6 +1104,11 @@ function setPeriod(next) {
   ecrireStockage("localStorage", PERIOD_KEY, JSON.stringify(period));
 }
 let period = readPeriod();
+// Le lundi qui ancre les payes. Il arrive avec l'aperçu, donc du SERVEUR : réglé sur le
+// téléphone, il vaut aussi sur l'ordinateur du bureau. Deux ancres différentes donneraient
+// deux totaux pour la même paye.
+let payeDebut = null;
+let payeReglageOuvert = false;
 
 // ---------- Traductions ----------
 const I18N = {
@@ -1099,6 +1129,15 @@ const I18N = {
     p2Semaines: "2 dernières semaines",
     p30Jours: "30 derniers jours",
     pTout: "Tout l'historique",
+    pPaye: "Paye",
+    payeRegler: "À quel lundi commence une paye ?",
+    payeReglerAide: "Choisis le lundi d'une paye, n'importe laquelle — les autres se calculent toutes seules, aux deux semaines.",
+    payeEnregistrer: "Enregistrer",
+    payeChanger: "Changer le lundi de départ",
+    payePrecedente: "Paye précédente",
+    payeSuivante: "Paye suivante",
+    payeEnCours: "Paye en cours",
+    payeRamenee: (d) => `Ramené au lundi : ${d}`,
     a: "à",
     appliquer: "Appliquer",
     effacerPeriode: "Effacer la période personnalisée",
@@ -1374,6 +1413,15 @@ const I18N = {
     p2Semaines: "Last 2 weeks",
     p30Jours: "Last 30 days",
     pTout: "All history",
+    pPaye: "Pay period",
+    payeRegler: "Which Monday does a pay period start on?",
+    payeReglerAide: "Pick the Monday of any pay period — the others follow on their own, every two weeks.",
+    payeEnregistrer: "Save",
+    payeChanger: "Change the starting Monday",
+    payePrecedente: "Previous pay",
+    payeSuivante: "Next pay",
+    payeEnCours: "Current pay",
+    payeRamenee: (d) => `Moved to the Monday: ${d}`,
     a: "to",
     appliquer: "Apply",
     effacerPeriode: "Clear the custom range",
@@ -1653,7 +1701,52 @@ function isoDaysAgo(n) {
   return localISO(d);
 }
 
+// La rangée de la paye : soit on règle le lundi de départ, soit on navigue d'une paye à
+// l'autre. Les deux ne s'affichent jamais ensemble — tant qu'il n'y a pas d'ancre, il n'y a
+// rien à naviguer.
+function blocPayeHTML() {
+  if (!payeDebut || payeReglageOuvert) {
+    const valeur = payeDebut || "";
+    return `
+      <div class="paye-reglage">
+        <div class="paye-question">${t("payeRegler")}</div>
+        <p class="paye-aide">${t("payeReglerAide")}</p>
+        <div class="paye-reglage-ligne">
+          <input type="date" id="payeDebutInput" value="${valeur}" aria-label="${t("payeRegler")}" />
+          <button class="period-apply" id="payeEnregistrer">${t("payeEnregistrer")}</button>
+        </div>
+      </div>`;
+  }
+  const p = periodeDePaye();
+  // « Paye suivante » ne mène nulle part quand on est déjà sur celle en cours : une paye à
+  // venir n'a aucune déclaration, et le bouton donnerait un écran vide qui se lirait comme
+  // une perte de données.
+  const auBout = (period.payeDecalage || 0) >= 0;
+  return `
+    <div class="paye-nav">
+      <button class="paye-fleche" id="payePrecedente" aria-label="${t("payePrecedente")}" title="${t("payePrecedente")}">◂</button>
+      <div class="paye-centre">
+        <div class="paye-dates">${t("duAu", fmtDateLong(p.debut), fmtDateLong(p.fin))}</div>
+        ${(period.payeDecalage || 0) === 0 ? `<div class="paye-marque">${t("payeEnCours")}</div>` : ""}
+      </div>
+      <button class="paye-fleche" id="payeSuivante" ${auBout ? "disabled" : ""} aria-label="${t("payeSuivante")}" title="${t("payeSuivante")}">▸</button>
+    </div>
+    <button class="paye-changer" id="payeChanger">${t("payeChanger")}</button>`;
+}
+
+function periodeDePaye() {
+  if (!payeDebut) return null;
+  return window.PeriodePaye.periode(payeDebut, todayISO(), period.payeDecalage || 0);
+}
+
 function resolvePeriod() {
+  if (period.mode === "paye") {
+    const p = periodeDePaye();
+    // Sans ancre, la paye ne veut rien dire : on ne retombe PAS en silence sur les deux
+    // dernières semaines, qui donneraient un chiffre d'allure juste mais faux. L'écran
+    // demande la date à la place.
+    return p ? { start: p.debut, end: p.fin } : { start: null, end: null };
+  }
   if (period.mode === "2w") return { start: isoDaysAgo(13), end: todayISO() };
   if (period.mode === "month") return { start: isoDaysAgo(29), end: todayISO() };
   if (period.mode === "all") return { start: null, end: null };
@@ -1773,6 +1866,20 @@ async function load() {
     if (start) params.set("startDate", start);
     if (end) params.set("endDate", end);
     overview = await api(`/api/admin/overview?${params.toString()}`);
+    payeDebut = overview.payeDebut || null;
+    // L'ancre des payes arrive AVEC l'aperçu, donc au tout premier chargement la requête
+    // est partie sans dates — et le serveur a répondu « tout l'historique ». L'écran
+    // afficherait alors les bonnes dates de paye au-dessus de chiffres qui couvrent l'année.
+    // On redemande une fois, avec la bonne fenêtre. Ça ne se produit qu'au premier
+    // chargement d'un onglet réglé sur « Paye » : ensuite l'ancre est déjà là.
+    if (period.mode === "paye" && payeDebut && !start) {
+      const vrai = resolvePeriod();
+      if (vrai.start && vrai.end) {
+        const p2 = new URLSearchParams({ startDate: vrai.start, endDate: vrai.end });
+        overview = await api(`/api/admin/overview?${p2.toString()}`);
+        payeDebut = overview.payeDebut || payeDebut;
+      }
+    }
     try {
       const res = await api("/api/admin/messages");
       messages = res.messages;
@@ -1930,6 +2037,9 @@ function render() {
   const { start, end } = resolvePeriod();
   const periodLabel =
     period.mode === "all" ? t("toutesLesDonnees") :
+    // En mode paye, la rangée au-dessus porte déjà les dates : les répéter ferait deux fois
+    // la même phrase à deux lignes d'écart.
+    period.mode === "paye" ? "" :
     start && end ? t("duAu", fmtDateLong(start), fmtDateLong(end)) : t("choisisDate");
   const isCustom = period.mode === "custom";
 
@@ -2051,6 +2161,7 @@ function render() {
           <button class="period-btn ${period.mode === "2w" ? "active" : ""}" data-period="2w" aria-pressed="${period.mode === "2w"}">${t("p2Semaines")}</button>
           <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month" aria-pressed="${period.mode === "month"}">${t("p30Jours")}</button>
           <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all" aria-pressed="${period.mode === "all"}">${t("pTout")}</button>
+          <button class="period-btn ${period.mode === "paye" ? "active" : ""}" data-period="paye" aria-pressed="${period.mode === "paye"}">${t("pPaye")}</button>
           <div class="period-dates ${isCustom ? "active" : ""}">
             <input type="date" id="customStart" aria-label="${t("dateDebut")}" title="${t("dateDebut")}" value="${isCustom ? period.start || "" : ""}" />
             <span aria-hidden="true">${t("a")}</span>
@@ -2059,6 +2170,7 @@ function render() {
             ${isCustom ? `<button class="period-clear" id="customClear" title="${t("effacerPeriode")}" aria-label="${t("effacerPeriode")}">✕</button>` : ""}
           </div>
         </div>
+        ${period.mode === "paye" ? blocPayeHTML() : ""}
         <div class="period-error" id="periodError" role="status" aria-live="polite" hidden></div>
         <div class="period-label" aria-live="polite">${periodLabel}</div>
         <div class="export-row">
@@ -2418,8 +2530,54 @@ function render() {
     await load();
   };
   document.querySelectorAll("[data-period]").forEach((btn) => {
-    btn.addEventListener("click", () => changePeriod({ mode: btn.dataset.period, start: null, end: null }));
+    btn.addEventListener("click", () => {
+      // Revenir sur « Paye » repart toujours de la paye EN COURS. Garder le décalage ferait
+      // rouvrir l'onglet sur une paye de septembre sans que rien ne dise pourquoi.
+      payeReglageOuvert = false;
+      changePeriod({ mode: btn.dataset.period, start: null, end: null, payeDecalage: 0 });
+    });
   });
+
+  // ---------- la paye ----------
+  const payeEnregistrer = document.getElementById("payeEnregistrer");
+  if (payeEnregistrer) {
+    payeEnregistrer.addEventListener("click", async () => {
+      const champ = document.getElementById("payeDebutInput");
+      const choisi = champ.value;
+      if (!choisi) return alert(t("choisisDate"));
+      payeEnregistrer.disabled = true;
+      try {
+        const res = await api("/api/admin/paye-debut", { method: "POST", body: JSON.stringify({ debut: choisi }) });
+        payeDebut = res.payeDebut;
+        payeReglageOuvert = false;
+        period.payeDecalage = 0;
+        setPeriod(period);
+        // Le serveur ramène la date à SON lundi. Le dire plutôt que de le faire en douce :
+        // sinon on voit un autre chiffre que celui qu'on pensait régler, sans savoir pourquoi.
+        if (payeDebut !== choisi) alert(t("payeRamenee", fmtDateLong(payeDebut)));
+        await load();
+      } catch (e) {
+        // On ne referme pas : la date tapée reste à l'écran, comme partout ailleurs.
+        payeEnregistrer.disabled = false;
+        alert(e.message || "Erreur");
+      }
+    });
+  }
+  const payeChanger = document.getElementById("payeChanger");
+  if (payeChanger) {
+    payeChanger.addEventListener("click", () => {
+      payeReglageOuvert = true;
+      render();
+    });
+  }
+  const allerPaye = (pas) => {
+    period.payeDecalage = (period.payeDecalage || 0) + pas;
+    changePeriod(period);
+  };
+  const payePrec = document.getElementById("payePrecedente");
+  if (payePrec) payePrec.addEventListener("click", () => allerPaye(-1));
+  const payeSuiv = document.getElementById("payeSuivante");
+  if (payeSuiv) payeSuiv.addEventListener("click", () => allerPaye(1));
   const customStart = document.getElementById("customStart");
   const customEnd = document.getElementById("customEnd");
   const customApply = document.getElementById("customApply");

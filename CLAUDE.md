@@ -58,6 +58,7 @@ public/shared/cout-main-oeuvre.js  masse salariale d'une semaine (cuisine seulem
 public/shared/absences.js  congés et vacances : plages, conflits, mise en forme des dates
 public/shared/disponibilites.js  l'habitude déclarée par chaque employé, et ses accrocs
 public/shared/feries.js    fériés du Québec et grosses journées de restaurant — calculés, pas saisis
+public/shared/periode-paye.js  les payes aux deux semaines, ancrées à un lundi
 public/shared/alerte-ferie.js  la fenêtre qui rappelle la commande avant un férié
 public/shared/tirer-pour-actualiser.js  « tirer pour actualiser », les trois écrans
 test/                     tests node:test
@@ -958,6 +959,60 @@ Les comptes se tiennent : une serveuse retranche de son net ce qu'elle remet, l'
 l'ajoute au sien. Le total des pourboires du restaurant reste juste, et le même argent n'est
 pas compté deux fois.
 
+### La période de paye
+
+La barre de période offrait « 2 dernières semaines », qui est une fenêtre **glissante** :
+aujourd'hui moins treize jours. Ça ne correspond à aucune paye. Demandé ainsi : « peux-tu
+décoller le 2 semaines à partir d'un lundi précis, pour suivre le détail de la paye qui est
+aux 2 semaines et commence un lundi ». Une paye ne roule pas, elle **tombe** : du lundi 5 au
+dimanche 18, puis du 19 au 1er, et ainsi de suite. Un total pris sur une fenêtre glissante ne
+se compare à aucun talon.
+
+Un quatrième bouton, **Paye**, à côté des trois autres. Les trois anciens restent : « 2
+dernières semaines » ne sert plus à grand-chose une fois la paye réglée, mais retirer un
+bouton dont quelqu'un a l'habitude coûte plus cher que de le laisser.
+
+**Tout tient dans une ancre** — le lundi d'une paye, n'importe laquelle — et une division
+(`public/shared/periode-paye.js`). Les périodes d'AVANT l'ancre se calculent aussi bien que
+celles d'après : quelqu'un qui règle son ancre en octobre doit pouvoir revenir sur la paye de
+septembre. C'est `Math.floor` et pas `Math.trunc`, et ce n'est pas un détail — avec `trunc`,
+les treize jours précédant l'ancre se rangeaient dans la période courante et gonflaient la
+paye en cours.
+
+**L'ancre vit dans `reglages`, pas dans le navigateur**, exactement comme la date de
+sauvegarde : le gérant règle ça sur son téléphone, ouvre `/admin` de l'ordinateur du bureau,
+et deux ancres différentes donneraient deux totaux pour la MÊME paye. Un chiffre qu'on
+compare à un talon ne peut pas dépendre de l'appareil qui le regarde. Le **décalage** (quelle
+paye on regarde), lui, est de la navigation et reste par appareil.
+
+**Une ancre qui n'est pas un lundi est ramenée à son lundi, et on le DIT.** Le réglage vient
+d'un calendrier où le doigt glisse ; une paye qui commencerait un mardi fausserait tout sans
+rien afficher d'anormal. Mais corriger en douce ferait voir un autre chiffre que celui qu'on
+pensait régler, donc une alerte nomme le lundi retenu.
+
+**Sans ancre, l'écran DEMANDE la date** — il ne retombe pas en silence sur les deux dernières
+semaines, qui donneraient un chiffre d'allure juste et faux.
+
+**« Paye suivante » est éteint sur la paye en cours** : une paye à venir n'a aucune
+déclaration, et le bouton donnerait un écran vide qui se lirait comme une perte de données.
+Revenir sur l'onglet repart toujours de la paye en cours — garder le décalage ferait rouvrir
+sur une paye de septembre sans que rien ne dise pourquoi.
+
+**Le piège de l'ordre, vu en vrai :** l'ancre arrive AVEC l'aperçu, donc au tout premier
+chargement la requête part sans dates et le serveur répond « tout l'historique ». L'écran
+affichait alors les bonnes dates de paye au-dessus de chiffres qui couvraient l'année. On
+redemande une fois, avec la bonne fenêtre — et seulement dans ce cas-là.
+
+Ce que ça débloque sans rien ajouter : **« Résumé pour paye » sort exactement la paye**,
+puisque les deux exports suivent la période choisie. C'était le nom du bouton depuis le
+début ; il dit enfin la vérité.
+
+Le calcul est couvert par `test/periode-paye.test.js` — dont la garantie qui compte : sur
+vingt-sept périodes d'affilée, chaque journée appartient à exactement UNE paye, sans trou ni
+recouvrement. Un trou d'un jour ferait disparaître une journée déclarée de tous les talons.
+Le trajet à l'écran est dans `test/ui-smoke.test.mjs`, bornes comprises : le dimanche 4
+octobre appartient à la paye précédente, le 18 à celle en cours.
+
 ### Le bandeau des retards
 
 **Une pastille par PERSONNE, pas par journée** — `regrouperParPersonne()` dans `admin.html`.
@@ -1404,6 +1459,9 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   postes, échappement) ; le fichier est chargé avec un faux `window`.
 - `test/feries.test.js` — les dates des fériés (dont Pâques sur plusieurs années) et le
   moment où l'alerte de commande sort.
+- `test/periode-paye.test.js` — les payes aux deux semaines : le lundi d'une semaine (dont le
+  piège du dimanche), les deux bornes, les périodes d'avant l'ancre, une ancre ramenée à son
+  lundi, le changement d'heure, et surtout qu'une année de périodes s'enchaîne sans trou.
 - `test/disponibilites.test.js` — le défaut, la détection d'accroc, et la différence entre
   « a dit oui à tout » et « n'a jamais répondu ».
 - `test/demandes-conge.test.mjs` — le trajet complet d'une demande de congé sur le vrai

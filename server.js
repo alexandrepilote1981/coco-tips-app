@@ -19,6 +19,7 @@ const Mdp = require("./mdp");
 const TipMath = require("./public/shared/tip-math.js");
 const { computeEntry } = TipMath;
 const CoutMainOeuvre = require("./public/shared/cout-main-oeuvre.js");
+const PeriodePaye = require("./public/shared/periode-paye.js");
 const { buildBackupZip } = require("./backup");
 
 const app = express();
@@ -1290,6 +1291,16 @@ app.get("/api/admin/schedule/pdf", requireScheduleAccess, async (req, res) => {
 // La date de la dernière sauvegarde. Elle vit en base et pas dans le navigateur : le gérant
 // change de téléphone, ouvre /admin de l'ordinateur du bureau, et un rappel qui repartirait
 // à zéro à chaque appareil ne vaudrait rien.
+// Le lundi qui ancre les périodes de paye. Dans `reglages` et PAS dans le navigateur, pour
+// la même raison que la date de sauvegarde : le gérant règle ça sur son téléphone, ouvre
+// /admin de l'ordinateur du bureau, et deux ancres différentes donneraient deux totaux
+// différents pour la MÊME paye. Un chiffre qu'on compare à un talon ne peut pas dépendre de
+// l'appareil qui le regarde.
+function payeDebut() {
+  const l = db.prepare("SELECT valeur FROM reglages WHERE cle = 'paye_debut'").get();
+  return l && l.valeur ? l.valeur : null;
+}
+
 function derniereSauvegarde() {
   const l = db.prepare("SELECT valeur FROM reglages WHERE cle = 'derniere_sauvegarde'").get();
   return l ? l.valeur : null;
@@ -1357,7 +1368,23 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
     const { mdp_cuisine, ...sansEmpreinte } = r;
     return { ...sansEmpreinte, mdp_cuisine_pose: Mdp.estPose(mdp_cuisine), employees };
   });
-  res.json({ restaurants: data, derniereSauvegarde: derniereSauvegarde() });
+  res.json({ restaurants: data, derniereSauvegarde: derniereSauvegarde(), payeDebut: payeDebut() });
+});
+
+// Poser le lundi d'ancrage des payes. Le serveur RAMÈNE la date à son lundi plutôt que de
+// refuser : le réglage vient d'un calendrier où le doigt glisse, et une paye qui
+// commencerait un mardi fausserait tous les totaux sans rien afficher d'anormal. Une valeur
+// vide retire l'ancre — le bouton « Paye » redemande alors sa date.
+app.post("/api/admin/paye-debut", requireAdmin, (req, res) => {
+  const brut = String(req.body.debut || "").trim();
+  if (brut === "") {
+    db.prepare("DELETE FROM reglages WHERE cle = 'paye_debut'").run();
+    return res.json({ payeDebut: null });
+  }
+  const lundi = PeriodePaye.lundiDe(brut);
+  if (!lundi) return res.status(400).json({ error: "Date invalide (AAAA-MM-JJ)" });
+  db.prepare("INSERT INTO reglages (cle, valeur) VALUES ('paye_debut', ?) ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur").run(lundi);
+  res.json({ payeDebut: lundi });
 });
 
 // ---------- Horaire (quarts de travail) ----------

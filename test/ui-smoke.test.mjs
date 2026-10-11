@@ -1781,6 +1781,93 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.taille(1000);
   });
 
+  await t.test("la paye : des blocs de deux semaines qui commencent un lundi fixe", async () => {
+    // Demandé ainsi : « peux-tu décoller le 2 semaines à partir d'un lundi précis, pour
+    // suivre le détail de la paye qui est aux 2 semaines et commence un lundi ». « 2
+    // dernières semaines » est une fenêtre GLISSANTE — aujourd'hui moins treize jours —
+    // donc son total ne correspond à aucun talon de paye.
+    const resto = await (await api("/api/admin/restaurants", { method: "POST", body: JSON.stringify({ name: "Resto Paye" }) })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST",
+      body: JSON.stringify({ restaurant_id: resto.id, name: "Paye Marie", secteur: "salle" }),
+    })).json();
+    const decl = (date, ventes) =>
+      fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, ventes, clients: 50, pct: 10, remis: 0, is_hotesse: false }),
+      });
+    // Ancre au lundi 5 octobre 2026 : la paye court du 5 au 18, la précédente du 21 sept au
+    // 4 oct. Les deux BORNES sont déclarées exprès — c'est là que ça se joue.
+    await decl("2026-10-05", 1000); // premier jour de la paye → 100 $
+    await decl("2026-10-18", 1000); // DERNIER jour de la paye → 100 $
+    await decl("2026-10-04", 5000); // dimanche d'avant : paye précédente → 500 $
+    await decl("2026-10-19", 9000); // lundi d'après : paye suivante → ne doit jamais paraître
+
+    await ouvrirAdmin();
+    const netDe = () =>
+      onglet.ev(`(function () {
+        var f = [...document.querySelectorAll(".fiche-nom")].find(function (n) { return /Paye Marie/.test(n.textContent); });
+        return f ? f.closest(".fiche-entete").querySelector(".fiche-resume b").textContent : "(introuvable)";
+      })()`);
+
+    await onglet.ev(`document.querySelector('[data-period="paye"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.getElementById("payeDebutInput")`), {
+      quoi: "la demande du lundi de départ",
+    });
+    // Sans ancre, la paye ne veut rien dire : l'écran DEMANDE plutôt que de retomber en
+    // silence sur les deux dernières semaines, qui donneraient un chiffre d'allure juste.
+    assert.equal(await onglet.ev(`!!document.querySelector(".paye-dates")`), false);
+
+    // On règle un MARDI exprès : le serveur doit le ramener à son lundi, et le DIRE.
+    await onglet.ev(`(function () {
+      window.__alertes = [];
+      window.alert = function (m) { window.__alertes.push(m); };
+      document.getElementById("payeDebutInput").value = "2026-10-06";
+    })()`);
+    await onglet.ev(`document.getElementById("payeEnregistrer").click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".paye-dates")`), { quoi: "la navigation de paye" });
+    assert.match(
+      await onglet.ev(`(window.__alertes || [])[0] || ""`),
+      /5 octobre|October 5/,
+      "ramener la date en douce ferait afficher un autre chiffre que celui qu'on pensait régler"
+    );
+
+    const datesPaye = () => onglet.ev(`document.querySelector(".paye-dates").textContent`);
+    assert.match(await datesPaye(), /5 octobre 2026.*18 octobre 2026|October 5, 2026.*October 18, 2026/);
+    assert.match(await netDe(), /200,00|200\.00/, "les DEUX bornes comptent : le 5 et le 18");
+    assert.equal(await onglet.ev(`!!document.querySelector(".paye-marque")`), true, "« Paye en cours »");
+    // Une paye à venir n'a aucune déclaration : le bouton donnerait un écran vide qui se
+    // lirait comme une perte de données.
+    assert.equal(await onglet.ev(`document.getElementById("payeSuivante").disabled`), true);
+
+    await onglet.ev(`document.getElementById("payePrecedente").click()`);
+    await jusqua(async () => /21 septembre|September 21/.test(await datesPaye()), { quoi: "la paye précédente" });
+    assert.match(
+      await netDe(),
+      /500,00|500\.00/,
+      "le dimanche 4 octobre appartient à la paye PRÉCÉDENTE, pas à celle en cours"
+    );
+    assert.equal(await onglet.ev(`document.getElementById("payeSuivante").disabled`), false);
+
+    // Rechargement : l'ancre vit en BASE, pas dans le navigateur — le gérant règle ça sur
+    // son téléphone et ouvre /admin du bureau. Et les chiffres doivent être justes du
+    // PREMIER rendu : l'ancre arrive avec l'aperçu, donc la première requête serait partie
+    // sans dates et aurait ramené tout l'historique sous les bonnes dates de paye.
+    await onglet.ev(`document.getElementById("payeSuivante").click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".paye-marque")`), { quoi: "le retour à la paye en cours" });
+    await onglet.aller(`${serveur.base}/admin`, ".paye-dates");
+    await jusqua(async () => /200,00|200\.00/.test(await netDe()), {
+      quoi: "le bon total dès le rechargement",
+    });
+    assert.match(await datesPaye(), /5 octobre 2026|October 5, 2026/);
+
+    // On remet la période d'avant : elle vit dans localStorage, et un test qui finit sur
+    // « Paye » déciderait de l'écran d'entrée du suivant. Même piège que l'onglet actif.
+    await onglet.ev(`document.querySelector('[data-period="2w"]').click()`);
+    await jusqua(() => onglet.ev(`!document.querySelector(".paye-dates")`), { quoi: "le retour aux 2 semaines" });
+  });
+
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
   // plafond de tentatives, qui bloque l'adresse 127.0.0.1 pour quinze minutes — tout test
   // de page employé placé après échouerait pour une raison sans rapport.
