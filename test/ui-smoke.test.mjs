@@ -1658,12 +1658,13 @@ test("interface", optionsDuTest, async (t) => {
     );
     assert.match(
       await onglet.ev(`document.querySelector(".date-indice").textContent`),
-      /Modifier|Edit/,
+      /Modifier date|Edit date/,
       "le mot est l'indication ; l'icône seule ne suffit pas"
     );
     // Et la rangée tient sur le plus petit téléphone encore en service (320 px). Mesuré :
-    // « Modifier » coûte 208 px, « Modifier date » en coûte 239 et déborde la carte là —
-    // c'est ce qui a tranché entre les deux, pas le goût.
+    // « Modifier date » coûte 218 px sans icône de calendrier, contre 239 px avec — et
+    // 239 px débordent une rangée de 250 px. C'est la mesure qui a retiré l'icône, pas le
+    // goût ; le test est là pour que personne ne la remette sans refaire le calcul.
     assert.equal(
       await onglet.ev(`(function () {
         var t = document.querySelector(".day-head").getBoundingClientRect();

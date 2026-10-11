@@ -181,7 +181,11 @@
   /* La date ressemblait à du texte posé là : rien ne disait qu'on peut appuyer dessus pour
      la changer. Signalé en regardant une vraie carte — « ajoute une indication à côté pour
      qu'il sache qu'il faut appuyer là pour modifier la date ». Elle porte donc le fond d'un
-     champ, comme VENTES et CLIENTS, une icône de calendrier et le mot.
+     champ, comme VENTES et CLIENTS, et le mot « Modifier date ».
+
+     PAS d'icône de calendrier : le mot dit déjà « date », donc elle ne portait rien de plus
+     — et ses 21 px étaient exactement ce qui faisait déborder la rangée sur un écran de
+     320 px. Mesuré : 239 px avec elle contre 218 px sans, pour 250 px de rangée.
      C'est une ÉTIQUETTE qui enveloppe le champ : taper n'importe où dedans ouvre le
      calendrier, par le comportement natif du navigateur et sans une ligne de JavaScript —
      un `showPicker()` fait à la main ne marche pas partout et ouvrirait deux fois là où il
@@ -411,7 +415,7 @@ const I18N = {
     modifieeDepuisEnvoi: "Tu as changé un montant depuis l'envoi.",
     renvoyer: "Renvoyer ma déclaration",
     aRenvoyer: "À renvoyer",
-    changerDate: "Modifier",
+    changerDate: "Modifier date",
     hotesseCourt: "Hôtesse",
     remitCourtRecevoir: "à recevoir",
     remitCourtRemettre: "à remettre",
@@ -519,7 +523,7 @@ const I18N = {
     modifieeDepuisEnvoi: "You changed an amount after sending.",
     renvoyer: "Send again",
     aRenvoyer: "Resend",
-    changerDate: "Edit",
+    changerDate: "Edit date",
     hotesseCourt: "Host",
     remitCourtRecevoir: "to receive",
     remitCourtRemettre: "to hand in",
@@ -1082,7 +1086,6 @@ function corpsJourHTML(e) {
   return `
     <div class="day-head">
       <label class="date-champ">
-        ${icon("calendar", 14)}
         <input type="date" value="${e.date}" data-id="${e.id}" data-field="date" />
         <span class="date-indice">${t("changerDate")}</span>
       </label>

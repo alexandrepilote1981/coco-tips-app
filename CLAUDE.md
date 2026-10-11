@@ -686,15 +686,16 @@ rafraîchissement — la journée qu'on venait d'ouvrir se refermerait toute seu
 **La date, dans la carte ouverte, se donne pour ce qu'elle est.** Elle ressemblait à du texte
 posé là — rien ne disait qu'on peut appuyer dessus. Signalé en regardant une vraie carte :
 « ajoute une indication à côté pour qu'il sache qu'il faut appuyer là pour modifier la date ».
-Elle porte donc le fond d'un champ, comme VENTES et CLIENTS, une icône de calendrier et le mot
-« Modifier » — le même mot que le bouton des fiches du tableau de bord.
+Elle porte donc le fond d'un champ, comme VENTES et CLIENTS, et le mot **« Modifier date »**.
 
-**Le mot est mesuré, pas choisi au goût.** La question posée était « ça rentre-tu, "modifier
-date" ? ». Sur son téléphone (390 px) les quatre candidats rentrent, et même à 360 px. Mais à
-**320 px** — un vieux SE, le plus petit encore en service — « Modifier date » coûte 239 px et
-« Modifier la date » 256 px : les deux débordent la carte. « Modifier » en coûte 208, soit
-exactement le prix de « Changer », et tient partout. Le test vérifie que la puce et la
-poubelle tiennent côte à côte sans déborder.
+**Pas d'icône de calendrier**, et c'est la mesure qui l'a retirée. La question posée était
+« ça rentre-tu, "modifier date" ? » — deux fois, donc c'était le libellé voulu. Avec l'icône,
+la puce coûte **239 px** et déborde une rangée de 250 px sur un écran de **320 px**, le plus
+petit encore en service. Sans elle, **218 px**, et ça tient partout avec 9 px de reste.
+L'icône ne portait de toute façon rien que le mot ne dise déjà : il y a « date » écrit dedans.
+
+Le test vérifie que la puce et la poubelle tiennent côte à côte sans déborder la carte — c'est
+la borne qui a décidé du libellé, et rien n'empêchait de la reperdre au prochain mot.
 
 C'est une **étiquette qui enveloppe le champ** : taper n'importe où dans la puce ouvre le
 calendrier par le comportement natif du navigateur, sans une ligne de JavaScript. Chrome,
