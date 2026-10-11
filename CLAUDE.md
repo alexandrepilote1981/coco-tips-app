@@ -683,6 +683,32 @@ L'état vit dans `joursOuverts` au niveau du module, comme `envoyeesOuvert` : `r
 reconstruit toute la page, et un attribut posé sur un nœud ne survivrait pas au premier
 rafraîchissement — la journée qu'on venait d'ouvrir se refermerait toute seule.
 
+**La date, dans la carte ouverte, se donne pour ce qu'elle est.** Elle ressemblait à du texte
+posé là — rien ne disait qu'on peut appuyer dessus. Signalé en regardant une vraie carte :
+« ajoute une indication à côté pour qu'il sache qu'il faut appuyer là pour modifier la date ».
+Elle porte donc le fond d'un champ, comme VENTES et CLIENTS, et le mot **« Modifier date »**.
+
+**Pas d'icône de calendrier**, et c'est la mesure qui l'a retirée. La question posée était
+« ça rentre-tu, "modifier date" ? » — deux fois, donc c'était le libellé voulu. Avec l'icône,
+la puce coûte **239 px** et déborde une rangée de 250 px sur un écran de **320 px**, le plus
+petit encore en service. Sans elle, **218 px**, et ça tient partout avec 9 px de reste.
+L'icône ne portait de toute façon rien que le mot ne dise déjà : il y a « date » écrit dedans.
+
+Le test vérifie que la puce et la poubelle tiennent côte à côte sans déborder la carte — c'est
+la borne qui a décidé du libellé, et rien n'empêchait de la reperdre au prochain mot.
+
+C'est une **étiquette qui enveloppe le champ** : taper n'importe où dans la puce ouvre le
+calendrier par le comportement natif du navigateur, sans une ligne de JavaScript. Chrome,
+lui, dessine sa PROPRE icône dans le champ — la puce en portait donc deux sur un ordinateur
+contre une seule sur l'iPhone de l'équipe. On cache la sienne
+(`::-webkit-calendar-picker-indicator`), et comme c'était elle qui ouvrait le calendrier au
+clic, un `showPicker()` prend le relais — jamais quand le doigt a touché le champ lui-même,
+sinon on rouvre par-dessus un calendrier déjà ouvert.
+
+Le test regarde la **règle CSS** et non le rendu : `getComputedStyle` sur un pseudo-élément de
+la zone d'ombre de WebKit rend « block » même quand la règle s'applique bel et bien. Un test
+qui croit cette mesure échoue sur du code juste.
+
 Ce que ça coûte, et c'est assumé : **une tape de plus pour déclarer sa journée**, y compris
 quand il n'y en a qu'une. Une règle « ouverte s'il n'y en a qu'une » donnerait deux écrans
 différents pour la même page, et c'est exactement ce qu'on a refusé pour la largeur des colonnes
