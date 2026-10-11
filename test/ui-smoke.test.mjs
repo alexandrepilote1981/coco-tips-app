@@ -240,7 +240,15 @@ test("interface", optionsDuTest, async (t) => {
     onglet.fermer();
     chrome.proc.kill("SIGKILL");
     serveur.proc.kill("SIGKILL");
-    rmSync(dossier, { recursive: true, force: true });
+    // Chrome écrit encore dans son profil à l'instant où on le tue, et le ménage échouait
+    // alors sur ENOTEMPTY — un échec qui faisait rougir TOUT le fichier une fois sur six,
+    // sans aucun rapport avec ce qui est testé. On laisse quelques essais, et on n'échoue
+    // pas sur du ménage : les fichiers sont dans un dossier temporaire de toute façon.
+    try {
+      rmSync(dossier, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    } catch {
+      /* du temporaire qui survit quelques heures ne casse rien */
+    }
   });
 
   const api = (chemin, options = {}) =>
@@ -406,6 +414,18 @@ test("interface", optionsDuTest, async (t) => {
     return { restoId: resto.id, employe, lien: `${serveur.base}/e/${employe.access_code}` };
   }
 
+  // Les journées sont repliées : une ligne chacune, qu'on ouvre d'une tape. Tout ce qui
+  // touche aux champs d'une journée passe donc par là d'abord.
+  async function ouvrirPremiereJournee(ou = "") {
+    await jusqua(async () => onglet.ev(`!!document.querySelector("${ou} .jour-tete".trim())`), {
+      quoi: "la ligne d'une journée",
+    });
+    await onglet.ev(`document.querySelector("${ou} .jour-tete".trim()).click()`);
+    await jusqua(async () => onglet.ev(`!!document.querySelector("${ou} .day-body".trim())`), {
+      quoi: "l'ouverture de la journée",
+    });
+  }
+
   await t.test("la serveuse peut envoyer sa déclaration, et la modifier l'annule", async () => {
     const { lien, employe } = await creerEmploye("Fatima");
     await onglet.aller(lien, "#addBtn");
@@ -469,7 +489,9 @@ test("interface", optionsDuTest, async (t) => {
     );
 
     // Après un rechargement, l'état vient du serveur : toujours à envoyer.
-    await onglet.aller(lien, "[data-action='submit']");
+    await onglet.aller(lien, ".jour-tete");
+    await ouvrirPremiereJournee();
+    assert.equal(await onglet.ev(`!!document.querySelector('[data-action="submit"]')`), true);
     assert.equal(await onglet.ev(`!!document.querySelector(".submitted-note")`), false);
     assert.equal(
       await onglet.ev(`!!document.querySelector(".submit-hint")`),
@@ -498,6 +520,8 @@ test("interface", optionsDuTest, async (t) => {
     // Dépliée, elle est là, avec sa confirmation d'envoi.
     await onglet.ev(`document.getElementById("toggleEnvoyees").click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector("#sentList .day-card")`), { quoi: "le dépliage" });
+    // Dépliée, la SECTION montre une ligne par journée ; la journée elle-même s'ouvre à part.
+    await ouvrirPremiereJournee("#sentList");
     assert.equal(await onglet.ev(`!!document.querySelector(".submitted-note")`), true);
   });
 
@@ -1571,6 +1595,137 @@ test("interface", optionsDuTest, async (t) => {
       `[...document.querySelectorAll(".conge-ligne")].find((l) => l.querySelector(".conge-etat.refuse")).innerText`
     );
     assert.match(texteRefus, /Trop de monde cette semaine-là/, "un refus sans un mot fait rappeler le gérant");
+  });
+
+  await t.test("ses journées sont repliées, et une tape en ouvre une", async () => {
+    // Demandé ainsi : « un moyen de rapetisser ça en laissant juste une ligne, et quand on
+    // clique ça ouvre, pour que le lien serveuse et hôtesse soit moins lourd ». Une carte
+    // dépliée fait près d'un écran de téléphone : cinq midis déclarés dans la semaine et la
+    // page devient un corridor.
+    const { employe, lien } = await creerEmploye("Repliée");
+    const jour = (d) =>
+      fetch(`${serveur.base}/api/employee/${employe.access_code}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: d, ventes: 1200, clients: 80, pct: 15, remis: 0, is_hotesse: false }),
+      });
+    await jour("2026-10-05");
+    await jour("2026-10-06");
+    await jour("2026-10-07");
+
+    await onglet.taille(390, 844); // un téléphone, puisque c'est là que ça se vit
+    await onglet.aller(lien, ".jour-tete");
+
+    assert.equal(await onglet.ev(`document.querySelectorAll(".day-card").length`), 3, "les trois journées");
+    assert.equal(
+      await onglet.ev(`document.querySelectorAll(".day-body").length`),
+      0,
+      "replié veut dire NON CONSTRUIT : aucun formulaire n'existe tant qu'on n'a pas ouvert"
+    );
+    // Une ligne, c'est une ligne : la carte ne doit pas dépasser la hauteur d'une rangée
+    // tapable. 44 px de cible + le rembourrage de la carte.
+    const hauteurLigne = await onglet.ev(`Math.round(document.querySelector(".day-card").getBoundingClientRect().height)`);
+    assert.ok(hauteurLigne < 100, `une journée repliée fait ${hauteurLigne} px, ce n'est plus une ligne`);
+
+    const replie = await onglet.ev(`document.body.scrollHeight`);
+
+    // Ce qu'on lit sans ouvrir : la date et le net.
+    const ligne = await onglet.ev(`document.querySelector(".day-card .jour-tete").innerText`);
+    assert.match(ligne, /oct/, "la journée doit se nommer");
+    assert.match(ligne, /180,00|180\.00/, "et porter son net — 1200 × 15 %");
+
+    // --- une tape ouvre
+    await onglet.ev(`document.querySelector(".day-card .jour-tete").click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".day-body")`), { quoi: "l'ouverture" });
+    assert.equal(
+      await onglet.ev(`document.querySelectorAll(".day-body").length`),
+      1,
+      "ouvrir une journée n'ouvre pas les autres"
+    );
+    assert.equal(await onglet.ev(`!!document.querySelector('input[data-field="ventes"]')`), true);
+    assert.equal(await onglet.ev(`!!document.querySelector('[data-action="submit"]')`), true);
+
+    const ouvert = await onglet.ev(`document.body.scrollHeight`);
+    assert.ok(ouvert > replie, "ouvrir doit allonger la page, sinon le repli ne sert à rien");
+    console.log(`      trois journées : ${replie} px repliées, ${ouvert} px avec UNE seule ouverte`);
+
+    // --- une tape referme, et ce qui était tapé ne se perd pas
+    await onglet.ev(`(function () {
+      var champ = document.querySelector('input[data-field="ventes"]');
+      champ.value = "999";
+      champ.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await onglet.ev(`document.querySelector(".day-card .jour-tete").click()`);
+    await jusqua(
+      () => onglet.ev(`document.querySelector(".day-card .day-body").style.display === "none"`),
+      { quoi: "la fermeture" }
+    );
+    // À deux pixels près : le « ✓ » qui clignote après un enregistrement remplace un libellé
+    // plus long, et ça suffit à faire bouger la page d'un pixel. Ce qu'on vérifie, c'est que
+    // la carte s'est bien refermée, pas la police du bandeau du haut.
+    const refermee = await onglet.ev(`document.body.scrollHeight`);
+    assert.ok(
+      Math.abs(refermee - replie) <= 2,
+      `refermée, la page devrait retrouver sa hauteur : ${refermee} px contre ${replie} px`
+    );
+    // Le net de la ligne suit la saisie : c'est ce qu'elle voit en refermant.
+    assert.match(
+      await onglet.ev(`document.querySelector(".day-card .jour-chiffres").innerText`),
+      /149,85|149\.85/,
+      "999 × 15 % = 149,85 $, affiché sans rouvrir"
+    );
+
+    await onglet.ev(`document.querySelector(".day-card .jour-tete").click()`);
+    await jusqua(
+      () => onglet.ev(`document.querySelector(".day-card .day-body").style.display !== "none"`),
+      { quoi: "la réouverture" }
+    );
+    assert.equal(
+      await onglet.ev(`document.querySelector('input[data-field="ventes"]').value`),
+      "999",
+      "le corps est CACHÉ et non effacé : un montant tapé ne disparaît pas en refermant"
+    );
+
+    // --- ce qui doit se lire SANS ouvrir
+    // Une journée dont l'argent n'est pas réglé, et une journée d'hôtesse, ne se voient pas
+    // dans le net : sans marque sur la ligne, il faudrait ouvrir les trois cents journées de
+    // l'année pour retrouver celle où il reste 75 $ à remettre.
+    await onglet.ev(`(function () {
+      document.querySelector('[data-remit="employee_owes"]').click();
+    })()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector(".remit-amount-input")`), {
+      quoi: "le champ du montant dû",
+    });
+    await onglet.ev(`(function () {
+      var champ = document.querySelector(".remit-amount-input");
+      champ.value = "75";
+      champ.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await jusqua(
+      () => onglet.ev(`/75,00|75\\.00/.test(document.querySelector(".day-card .jour-chiffres").innerText)`),
+      { quoi: "le montant dû sur la ligne repliée" }
+    );
+    const avecDu = await onglet.ev(`document.querySelector(".day-card .jour-chiffres").innerText`);
+    assert.match(avecDu, /à remettre|to hand in/, "la ligne doit dire de quel sens il s'agit");
+
+    await onglet.ev(`document.querySelector(".day-card .hotesse-checkbox").click()`);
+    await jusqua(
+      () => onglet.ev(`!!document.querySelector(".day-card .jour-marque.hotesse")`),
+      { quoi: "la marque hôtesse" }
+    );
+
+    // --- « + Ajouter » ouvre d'elle-même la journée qu'on vient de créer
+    await onglet.ev(`document.getElementById("addBtn").click()`);
+    await jusqua(() => onglet.ev(`document.querySelectorAll(".day-card").length === 4`), {
+      quoi: "la journée ajoutée",
+    });
+    assert.equal(
+      await onglet.ev(`!!document.querySelector("#daysList .day-card:first-child .day-body")`),
+      true,
+      "un « + Ajouter » qui poserait une ligne repliée se lirait comme un bouton qui ne fait rien"
+    );
+
+    await onglet.taille(1000);
   });
 
   // ATTENTION : ce test DOIT rester le dernier du fichier. Il déclenche volontairement le
