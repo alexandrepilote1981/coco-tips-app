@@ -101,3 +101,35 @@ test("un an de périodes s'enchaîne sans trou ni recouvrement", () => {
     precedente = p;
   }
 });
+
+test("reculer et avancer d'un jour ne saute rien, même aux changements d'heure", () => {
+  // Demandé ainsi : « valide qu'il n'y a pas de décalage de date à venir ». Le pas est
+  // volontairement de l'arithmétique PURE sur une date déjà fixée — pas de `new Date()` à
+  // chaque clic — donc le fuseau de l'appareil ne peut plus s'en mêler. Ce test verrouille
+  // ça aux quatre endroits où une erreur de fuseau se verrait.
+  const jours = (a, b) => (new Date(b + "T12:00:00Z") - new Date(a + "T12:00:00Z")) / 86400000;
+  for (const autour of [
+    "2026-11-01", // changement d'heure d'automne au Québec
+    "2027-03-14", // changement d'heure du printemps
+    "2027-01-01", // le Nouvel An
+    "2028-02-29", // un 29 février
+  ]) {
+    const vus = [];
+    for (let d = -5; d <= 5; d++) vus.push(P.decalerJour(autour, d));
+    for (let i = 1; i < vus.length; i++) {
+      assert.equal(jours(vus[i - 1], vus[i]), 1, `${vus[i - 1]} → ${vus[i]} autour du ${autour}`);
+    }
+    assert.equal(new Set(vus).size, vus.length, `une journée revient deux fois autour du ${autour}`);
+    assert.equal(P.decalerJour(autour, 0), autour, "décalage nul = la même journée");
+  }
+});
+
+test("un décalage de journée sur une date impossible ne devine rien", () => {
+  for (const faux of ["", null, undefined, "demain", "2026-13-01", "2027-02-30"]) {
+    assert.equal(P.decalerJour(faux, -1), null, JSON.stringify(faux));
+  }
+  // Un décalage de travers vaut zéro : mieux vaut rester sur aujourd'hui que sauter au
+  // hasard dans le calendrier.
+  assert.equal(P.decalerJour("2026-10-11", "n'importe quoi"), "2026-10-11");
+  assert.equal(P.decalerJour("2026-10-11", undefined), "2026-10-11");
+});

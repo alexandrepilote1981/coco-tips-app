@@ -78,7 +78,22 @@
     return { debut, fin: plusJours(debut, LONGUEUR - 1), index };
   }
 
-  const API = { lundiDe, estLundi, periode, LONGUEUR };
+  /**
+   * La journée à `decalage` jours de `jour` (négatif = dans le passé).
+   *
+   * Pourquoi ça vit ici plutôt que dans la page : la version d'avant repartait de l'HORLOGE
+   * à chaque pas — `new Date()` puis `setDate(getDate() - n)`. Ça marche, c'est vérifié sur
+   * les deux changements d'heure et le Nouvel An, mais ça dépend du fuseau de l'appareil et
+   * de l'heure qu'il est au moment du clic. Ici le pas est de l'arithmétique pure sur une
+   * date déjà fixée : il n'y a plus de fuseau dans l'affaire, donc plus rien à vérifier.
+   * L'horloge n'est lue qu'une fois, pour savoir quel jour on est.
+   */
+  function decalerJour(jour, decalage) {
+    if (!estISO(jour)) return null;
+    return plusJours(jour, Number(decalage) || 0);
+  }
+
+  const API = { lundiDe, estLundi, periode, decalerJour, LONGUEUR };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else racine.PeriodePaye = API;
 })(typeof window !== "undefined" ? window : globalThis);

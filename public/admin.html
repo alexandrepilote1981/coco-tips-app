@@ -1795,7 +1795,11 @@ function periodeDePaye() {
 // dois pour cette quinzaine » ; une journée répond à « comment ça a marché hier », et c'est
 // la question qu'on se pose le matin en prenant son café.
 function jourAffiche() {
-  return isoDaysAgo(-(period.jourDecalage || 0));
+  // L'horloge n'est lue qu'une fois, par `todayISO()`. Le pas, lui, est de l'arithmétique
+  // pure sur une date déjà fixée — donc aucun fuseau, aucun changement d'heure dans
+  // l'affaire. La version d'avant repartait de l'horloge à chaque pas ; ça marchait, mais
+  // ça demandait de le prouver à chaque changement d'heure.
+  return window.PeriodePaye.decalerJour(todayISO(), period.jourDecalage || 0);
 }
 
 function resolvePeriod() {
