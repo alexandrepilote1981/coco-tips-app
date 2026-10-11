@@ -340,6 +340,7 @@
 
 <!-- Même fichier que celui utilisé par le serveur : une seule définition du calcul. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
+<script src="/shared/nouvelle-version.js"></script>
 <script src="/shared/code-acces.js"></script>
 <!-- Les congés : libellés des types et mise en forme des périodes. Le même module que
      la grille du gérant, pour que « Congé du 14 au 15 octobre » s'écrive pareil des deux bords. -->
@@ -395,6 +396,8 @@ const joursOuverts = new Set();
 // ---------- Traductions ----------
 const I18N = {
   fr: {
+    nouvelleVersion: "Une nouvelle version est prête.",
+    nouvelleVersionRecharger: "Recharger",
     savedNote: "Sauvegardé automatiquement",
     aEnvoyer: (n) => `À envoyer (${n})`,
     dejaEnvoyees: (n) => `Déjà envoyées (${n})`,
@@ -503,6 +506,8 @@ const I18N = {
     locale: "fr-CA",
   },
   en: {
+    nouvelleVersion: "A new version is ready.",
+    nouvelleVersionRecharger: "Reload",
     savedNote: "Auto-saved",
     aEnvoyer: (n) => `To send (${n})`,
     dejaEnvoyees: (n) => `Already sent (${n})`,
@@ -1807,8 +1812,12 @@ load();
 // Tirer vers le bas depuis le haut de la page recharge les données, sans repartir de zéro.
 TirerPourActualiser.init({
   libelle: (cle) => t(cle),
-  surRafraichir: () => load(),
+  surRafraichir: () => { NouvelleVersion.verifier(); return load(); },
 });
+
+// Et la bande « nouvelle version » : sans elle, une app ajoutée à l'écran d'accueil ne
+// redemande jamais sa page et reste sur du vieux code pour toujours.
+NouvelleVersion.init({ libelle: (cle) => t(cle) });
 </script>
 </body>
 </html>

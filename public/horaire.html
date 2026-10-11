@@ -600,6 +600,7 @@
 
 <!-- Grille d'horaire commune à cette page et à /admin : une seule définition. -->
 <script src="/shared/tirer-pour-actualiser.js"></script>
+<script src="/shared/nouvelle-version.js"></script>
 <script src="/shared/noms.js"></script>
 <script src="/shared/code-acces.js"></script>
 <script src="/shared/absences.js"></script>
@@ -654,6 +655,8 @@ const RESTAURANT_CODE = window.CodeAcces.depuisChemin(window.location.pathname, 
 
 const I18N = {
   fr: {
+    nouvelleVersion: "Une nouvelle version est prête.",
+    nouvelleVersionRecharger: "Recharger",
     locale: "fr-CA",
     loginTagline: "Gère l'horaire, où que tu sois.",
     accesHoraire: "ACCÈS HORAIRE",
@@ -763,6 +766,8 @@ const I18N = {
     lienInvalideMsg: "Ce lien horaire n'est plus valide. Vérifie le lien reçu, ou contacte ton gérant.",
   },
   en: {
+    nouvelleVersion: "A new version is ready.",
+    nouvelleVersionRecharger: "Reload",
     locale: "en-CA",
     loginTagline: "Manage the schedule, wherever you are.",
     accesHoraire: "SCHEDULE ACCESS",
@@ -1277,8 +1282,14 @@ TirerPourActualiser.init({
   libelle: (cle) => t(cle),
   surRafraichir: async () => {
     if (RESTAURANT_CODE || TOKEN) await load();
+    // Chaque tirage regarde aussi si le code servi a changé.
+    NouvelleVersion.verifier();
   },
 });
+
+// Et la bande « nouvelle version » : sans elle, une app ajoutée à l'écran d'accueil ne
+// redemande jamais sa page et reste sur du vieux code pour toujours.
+NouvelleVersion.init({ libelle: (cle) => t(cle) });
 
 // La fenêtre d'avant-férié. TOUTES les portes d'horaire l'ouvrent — « je veux des
 // notifications pour toutes les fêtes dans les deux horaires » — et toutes voient les mêmes

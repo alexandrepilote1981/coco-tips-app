@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("node:crypto");
 const { db, nanoid, makeAccessCode, codeLibre, PHOTOS_DIR } = require("./db");
 const { buildSchedulePdf, schedulePdfFilename } = require("./pdf-horaire");
 // Le titre de la feuille est le même pour le PDF et pour la photo exportée par le
@@ -28,6 +29,37 @@ const app = express();
 // TOUT LE MONDE, et le plafond de tentatives bloquerait tous les utilisateurs d'un coup.
 // On fait confiance à un seul saut : l'adresse ajoutée par le proxy de Railway, et pas
 // un en-tête X-Forwarded-For que le client pourrait fabriquer lui-même.
+// L'empreinte des fichiers qu'on sert, calculée UNE fois au démarrage. Elle change à chaque
+// déploiement, et c'est tout ce qu'il faut pour qu'une page ouverte depuis des heures sache
+// qu'elle est périmée — voir public/shared/nouvelle-version.js, et la raison concrète qui a
+// fait naître tout ça : le propriétaire a passé une heure à regarder une vieille page.
+//
+// Au démarrage et pas à la demande : le contenu de `public/` ne bouge pas pendant qu'un
+// serveur tourne, et relire six fichiers à chaque requête pour rien coûterait plus cher que
+// tout le reste de la route.
+const VERSION_APP = (() => {
+  const fichiers = ["admin.html", "employee.html", "horaire.html", "landing.html"];
+  const h = crypto.createHash("sha1");
+  for (const f of fichiers) {
+    try {
+      h.update(fs.readFileSync(path.join(__dirname, "public", f)));
+    } catch (e) {
+      /* un fichier absent ne doit pas empêcher le serveur de démarrer */
+    }
+  }
+  const partages = path.join(__dirname, "public", "shared");
+  try {
+    for (const f of fs.readdirSync(partages).sort()) h.update(fs.readFileSync(path.join(partages, f)));
+  } catch (e) {
+    /* pareil */
+  }
+  return h.digest("hex").slice(0, 12);
+})();
+
+// Sans jeton : ce n'est qu'une empreinte de fichiers publics, et l'écran de connexion a
+// besoin de pouvoir se mettre à jour lui aussi.
+app.get("/api/version", (req, res) => res.json({ version: VERSION_APP }));
+
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "12mb" })); // les photos en base64 sont plus lourdes que du texte
 app.use(
