@@ -981,6 +981,22 @@ seul (`readPeriod`) : le gérant ne doit pas avoir à recliquer sur chacun de se
 Tant qu'aucun lundi n'est réglé, le libellé dit « Tout l'historique » — c'est ce que les
 chiffres couvrent, et laisser la ligne vide laisserait croire qu'ils cadrent une paye.
 
+**« 30 derniers jours » et « Tout l'historique » sont partis eux aussi.** Demandé ainsi, en
+pointant la barre : « retire ce que j'ai biffé en rouge, je veux la période de paye et la
+planche pour rentrer les dates ». Il ne reste donc que deux choses dans la barre — le bouton
+de la paye, et la saisie de dates à la main pour tout le reste.
+
+Le mode `all` **existe toujours en interne** : c'est ce que la paye rend tant qu'aucun lundi
+n'est réglé. Il n'a simplement plus de bouton. Et les trois modes retirés (`2w`, `month`,
+`all`) reviennent sur la paye quand ils sont relus du stockage — sans ça, la page resterait
+sur une période qu'aucune pastille ne nomme, et on ne saurait plus ce que les chiffres
+couvrent.
+
+Ce que ça coûte, et c'est assumé : revoir tout l'historique demande maintenant d'entrer deux
+dates. Le besoin a surtout disparu de lui-même — les montants à remettre non réglés sortent
+désormais quelle que soit la période (voir « Un montant à remettre ne se périme pas »), et
+c'était la raison principale de passer en « Tout ».
+
 **Tout tient dans une ancre** — le lundi d'une paye, n'importe laquelle — et une division
 (`public/shared/periode-paye.js`). Les périodes d'AVANT l'ancre se calculent aussi bien que
 celles d'après : quelqu'un qui règle son ancre en octobre doit pouvoir revenir sur la paye de

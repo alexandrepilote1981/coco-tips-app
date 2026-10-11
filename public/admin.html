@@ -1102,8 +1102,13 @@ function readPeriod() {
     // été REMPLACÉ par la période de paye, qui couvre les mêmes quatorze jours mais à date
     // fixe. On fait basculer les réglages déjà enregistrés plutôt que de les renvoyer au
     // défaut : le gérant ne doit pas avoir à recliquer sur chacun de ses appareils.
-    if (saved && saved.mode === "2w") return { ...PERIOD_DEFAUT };
-    if (!saved || !["month", "all", "custom", "paye"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    // Les raccourcis « 2 dernières semaines », « 30 derniers jours » et « Tout l'historique »
+    // ont été retirés de la barre, à la demande du propriétaire : il ne veut que la période
+    // de paye et la saisie de dates à la main. Un réglage déjà enregistré sur l'un d'eux
+    // reviendrait donc sur un bouton qui n'existe plus — aucune pastille allumée, et aucun
+    // moyen de comprendre ce que les chiffres couvrent. On le ramène sur la paye.
+    if (saved && ["2w", "month", "all"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
+    if (!saved || !["custom", "paye"].includes(saved.mode)) return { ...PERIOD_DEFAUT };
     if (saved.mode === "custom" && !(saved.start && saved.end)) return { ...PERIOD_DEFAUT };
     // Le décalage de paye est de la navigation, pas un réglage : il vit avec le reste de la
     // période, par appareil. L'ANCRE, elle, est en base — voir `payeDebut` plus bas.
@@ -1139,8 +1144,6 @@ const I18N = {
     entrer: "Entrer",
     motDePasseIncorrect: "Mot de passe incorrect",
     periodeAffichee: "Période affichée",
-    p30Jours: "30 derniers jours",
-    pTout: "Tout l'historique",
     pPaye: "2 semaines de paye",
     payeRegler: "À quel lundi commence une paye ?",
     payeReglerAide: "Choisis le lundi d'une paye, n'importe laquelle — les autres se calculent toutes seules, aux deux semaines.",
@@ -1423,8 +1426,6 @@ const I18N = {
     entrer: "Enter",
     motDePasseIncorrect: "Incorrect password",
     periodeAffichee: "Period shown",
-    p30Jours: "Last 30 days",
-    pTout: "All history",
     pPaye: "Pay period (2 weeks)",
     payeRegler: "Which Monday does a pay period start on?",
     payeReglerAide: "Pick the Monday of any pay period — the others follow on their own, every two weeks.",
@@ -1760,7 +1761,8 @@ function resolvePeriod() {
     // demande la date à la place.
     return p ? { start: p.debut, end: p.fin } : { start: null, end: null };
   }
-  if (period.mode === "month") return { start: isoDaysAgo(29), end: todayISO() };
+  // `all` n'a plus de bouton, mais le mode reste : c'est ce que la paye rend tant qu'aucun
+  // lundi n'est réglé, et ce que `periodLabel` annonce alors.
   if (period.mode === "all") return { start: null, end: null };
   return { start: period.start, end: period.end }; // custom
 }
@@ -2198,8 +2200,6 @@ function render() {
         <div class="section-label" id="periodeAfficheeLabel">${t("periodeAffichee")}</div>
         <div class="period-bar" role="group" aria-labelledby="periodeAfficheeLabel">
           <button class="period-btn ${period.mode === "paye" ? "active" : ""}" data-period="paye" aria-pressed="${period.mode === "paye"}">${t("pPaye")}</button>
-          <button class="period-btn ${period.mode === "month" ? "active" : ""}" data-period="month" aria-pressed="${period.mode === "month"}">${t("p30Jours")}</button>
-          <button class="period-btn ${period.mode === "all" ? "active" : ""}" data-period="all" aria-pressed="${period.mode === "all"}">${t("pTout")}</button>
 
           <div class="period-dates ${isCustom ? "active" : ""}">
             <input type="date" id="customStart" aria-label="${t("dateDebut")}" title="${t("dateDebut")}" value="${isCustom ? period.start || "" : ""}" />
