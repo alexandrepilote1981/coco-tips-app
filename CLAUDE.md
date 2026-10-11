@@ -997,6 +997,18 @@ n'a aucune déclaration, et le bouton donnerait un écran vide qui se lirait com
 données. Et revenir sur le bouton repart d'AUJOURD'HUI — garder le décalage ferait rouvrir
 l'app sur une journée de la semaine passée sans que rien ne dise pourquoi.
 
+**Le pas d'un jour est de l'arithmétique PURE**, `PeriodePaye.decalerJour()`, sur une date
+déjà fixée. L'horloge n'est lue qu'une fois, par `todayISO()`, pour savoir quel jour on est.
+
+La première version repartait de l'horloge à CHAQUE pas (`new Date()` puis
+`setDate(getDate() - n)`). Ça marchait — vérifié sur les deux changements d'heure du Québec,
+le Nouvel An et un 29 février, à 00 h 30, 02 h 30 et 23 h 30 — mais ça dépendait du fuseau de
+l'appareil et de l'heure qu'il était au moment du clic. Demandé ainsi : « valide qu'il n'y a
+pas de décalage de date à venir ». La bonne réponse à cette question n'est pas « j'ai
+vérifié », c'est **« il n'y a plus rien à vérifier »** : sans horloge dans le pas, aucun
+fuseau ne peut s'en mêler. `test/periode-paye.test.js` le verrouille aux quatre dates
+piégeuses.
+
 **« 30 derniers jours » et « Tout l'historique » sont partis eux aussi.** Demandé ainsi, en
 pointant la barre : « retire ce que j'ai biffé en rouge, je veux la période de paye et la
 planche pour rentrer les dates ». Il ne reste donc que deux choses dans la barre — le bouton
