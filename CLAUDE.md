@@ -950,33 +950,41 @@ les quatre colonnes d'argent, donc **« combien je dois à cette personne » et 
 reste à virer » n'étaient totalisés nulle part** — il fallait additionner 84 lignes à la
 main. Ce sont pourtant les deux chiffres pour lesquels on ouvre le rapport.
 
-### Les deux sens d'argent s'écrivent pareil
+### Le solde d'argent : DEUX colonnes, pas six
 
-Le résumé porte **six** colonnes d'argent, qui se lisent par paires de trois — un sens par
-paire, et dans chaque paire : ce qui est dû en tout, ce qui est réglé, ce qui reste.
+Le résumé a porté **six** colonnes d'argent — total / réglé / reste, pour chacun des deux sens
+(`Je lui dois / Déjà viré / RESTE À VIRER` et `Il me doit / Déjà reçu / RESTE À RECEVOIR`).
+C'était la correction d'une asymétrie réelle : le sens « on me doit » n'avait eu qu'une colonne,
+et l'argent reçu y disparaissait sans laisser de trace — « on voit l'argent que j'ai viré aux
+employés mais pourquoi j'ai pas de trace de l'argent qu'ils me devaient ou qu'ils m'ont payé. »
 
-| sens | total | réglé | reste |
-| --- | --- | --- | --- |
-| je dois à la personne | `Je lui dois` | `Déjà viré` | `RESTE À VIRER` |
-| la personne me doit | `Il me doit` | `Déjà reçu` | `RESTE À RECEVOIR` |
+Mais six colonnes, le rapport ouvert dans Numbers sur un iPad : **« as-tu vu comme c'est
+compliqué… simplifie. »** Presque tout était à `0,00`, parce qu'**une personne n'est jamais
+dans les deux sens à la fois** — soit tu lui dois, soit elle te doit. Et le total d'un sens est
+toujours la somme de ses deux autres colonnes, donc une sur trois ne disait rien de neuf.
 
-**La seconde rangée n'avait qu'une seule colonne**, et elle ne comptait que le NON réglé —
-donc l'argent reçu ne laissait **aucune trace**. Une serveuse qui lui devait 75 $ et qui l'a
-payé donnait une ligne à `0,00 $`, exactement comme quelqu'un qui n'a jamais rien dû. Rapporté
-le rapport du dimanche en main : « on voit l'argent que j'ai viré aux employés mais pourquoi
-j'ai pas de trace de l'argent qu'ils me devaient ou qu'ils m'ont payé. »
+Il n'en reste donc que **deux**, calculées par `soldeResume()` :
 
-Le sens employeur, lui, avait ses trois colonnes depuis le début — c'est pour ça qu'un virement
-se voit encore après coup. L'asymétrie ne se voyait pas tant que personne n'avait remboursé :
-tant que la colonne vaut 0, elle a l'air juste.
+| colonne | ce qu'elle dit |
+| --- | --- |
+| `Sens` | `Je lui dois`, `Il me doit`, ou vide s'il ne reste rien |
+| `Reste à régler $` | le montant encore dû, dans ce sens-là |
 
-`Il me doit` a donc changé de sens — c'est maintenant le TOTAL, comme `Je lui dois` en face —
-et le reste à recevoir a sa propre colonne. Un rapport ne doit pas effacer un montant au moment
-même où il est réglé : c'est précisément là qu'on veut pouvoir le relire.
+Le chiffre est le **net du NON réglé des deux sens** : reste-à-virer moins reste-à-recevoir. Une
+personne presque toujours d'un seul côté ; si par exception elle a les deux la même paye, on
+affiche le net avec son sens — exactement ce que fait déjà la pastille verte/rouge à l'écran
+(`pendingByEmployee`). La ligne `TOTAL RESTAURANT` montre le net du restaurant.
 
-Le test du résumé (`test/ui-smoke.test.mjs`) porte donc une personne qui devait 75 $ et les a
-payés. Sans elle, le rapport passait au vert sur le bogue même : les deux cas qu'il couvrait —
-un dû non réglé et un virement réglé — s'affichaient correctement tous les deux.
+**La trace de l'argent DÉJÀ réglé n'est pas perdue — elle a juste changé de place.** Elle vit
+dans le **Rapport total** (colonnes `Viré ?` / `Date du virement`) et dans la fiche de la
+personne à l'écran. Le résumé de paye, lui, ne répond qu'à une question : reste-t-il quelque
+chose à régler, et dans quel sens. Un solde entièrement réglé y affiche donc une ligne vide —
+ce n'est plus le piège d'avant (où l'argent reçu disparaissait SANS trace nulle part), puisque
+le détaillé le porte.
+
+`test/ui-smoke.test.mjs` couvre les trois cas sur une seule équipe : quelqu'un à qui on doit
+(`Je lui dois`), quelqu'un qui doit (`Il me doit`, net des deux sens), et quelqu'un de
+soldé (ligne vide). Plus le net de la ligne `TOTAL RESTAURANT`.
 
 **Une journée d'HÔTESSE n'est pas une journée de vente.** Signalé ainsi : « les hôtes n'ont
 pas de client ». Sur une journée cochée hôtesse, la colonne `ventes` contient le **montant

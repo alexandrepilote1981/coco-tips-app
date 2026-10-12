@@ -1178,7 +1178,7 @@ const I18N = {
     exporter: "Résumé pour paye",
     exporterDetail: "Rapport total",
     exportAide: "Les deux s\u2019ouvrent dans Numbers ou Excel, sur la p\u00e9riode choisie plus haut.",
-    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $", "Déjà reçu $", "RESTE À RECEVOIR $"],
+    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Sens", "Reste à régler $"],
     nomFichierResume: "declara-resume",
     nomFichierDetail: "declara-detail-par-jour",
 
@@ -1422,6 +1422,7 @@ const I18N = {
     csvNone: "Aucun", csvEmployerOwes: "Vous devez", csvEmployeeOwes: "Employé doit", csvOui: "Oui", csvNon: "Non",
     csvSousTotal: "SOUS-TOTAL",
     csvTotalRestaurant: "TOTAL RESTAURANT",
+    csvSensJeDois: "Je lui dois", csvSensIlMeDoit: "Il me doit",
     tout: "tout",
     locale: "fr-CA",
   },
@@ -1466,7 +1467,7 @@ const I18N = {
     exporter: "Payroll summary",
     exporterDetail: "Full report",
     exportAide: "Both open in Numbers or Excel, over the period chosen above.",
-    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $", "Already received $", "LEFT TO RECEIVE $"],
+    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "Direction", "Left to settle $"],
     nomFichierResume: "declara-summary",
     nomFichierDetail: "declara-day-by-day",
 
@@ -1704,6 +1705,7 @@ const I18N = {
     csvNone: "None", csvEmployerOwes: "You owe", csvEmployeeOwes: "Employee owes", csvOui: "Yes", csvNon: "No",
     csvSousTotal: "SUBTOTAL",
     csvTotalRestaurant: "RESTAURANT TOTAL",
+    csvSensJeDois: "I owe them", csvSensIlMeDoit: "They owe me",
     tout: "all",
     locale: "en-CA",
   },
@@ -3556,13 +3558,34 @@ function ligneResume(nomResto, nom, numero, s) {
     s.brut.toFixed(2),
     s.net.toFixed(2),
     siVentes(moyenneParClient(s.ventes, s.clients).toFixed(2)),
-    s.duParMoi.toFixed(2),
-    s.dejaVire.toFixed(2),
-    (s.duParMoi - s.dejaVire).toFixed(2),
-    s.duParLui.toFixed(2),
-    s.dejaRecu.toFixed(2),
-    (s.duParLui - s.dejaRecu).toFixed(2),
+    ...soldeResume(s),
   ];
+}
+
+/**
+ * Les deux sens d'argent, réduits à DEUX colonnes : le sens, et ce qui reste à régler.
+ *
+ * Il y avait six colonnes (total / réglé / reste, pour chaque sens). Le propriétaire, le
+ * rapport ouvert dans Numbers sur son iPad : « as-tu vu comme c'est compliqué… simplifie ».
+ * Presque tout était à 0,00, parce qu'une personne n'est jamais dans les deux sens à la
+ * fois — soit tu lui dois, soit elle te doit. On fusionne donc les deux « reste » en un
+ * seul chiffre, et un mot dit le sens : exactement ce que fait déjà la pastille verte/rouge
+ * à l'écran.
+ *
+ * Le net se calcule sur le NON réglé des deux sens : ce qu'il reste à virer moins ce qu'il
+ * reste à recevoir. La trace de ce qui est DÉJÀ réglé n'est pas perdue — elle vit dans le
+ * Rapport total (colonnes « Viré ? » / « Date ») et dans la fiche de la personne. Le résumé
+ * de paye, lui, ne répond qu'à une question : reste-t-il quelque chose à régler, et dans
+ * quel sens.
+ */
+function soldeResume(s) {
+  const resteAVirer = s.duParMoi - s.dejaVire;       // ce que je lui dois encore
+  const resteARecevoir = s.duParLui - s.dejaRecu;    // ce qu'elle me doit encore
+  const net = resteAVirer - resteARecevoir;          // positif = je lui dois ; négatif = elle me doit
+  // Un cent près : des arrondis de centièmes ne doivent pas inventer un sens pour un solde nul.
+  if (net > 0.005) return [t("csvSensJeDois"), net.toFixed(2)];
+  if (net < -0.005) return [t("csvSensIlMeDoit"), (-net).toFixed(2)];
+  return ["", "0.00"];
 }
 
 /**

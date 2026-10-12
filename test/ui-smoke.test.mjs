@@ -1418,9 +1418,10 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(sara[4], "1000.00", "ses ventes");
     assert.equal(sara[5], "50", "ses clients");
     assert.equal(sara[11], "20.00", "1 000 $ sur 50 clients");
-    assert.equal(sara[12], "90.00", "je lui dois");
-    assert.equal(sara[13], "0.00", "rien de viré");
-    assert.equal(sara[14], "90.00", "il reste 90 $ à virer");
+    // Deux colonnes d'argent, pas six : le sens, et ce qui reste à régler. Demandé en
+    // regardant le rapport dans Numbers — « as-tu vu comme c'est compliqué, simplifie ».
+    assert.equal(sara[12], "Je lui dois", "le sens s'écrit en toutes lettres");
+    assert.equal(sara[13], "90.00", "et il reste 90 $ à lui virer");
 
     const hugo = champs("Hugo Hotesse");
     assert.equal(hugo[4], "—", "une hôtesse n'a pas de ventes");
@@ -1428,27 +1429,27 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(hugo[11], "—", "donc pas de moyenne par client non plus");
     assert.equal(hugo[8], "65.00", "ce qu'elle a reçu vit dans SA colonne : 40 + 25");
     assert.equal(hugo[10], "65.00", "et c'est bien son pourboire net");
-    assert.equal(hugo[13], "30.00", "les 30 $ déjà virés");
-    assert.equal(hugo[14], "0.00", "donc plus rien à virer");
-    assert.equal(hugo[15], "15.00", "et elle me doit 15 $");
-    assert.equal(hugo[16], "0.00", "rien de reçu");
-    assert.equal(hugo[17], "15.00", "donc les 15 $ restent à recevoir");
+    // Elle avait 30 $ (je lui devais, réglé) et 15 $ (elle me doit, non réglé). Le net des
+    // DEUX sens, sur le non réglé : 0 à virer, 15 à recevoir → elle me doit 15.
+    assert.equal(hugo[12], "Il me doit", "le net penche de son côté");
+    assert.equal(hugo[13], "15.00", "il reste 15 $ à recevoir d'elle");
 
-    // Le point de ce test : son 75 $ est réglé, et il se VOIT encore.
+    // Un solde entièrement réglé ne laisse plus rien dans le résumé de paye : la trace de son
+    // 75 $ payé vit maintenant dans le Rapport total et dans sa fiche, pas ici. Le résumé ne
+    // répond qu'à « reste-t-il quelque chose à régler ».
     const rita = champs("Rita Remboursee");
-    assert.equal(rita[15], "75.00", "elle me devait 75 $");
-    assert.equal(rita[16], "75.00", "et elle les a payés — la trace reste");
-    assert.equal(rita[17], "0.00", "il ne reste plus rien à recevoir");
+    assert.equal(rita[12], "", "plus de sens : tout est réglé");
+    assert.equal(rita[13], "0.00", "et rien ne reste");
 
     // Le total du restaurant : les montants d'hôtesse NE sont PAS des ventes.
     const total = champs("TOTAL RESTAURANT");
     assert.equal(total[4], "1500.00", "les 65 $ reçus par l'hôtesse ne sont pas des ventes");
     assert.equal(total[5], "75", "et elle n'ajoute aucun client");
     assert.equal(total[6], "10.0", "le % moyen reste celui du service, pas 100 % gonflé par l'hôtesse");
-    assert.equal(total[14], "90.00", "90 à virer en tout");
-    assert.equal(total[15], "90.00", "90 qu'on me devait : 15 + 75");
-    assert.equal(total[16], "75.00", "dont 75 déjà reçus");
-    assert.equal(total[17], "15.00", "il reste 15 à recevoir");
+    // Net du restaurant : 90 à virer (Sara) moins 15 à recevoir (Hugo), les 75 de Rita étant
+    // réglés → il me reste 75 à virer, net.
+    assert.equal(total[12], "Je lui dois", "le net du resto penche vers « je dois »");
+    assert.equal(total[13], "75.00", "90 à virer moins 15 à recevoir");
 
     await onglet.ev(`document.getElementById("customClear").click()`);
   });
