@@ -939,10 +939,35 @@ journées ». Le résumé en fait 14.
 Ce n'est pas qu'une question de longueur. Les lignes SOUS-TOTAL du détaillé laissent vides
 les quatre colonnes d'argent, donc **« combien je dois à cette personne » et « combien il me
 reste à virer » n'étaient totalisés nulle part** — il fallait additionner 84 lignes à la
-main. Ce sont pourtant les deux chiffres pour lesquels on ouvre le rapport. Le résumé porte
-donc `Je lui dois` / `Déjà viré` / `RESTE À VIRER` / `Il me doit`.
+main. Ce sont pourtant les deux chiffres pour lesquels on ouvre le rapport.
 
-`Il me doit` ne compte que ce qui n'est **pas** réglé : une fois reçu, ce n'est plus dû.
+### Les deux sens d'argent s'écrivent pareil
+
+Le résumé porte **six** colonnes d'argent, qui se lisent par paires de trois — un sens par
+paire, et dans chaque paire : ce qui est dû en tout, ce qui est réglé, ce qui reste.
+
+| sens | total | réglé | reste |
+| --- | --- | --- | --- |
+| je dois à la personne | `Je lui dois` | `Déjà viré` | `RESTE À VIRER` |
+| la personne me doit | `Il me doit` | `Déjà reçu` | `RESTE À RECEVOIR` |
+
+**La seconde rangée n'avait qu'une seule colonne**, et elle ne comptait que le NON réglé —
+donc l'argent reçu ne laissait **aucune trace**. Une serveuse qui lui devait 75 $ et qui l'a
+payé donnait une ligne à `0,00 $`, exactement comme quelqu'un qui n'a jamais rien dû. Rapporté
+le rapport du dimanche en main : « on voit l'argent que j'ai viré aux employés mais pourquoi
+j'ai pas de trace de l'argent qu'ils me devaient ou qu'ils m'ont payé. »
+
+Le sens employeur, lui, avait ses trois colonnes depuis le début — c'est pour ça qu'un virement
+se voit encore après coup. L'asymétrie ne se voyait pas tant que personne n'avait remboursé :
+tant que la colonne vaut 0, elle a l'air juste.
+
+`Il me doit` a donc changé de sens — c'est maintenant le TOTAL, comme `Je lui dois` en face —
+et le reste à recevoir a sa propre colonne. Un rapport ne doit pas effacer un montant au moment
+même où il est réglé : c'est précisément là qu'on veut pouvoir le relire.
+
+Le test du résumé (`test/ui-smoke.test.mjs`) porte donc une personne qui devait 75 $ et les a
+payés. Sans elle, le rapport passait au vert sur le bogue même : les deux cas qu'il couvrait —
+un dû non réglé et un virement réglé — s'affichaient correctement tous les deux.
 
 **Une journée d'HÔTESSE n'est pas une journée de vente.** Signalé ainsi : « les hôtes n'ont
 pas de client ». Sur une journée cochée hôtesse, la colonne `ventes` contient le **montant

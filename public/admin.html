@@ -1178,7 +1178,7 @@ const I18N = {
     exporter: "Résumé pour paye",
     exporterDetail: "Rapport total",
     exportAide: "Les deux s\u2019ouvrent dans Numbers ou Excel, sur la p\u00e9riode choisie plus haut.",
-    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $"],
+    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $", "Déjà reçu $", "RESTE À RECEVOIR $"],
     nomFichierResume: "declara-resume",
     nomFichierDetail: "declara-detail-par-jour",
 
@@ -1466,7 +1466,7 @@ const I18N = {
     exporter: "Payroll summary",
     exporterDetail: "Full report",
     exportAide: "Both open in Numbers or Excel, over the period chosen above.",
-    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $"],
+    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $", "Already received $", "LEFT TO RECEIVE $"],
     nomFichierResume: "declara-summary",
     nomFichierDetail: "declara-day-by-day",
 
@@ -3503,7 +3503,7 @@ function estJourneeHotesse(d) {
 // Les totaux d'une personne (ou d'un restaurant) sur une période.
 function totauxDe(entries) {
   const s = { jours: 0, ventes: 0, clients: 0, remis: 0, brut: 0, net: 0,
-              recuHotesse: 0, duParMoi: 0, dejaVire: 0, duParLui: 0 };
+              recuHotesse: 0, duParMoi: 0, dejaVire: 0, duParLui: 0, dejaRecu: 0 };
   for (const d of entries) {
     s.jours++;
     s.brut += d.pourboireBrut;
@@ -3519,8 +3519,24 @@ function totauxDe(entries) {
       s.duParMoi += d.remit_amount || 0;
       if (d.transferred) s.dejaVire += d.remit_amount || 0;
     }
-    // « Il me doit » ne compte que ce qui n'est pas réglé : une fois reçu, ce n'est plus dû.
-    if (d.remit_direction === "employee_owes" && !d.transferred) s.duParLui += d.remit_amount || 0;
+    /**
+     * Les DEUX sens portent les mêmes trois colonnes : le total, ce qui est réglé, ce qui reste.
+     *
+     * « Il me doit » ne comptait que le NON réglé, donc l'argent reçu ne laissait AUCUNE
+     * trace : une serveuse qui lui devait 75 $ et qui l'a payé donnait une ligne à 0,00 $,
+     * identique à celle de quelqu'un qui n'a jamais rien dû. Rapporté ainsi, le rapport du
+     * dimanche en main : « on voit l'argent que j'ai viré aux employés mais pourquoi j'ai pas
+     * de trace de l'argent qu'ils me devaient ou qu'ils m'ont payé. »
+     *
+     * Le sens employeur avait ses trois colonnes depuis le début — c'est pour ça qu'un
+     * virement se voit encore après coup. L'autre sens n'en avait qu'une, et elle s'effaçait
+     * au moment même où le règlement arrivait, c'est-à-dire quand on veut le plus pouvoir le
+     * relire. Les deux sens sont maintenant écrits pareil.
+     */
+    if (d.remit_direction === "employee_owes") {
+      s.duParLui += d.remit_amount || 0;
+      if (d.transferred) s.dejaRecu += d.remit_amount || 0;
+    }
   }
   return s;
 }
@@ -3544,6 +3560,8 @@ function ligneResume(nomResto, nom, numero, s) {
     s.dejaVire.toFixed(2),
     (s.duParMoi - s.dejaVire).toFixed(2),
     s.duParLui.toFixed(2),
+    s.dejaRecu.toFixed(2),
+    (s.duParLui - s.dejaRecu).toFixed(2),
   ];
 }
 
@@ -3556,8 +3574,12 @@ function ligneResume(nomResto, nom, numero, s) {
  *
  * Et il manquait l'essentiel : les lignes SOUS-TOTAL laissaient vides les colonnes d'argent,
  * donc « combien je dois à Marie-Eve en tout » et « combien il me reste à virer » n'étaient
- * totalisés NULLE PART. Il fallait additionner les 84 lignes à la main. Ces deux chiffres
- * sont la raison d'être du rapport.
+ * totalisés NULLE PART. Il fallait additionner les 84 lignes à la main. Ces chiffres sont la
+ * raison d'être du rapport.
+ *
+ * Les six colonnes d'argent se lisent par paires de trois, un sens par paire : ce qui est dû
+ * en tout, ce qui est réglé, ce qui reste. Voir `totauxDe()` pour pourquoi le sens
+ * employé→employeur n'en avait qu'une.
  */
 function exportResumeCSV() {
   const rows = [t("csvHeadersResume")];
