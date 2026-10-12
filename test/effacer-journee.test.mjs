@@ -377,6 +377,22 @@ test("corriger les chiffres d'une journée déclarée", async (t) => {
     assert.equal((await rep.json()).entry.net, -200);
   });
 
+  await t.test("la saisie de l'EMPLOYÉE se borne exactement comme la correction du gérant", async () => {
+    // Même règle des deux côtés : le POST employé passait par `|| 0`, qui gardait « abc »
+    // (chaîne truthy) et laissait entrer un négatif ou un pct à 300 — le piège « le serveur
+    // et la page divergent » que tip-math.js raconte en tête. La page montrait un chiffre,
+    // la base en gardait un autre. On lit la journée par le lien de l'employée, donc après
+    // le même calcul partagé que partout.
+    await declarer(marie, "2026-11-02", { ventes: -100, clients: -5, pct: 300, remis: -7 });
+    const e = (await (await fetch(`${base}/api/employee/${marie.access_code}`)).json())
+      .entries.find((x) => x.date === "2026-11-02");
+    assert.equal(e.ventes, 0, "pas de ventes négatives");
+    assert.equal(e.clients, 0, "pas de clients négatifs");
+    assert.equal(e.pct, 100, "un pourcentage se plafonne à 100");
+    assert.equal(e.remis, 0, "pas de remis négatif");
+    assert.ok(Number.isFinite(e.net), "et jamais un NaN qui se propagerait dans les totaux");
+  });
+
   await t.test("une journée qui n'existe plus répond 404", async () => {
     // Comme l'effacement : un double envoi ne doit pas se lire comme deux corrections.
     assert.equal((await corriger("jamaisvu", { ventes: 1 })).status, 404);

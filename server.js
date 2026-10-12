@@ -120,23 +120,61 @@ function deletePhotoFiles(entries) {
 
 // ---------- helpers ----------
 
-function requireAdmin(req, res, next) {
-  const token = req.headers["x-admin-token"];
-  if (token !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Non autorisé" });
-  }
-  next();
+// Comparaison à temps constant, sans fuite de longueur : on compare l'empreinte SHA-256 des
+// deux chaînes (toujours 32 octets), pas les chaînes elles-mêmes. `===` s'arrête au premier
+// caractère qui diffère, et le temps de réponse raconte alors combien de caractères étaient
+// bons — c'est exactement ce que mdp.js évite déjà avec timingSafeEqual pour le lien cuisine.
+function memeSecret(essai, attendu) {
+  const a = crypto.createHash("sha256").update(String(essai)).digest();
+  const b = crypto.createHash("sha256").update(String(attendu)).digest();
+  return crypto.timingSafeEqual(a, b);
 }
+
+/**
+ * Le plafond de tentatives s'applique AUSSI aux portes par mot de passe, et pas seulement aux
+ * routes de connexion.
+ *
+ * Le piège, vu en relisant tout : /login est plafonné, mais il renvoie le mot de passe
+ * LUI-MÊME comme jeton (`token: ADMIN_PASSWORD`). Rien n'oblige donc un attaquant à passer
+ * par /login — il envoie directement `X-Admin-Token: <essai>` sur n'importe quelle route de
+ * données, qui jusqu'ici comparait sans aucun plafond. Le plafond de /login gardait une porte
+ * que personne n'a besoin d'ouvrir. Le mot de passe horaire fait quatre chiffres : sans
+ * plafond sur l'en-tête, on les essaie tous en quelques minutes.
+ *
+ * On réutilise exactement la mécanique des autres portes (celle du lien cuisine) :
+ *   - pas de jeton du tout → 401, et ça NE COMPTE PAS : une page déconnectée n'est pas une
+ *     tentative de devinette ;
+ *   - un jeton DÉJÀ accepté depuis cette adresse passe toujours (`estConnu`), même pendant un
+ *     blocage — toute l'équipe partage un WiFi, donc une seule adresse ;
+ *   - sinon on compare ; un bon jeton efface l'ardoise, un mauvais compte comme un échec, et
+ *     seuls les essais DISTINCTS comptent (répéter le même mauvais jeton ne compte qu'une
+ *     fois, deviner en change forcément à chaque coup).
+ */
+function portePlafonnee(bucket, estBon) {
+  return (req, res, next) => {
+    const token = req.headers["x-admin-token"];
+    if (token == null || token === "") return res.status(401).json({ error: "Non autorisé" });
+    if (estConnu(bucket, req, token)) return next();
+    const attente = blocageSecondes(bucket, req);
+    if (attente) return refuser(res, attente);
+    if (estBon(token)) {
+      clearFailures(bucket, req);
+      noteSuccess(bucket, req, token);
+      return next();
+    }
+    noteFailure(bucket, req, token);
+    return res.status(401).json({ error: "Non autorisé" });
+  };
+}
+
+const requireAdmin = portePlafonnee("admin-token", (token) => memeSecret(token, ADMIN_PASSWORD));
 
 // Accepte le mot de passe admin OU le mot de passe horaire — utilisé pour tout ce qui
 // touche uniquement à la planification (aucune donnée financière derrière cette porte).
-function requireScheduleAccess(req, res, next) {
-  const token = req.headers["x-admin-token"];
-  if (token !== ADMIN_PASSWORD && token !== SCHEDULE_PASSWORD) {
-    return res.status(401).json({ error: "Non autorisé" });
-  }
-  next();
-}
+const requireScheduleAccess = portePlafonnee(
+  "schedule-token",
+  (token) => memeSecret(token, ADMIN_PASSWORD) || memeSecret(token, SCHEDULE_PASSWORD)
+);
 
 // =========================================================
 //  API EMPLOYÉ (accès par code, aucun mot de passe compliqué)
@@ -305,10 +343,20 @@ app.post("/api/employee/:code/entries", (req, res) => {
     .get(req.params.code.toUpperCase());
   if (!emp) return res.status(404).json({ error: "Code inconnu" });
 
-  const { id, date, ventes, clients, pct, remis, remit_direction, remit_amount, is_hotesse } = req.body;
+  const { id, date, remit_direction, remit_amount, is_hotesse } = req.body;
   if (!date) return res.status(400).json({ error: "Date requise" });
+  // Les mêmes bornes que le PATCH du gérant, et pour la même raison : une seule façon
+  // d'écrire ces chiffres. `|| 0` gardait « abc » (chaîne truthy) et laissait passer un
+  // négatif ou un pct à 300 — exactement le piège « le serveur et la page divergent » que
+  // tip-math.js raconte en tête. `TipMath.toNumber` rend 0 sur une saisie de travers, jamais
+  // NaN ; les montants ne descendent pas sous zéro, et le pourcentage se plafonne à 100.
+  const positif = (v) => Math.max(0, TipMath.toNumber(v));
+  const ventes = positif(req.body.ventes);
+  const clients = positif(req.body.clients);
+  const pct = Math.min(100, positif(req.body.pct));
+  const remis = positif(req.body.remis);
   const direction = ["employer_owes", "employee_owes"].includes(remit_direction) ? remit_direction : null;
-  const amount = direction ? (parseFloat(remit_amount) || 0) : 0;
+  const amount = direction ? positif(remit_amount) : 0;
   const hotesse = is_hotesse ? 1 : 0;
 
   // Si un id est fourni et appartient bien à cet employé, on met à jour cette entrée précise.
@@ -322,7 +370,7 @@ app.post("/api/employee/:code/entries", (req, res) => {
     // envoyer, sinon le gérant croirait final un montant qui a changé depuis.
     db.prepare(
       `UPDATE entries SET date=?, ventes=?, clients=?, pct=?, remis=?, remit_direction=?, remit_amount=?, is_hotesse=?, submitted_at=NULL, updated_at=datetime('now'), data_updated_at=datetime('now') WHERE id=?`
-    ).run(date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse, existing.id);
+    ).run(date, ventes, clients, pct, remis, direction, amount, hotesse, existing.id);
     res.json({ ok: true, id: existing.id });
   } else {
     // Sinon on crée une NOUVELLE entrée — plusieurs entrées peuvent exister pour la même date
@@ -330,7 +378,7 @@ app.post("/api/employee/:code/entries", (req, res) => {
     const newId = nanoid(10);
     db.prepare(
       `INSERT INTO entries (id, employee_id, date, ventes, clients, pct, remis, remit_direction, remit_amount, is_hotesse, created_at, data_updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`
-    ).run(newId, emp.id, date, ventes || 0, clients || 0, pct || 0, remis || 0, direction, amount, hotesse);
+    ).run(newId, emp.id, date, ventes, clients, pct, remis, direction, amount, hotesse);
     res.json({ ok: true, id: newId });
   }
 });
