@@ -1350,6 +1350,7 @@ test("interface", optionsDuTest, async (t) => {
 
     const serveuse = await creer("Sara Serveuse", "41");
     const hotesse = await creer("Hugo Hotesse", "42");
+    const remboursee = await creer("Rita Remboursee", "43");
 
     const declarer = (emp, corps) =>
       fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
@@ -1374,6 +1375,18 @@ test("interface", optionsDuTest, async (t) => {
     });
     await api(`/api/admin/entries/${regle.id}/transferred`, {
       method: "POST", body: JSON.stringify({ transferred: true, transfer_date: "2026-09-28" }),
+    });
+
+    // Et le cas qui manquait au rapport : quelqu'un qui lui devait de l'argent et qui l'a
+    // PAYÉ. « On voit l'argent que j'ai viré aux employés mais pourquoi j'ai pas de trace de
+    // l'argent qu'ils me devaient ou qu'ils m'ont payé. » Avant, cette journée-là donnait
+    // une ligne à 0,00 $ — indiscernable de celle de quelqu'un qui n'a jamais rien dû.
+    const rendu = await declarer(remboursee, {
+      date: "2026-09-21", ventes: 500, clients: 25, pct: 10, remis: 0,
+      remit_direction: "employee_owes", remit_amount: 75,
+    });
+    await api(`/api/admin/entries/${rendu.id}/transferred`, {
+      method: "POST", body: JSON.stringify({ transferred: true, transfer_date: "2026-09-29" }),
     });
 
     await ouvrirAdmin();
@@ -1418,14 +1431,24 @@ test("interface", optionsDuTest, async (t) => {
     assert.equal(hugo[13], "30.00", "les 30 $ déjà virés");
     assert.equal(hugo[14], "0.00", "donc plus rien à virer");
     assert.equal(hugo[15], "15.00", "et elle me doit 15 $");
+    assert.equal(hugo[16], "0.00", "rien de reçu");
+    assert.equal(hugo[17], "15.00", "donc les 15 $ restent à recevoir");
+
+    // Le point de ce test : son 75 $ est réglé, et il se VOIT encore.
+    const rita = champs("Rita Remboursee");
+    assert.equal(rita[15], "75.00", "elle me devait 75 $");
+    assert.equal(rita[16], "75.00", "et elle les a payés — la trace reste");
+    assert.equal(rita[17], "0.00", "il ne reste plus rien à recevoir");
 
     // Le total du restaurant : les montants d'hôtesse NE sont PAS des ventes.
     const total = champs("TOTAL RESTAURANT");
-    assert.equal(total[4], "1000.00", "les 65 $ reçus par l'hôtesse ne sont pas des ventes");
-    assert.equal(total[5], "50", "et elle n'ajoute aucun client");
+    assert.equal(total[4], "1500.00", "les 65 $ reçus par l'hôtesse ne sont pas des ventes");
+    assert.equal(total[5], "75", "et elle n'ajoute aucun client");
     assert.equal(total[6], "10.0", "le % moyen reste celui du service, pas 100 % gonflé par l'hôtesse");
     assert.equal(total[14], "90.00", "90 à virer en tout");
-    assert.equal(total[15], "15.00", "15 qu'on me doit");
+    assert.equal(total[15], "90.00", "90 qu'on me devait : 15 + 75");
+    assert.equal(total[16], "75.00", "dont 75 déjà reçus");
+    assert.equal(total[17], "15.00", "il reste 15 à recevoir");
 
     await onglet.ev(`document.getElementById("customClear").click()`);
   });

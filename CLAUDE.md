@@ -97,6 +97,15 @@ affichait un montant, la base en gardait un autre. Même principe pour
 
 Si une logique doit vivre des deux côtés, elle va dans `public/shared/`, avec des tests.
 
+Le même soin vaut pour les DEUX chemins d'écriture d'une journée. La correction du gérant
+(`PATCH /api/admin/entries/:id`) bornait déjà tout par `TipMath.toNumber` + `Math.max(0, …)` +
+pct plafonné à 100, mais la saisie de l'employée (`POST /api/employee/:code/entries`) passait
+encore par `ventes || 0` — qui gardait « abc » (une chaîne truthy), un négatif ou un pct à 300.
+C'est littéralement le piège raconté en tête de `tip-math.js`, du côté écriture : la page
+montrait un chiffre, la base en gardait un autre. Les deux chemins appliquent maintenant les
+mêmes bornes. Couvert par `test/effacer-journee.test.mjs`, qui déclare une journée de travers
+par le lien de l'employée et la relit propre.
+
 ## Salle et cuisine
 
 Chaque employé porte un `secteur` : `salle` ou `cuisine`. Tout en découle.
@@ -939,10 +948,35 @@ journées ». Le résumé en fait 14.
 Ce n'est pas qu'une question de longueur. Les lignes SOUS-TOTAL du détaillé laissent vides
 les quatre colonnes d'argent, donc **« combien je dois à cette personne » et « combien il me
 reste à virer » n'étaient totalisés nulle part** — il fallait additionner 84 lignes à la
-main. Ce sont pourtant les deux chiffres pour lesquels on ouvre le rapport. Le résumé porte
-donc `Je lui dois` / `Déjà viré` / `RESTE À VIRER` / `Il me doit`.
+main. Ce sont pourtant les deux chiffres pour lesquels on ouvre le rapport.
 
-`Il me doit` ne compte que ce qui n'est **pas** réglé : une fois reçu, ce n'est plus dû.
+### Les deux sens d'argent s'écrivent pareil
+
+Le résumé porte **six** colonnes d'argent, qui se lisent par paires de trois — un sens par
+paire, et dans chaque paire : ce qui est dû en tout, ce qui est réglé, ce qui reste.
+
+| sens | total | réglé | reste |
+| --- | --- | --- | --- |
+| je dois à la personne | `Je lui dois` | `Déjà viré` | `RESTE À VIRER` |
+| la personne me doit | `Il me doit` | `Déjà reçu` | `RESTE À RECEVOIR` |
+
+**La seconde rangée n'avait qu'une seule colonne**, et elle ne comptait que le NON réglé —
+donc l'argent reçu ne laissait **aucune trace**. Une serveuse qui lui devait 75 $ et qui l'a
+payé donnait une ligne à `0,00 $`, exactement comme quelqu'un qui n'a jamais rien dû. Rapporté
+le rapport du dimanche en main : « on voit l'argent que j'ai viré aux employés mais pourquoi
+j'ai pas de trace de l'argent qu'ils me devaient ou qu'ils m'ont payé. »
+
+Le sens employeur, lui, avait ses trois colonnes depuis le début — c'est pour ça qu'un virement
+se voit encore après coup. L'asymétrie ne se voyait pas tant que personne n'avait remboursé :
+tant que la colonne vaut 0, elle a l'air juste.
+
+`Il me doit` a donc changé de sens — c'est maintenant le TOTAL, comme `Je lui dois` en face —
+et le reste à recevoir a sa propre colonne. Un rapport ne doit pas effacer un montant au moment
+même où il est réglé : c'est précisément là qu'on veut pouvoir le relire.
+
+Le test du résumé (`test/ui-smoke.test.mjs`) porte donc une personne qui devait 75 $ et les a
+payés. Sans elle, le rapport passait au vert sur le bogue même : les deux cas qu'il couvrait —
+un dû non réglé et un virement réglé — s'affichaient correctement tous les deux.
 
 **Une journée d'HÔTESSE n'est pas une journée de vente.** Signalé ainsi : « les hôtes n'ont
 pas de client ». Sur une journée cochée hôtesse, la colonne `ventes` contient le **montant
@@ -1496,6 +1530,30 @@ inconnu reçoit toujours la même réponse, quel qu'il soit — vérifié dans
 La limite assumée : quelqu'un qui ouvre son lien pour la **première** fois pendant que son WiFi
 est bloqué doit attendre la fin du blocage.
 
+### Le plafond protège aussi les portes par mot de passe, pas seulement `/login`
+
+Le piège, et il était réel : `/api/admin/login` et `/api/schedule/login` étaient plafonnés,
+mais ils renvoient le mot de passe **lui-même** comme jeton (`token: ADMIN_PASSWORD`). Rien
+n'oblige donc un attaquant à passer par `/login` — il envoie directement l'en-tête
+`X-Admin-Token: <essai>` sur n'importe quelle route de données, et là `requireAdmin` /
+`requireScheduleAccess` comparaient sans **aucun** plafond. Le plafond de `/login` gardait une
+porte que personne n'a besoin d'ouvrir. Le mot de passe horaire fait quatre chiffres : sans
+plafond sur l'en-tête, on les essaie tous en quelques minutes.
+
+Les deux middleware passent maintenant par `portePlafonnee()`, qui réutilise **exactement** la
+mécanique des portes par code — guichets distincts (`admin-token`, `schedule-token`), seuls les
+essais DISTINCTS comptent, un jeton déjà accepté depuis cette adresse (`estConnu`) traverse un
+blocage, et un en-tête vide n'est pas une tentative (401, jamais compté). La comparaison passe
+par `memeSecret()` : SHA-256 des deux chaînes puis `timingSafeEqual`, pour ne révéler ni la
+longueur ni le nombre de caractères justes — le même soin que `mdp.js` prend déjà pour le lien
+cuisine, là où `!==` ne le prenait pas. Couvert par `test/verrou-codes.test.mjs` : premier
+mauvais jeton en 401, dix jetons distincts bloquent, le gérant déjà connu entre encore.
+
+**Ça ne remplace pas un vrai mot de passe long.** Le plafond rend la force brute lente ; un
+mot de passe admin à sept chiffres ou un mot de passe horaire à quatre reste faible. Le jeton
+vit en clair dans `sessionStorage` et `/login` le renvoie tel quel — c'est le design sans
+comptes, assumé. Le plafond est le filet, pas la serrure.
+
 ### Le verrou du lien gérant de cuisine
 
 Deux commandes sur la fiche du restaurant, dans l'onglet Horaire cuisine : **Changer le lien**
@@ -1634,7 +1692,8 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
   abîmée ferme la porte, et le cache ne fait jamais passer un mauvais essai.
 - `test/verrou-codes.test.mjs` — la promesse vécue par une employée : mon lien marche-t-il ?
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
-  est bon, et qu'il la ferme quand même à qui essaie de deviner.
+  est bon, et qu'il la ferme quand même à qui essaie de deviner. Et que les portes par mot de
+  passe (l'en-tête `X-Admin-Token`, pas seulement `/login`) se plafonnent de la même façon.
 - `test/effacer-semaine.test.mjs` — l'effacement en lot et ses bornes.
 - `test/sauvegarde.test.mjs` — la date de la dernière sauvegarde : absente au départ, écrite
   seulement quand l'archive a vraiment été produite, et qui survit à un redémarrage.

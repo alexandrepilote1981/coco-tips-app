@@ -151,4 +151,39 @@ test("le verrou des codes", async (t) => {
     });
     assert.equal(refus.status, 429, "le mot de passe, lui, se bloque toujours");
   });
+
+  // La vraie porte admin, c'est l'en-tête X-Admin-Token sur les routes de données — pas
+  // /login, qui renvoie le mot de passe lui-même comme jeton et qu'un attaquant peut donc
+  // sauter. Avant, cet en-tête se comparait sans aucun plafond : le mot de passe horaire
+  // (quatre chiffres) tombait en minutes.
+  const avecJeton = (chemin, jeton) =>
+    fetch(`${base}${chemin}`, { headers: { "X-Admin-Token": jeton } });
+
+  await t.test("deviner le jeton admin par l'en-tête finit par bloquer", async () => {
+    // Le premier mauvais essai répond 401, pas 429 : on ne bloque pas dès la première faute.
+    assert.equal((await avecJeton("/api/admin/overview", "devine-00")).status, 401, "401 au premier");
+    for (let i = 1; i < 12; i++) await avecJeton("/api/admin/overview", `devine-${String(i).padStart(2, "0")}`);
+    assert.equal((await avecJeton("/api/admin/overview", "devine-encore")).status, 429, "puis 429");
+  });
+
+  await t.test("mais le gérant, dont le jeton a déjà servi, entre encore", async () => {
+    // `creer()` au début du fichier a déjà fait passer MOT_DE_PASSE depuis cette adresse :
+    // il est « connu », donc il traverse le blocage comme le code de Trycia. Sans ça, un
+    // curieux qui malmène l'URL enfermerait dehors le vrai gérant sur le WiFi partagé.
+    assert.equal((await avecJeton("/api/admin/overview", MOT_DE_PASSE)).status, 200);
+  });
+
+  await t.test("et un jeton admin vide n'est jamais compté comme un essai", async () => {
+    // Une page déconnectée n'envoie rien : ça doit répondre 401 sans jamais rapprocher
+    // l'adresse d'un blocage, sinon rouvrir /admin dix fois suffirait à se verrouiller.
+    assert.equal((await fetch(`${base}/api/admin/overview`)).status, 401);
+  });
+
+  await t.test("la porte horaire par en-tête se plafonne elle aussi", async () => {
+    // requireScheduleAccess, compteur distinct de la porte admin : deviner l'un ne bloque
+    // pas l'autre, mais chacune se ferme sur la force brute.
+    assert.equal((await avecJeton("/api/schedule/roster", "faux-h-00")).status, 401, "401 au premier");
+    for (let i = 1; i < 12; i++) await avecJeton("/api/schedule/roster", `faux-h-${String(i).padStart(2, "0")}`);
+    assert.equal((await avecJeton("/api/schedule/roster", "faux-h-zzz")).status, 429, "puis 429");
+  });
 });
