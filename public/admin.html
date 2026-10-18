@@ -1395,6 +1395,7 @@ const I18N = {
     modifierJournee: "Corriger cette journée",
     corrigerTitre: "Corriger la journée",
     champVentes: "Ventes $",
+    champMontantRecu: "Montant reçu des serveuses $",
     champClients: "Clients",
     champPct: "Pourboire %",
     champRemis: "Remis à l'hôtesse $",
@@ -1681,6 +1682,7 @@ const I18N = {
     modifierJournee: "Correct this day",
     corrigerTitre: "Correct the day",
     champVentes: "Sales $",
+    champMontantRecu: "Amount received from servers $",
     champClients: "Guests",
     champPct: "Tip %",
     champRemis: "Given to host $",
@@ -3393,6 +3395,37 @@ function majSensCorrection(sens) {
   document.getElementById("entryMontant").style.display = sens ? "block" : "none";
 }
 
+// La fenêtre change de forme quand on coche « hôtesse », exactement comme la page de
+// l'employée. Une journée d'hôtesse n'a ni clients, ni %, ni remis : la colonne « ventes »
+// y devient le MONTANT REÇU des serveuses, et le net vaut ce montant. Sans ça, le gérant
+// corrigeait une hôtesse avec un formulaire de serveuse — des champs qui ne veulent rien
+// dire ce jour-là.
+//
+// `bascule` est vrai quand c'est l'utilisateur qui vient de (dé)cocher : on force alors les
+// mêmes valeurs neutres que côté employée, pour que le net suive. À l'OUVERTURE d'une
+// journée déjà hôtesse, il est faux — ses chiffres sont déjà les bons, on n'y touche pas.
+function majHotesseCorrection(estHotesse, bascule) {
+  document.getElementById("lblVentes").textContent = estHotesse ? t("champMontantRecu") : t("champVentes");
+  for (const id of ["entryClients", "entryPct", "entryRemis"])
+    document.getElementById(id).closest("label").style.display = estHotesse ? "none" : "";
+  // Un seul champ sur toute la largeur en mode hôtesse, comme la grille de l'employée.
+  document.querySelector(".entry-grille").style.gridTemplateColumns = estHotesse ? "1fr" : "";
+  if (bascule) {
+    if (estHotesse) {
+      // ventes = montant reçu ; pct 100 et remis 0 font que le net vaut ce montant.
+      document.getElementById("entryPct").value = 100;
+      document.getElementById("entryClients").value = 0;
+      document.getElementById("entryRemis").value = 0;
+    } else {
+      // En sortant, on repart à zéro plutôt que de garder le montant reçu collé dans
+      // « ventes » et un pct à 100 — exactement ce que fait la page de l'employée.
+      for (const id of ["entryVentes", "entryClients", "entryPct", "entryRemis"])
+        document.getElementById(id).value = 0;
+    }
+  }
+  majNetCorrection();
+}
+
 function ouvrirCorrection(entryId) {
   const trouve = journeeParId(entryId);
   if (!trouve) return;
@@ -3433,7 +3466,9 @@ function ouvrirCorrection(entryId) {
   }
 
   majSensCorrection(journee.remit_direction || "");
-  majNetCorrection();
+  // La forme de la fenêtre suit la case hôtesse dès l'ouverture, sans forcer les valeurs
+  // d'une journée déjà enregistrée (bascule = false).
+  majHotesseCorrection(!!journee.is_hotesse, false);
   // Le bouton se réarme À L'OUVERTURE, et pas seulement quand un envoi échoue.
   // Le bogue vécu : « ça marchait pour une mais l'autre s'enregistre pas quand j'appuie
   // sur le piton ». L'enregistrement désactive le bouton le temps de l'aller-retour, et ne
@@ -3850,6 +3885,8 @@ document.getElementById("entryModalOverlay").addEventListener("click", (e) => {
 });
 for (const champ of ["entryVentes", "entryClients", "entryPct", "entryRemis"])
   document.getElementById(champ).addEventListener("input", majNetCorrection);
+// Cocher « hôtesse » change la forme de la fenêtre, comme sur la page de l'employée.
+document.getElementById("entryHotesse").addEventListener("change", (ev) => majHotesseCorrection(ev.target.checked, true));
 for (const bouton of document.querySelectorAll(".entry-sens button"))
   bouton.addEventListener("click", () => majSensCorrection(bouton.dataset.sens));
 

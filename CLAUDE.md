@@ -886,6 +886,17 @@ Le test qui le garde corrige **deux** journées d'affilée (`test/ui-smoke.test.
 qui n'en corrige qu'une passe au vert sur le bogue même — c'est exactement ce qui s'est passé :
 la vérification au navigateur n'avait fait qu'une seule correction.
 
+**Cocher « hôtesse » change la forme de la fenêtre, comme sur la page de l'employée.** Demandé
+ainsi : « quand on modifie une déclaration dans admin et on coche hôtesse, le menu devrait aussi
+changer comme dans la page des employés. » Une journée d'hôtesse n'a ni clients, ni %, ni remis :
+`majHotesseCorrection()` masque ces trois champs, renomme « Ventes » en « Montant reçu des
+serveuses », et force pct 100 / clients 0 / remis 0 pour que le net vaille ce montant — exactement
+ce que fait `corpsJourHTML()` côté employée. Sans ça, le gérant corrigeait une hôtesse avec un
+formulaire de serveuse, des champs qui ne veulent rien dire ce jour-là. Le `bascule` distingue un
+(dé)cochage de l'utilisateur (on force les valeurs) de la simple OUVERTURE d'une journée déjà
+hôtesse (on n'y touche pas). Couvert par `test/ui-smoke.test.mjs`, qui coche, enregistre, relit la
+journée en hôtesse, puis décoche et voit les champs revenir.
+
 **La date ne se modifie pas** depuis cette fenêtre : la déplacer changerait la semaine de la
 journée et pourrait créer un doublon avec une autre déjà déclarée. Effacer et refaire reste le
 chemin pour ça. La photo ne bouge pas non plus.

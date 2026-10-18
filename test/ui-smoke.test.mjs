@@ -1514,6 +1514,70 @@ test("interface", optionsDuTest, async (t) => {
     assert.deepEqual(montants, [1000, 2000], "les DEUX corrections sont passées, pas juste la première");
   });
 
+  await t.test("cocher hôtesse dans la correction change la fenêtre, comme chez l'employée", async () => {
+    // Demandé ainsi : « quand on modifie une déclaration dans admin et on coche hôtesse, le
+    // menu devrait aussi changer comme dans la page des employés ». Une journée d'hôtesse n'a
+    // ni clients, ni %, ni remis — « ventes » y devient le montant reçu des serveuses.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto Hotesse" }),
+    })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: "Hanna Hotesse", secteur: "salle" }),
+    })).json();
+    await fetch(`${serveur.base}/api/employee/${emp.access_code}/entries`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: "2026-10-05", ventes: 900, clients: 45, pct: 11, remis: 0 }),
+    });
+
+    await ouvrirAdmin();
+    // On vise la fiche de Hanna par son id (#emp-card-<id>) et son crayon à l'intérieur :
+    // d'autres fiches d'autres tests peuvent rester ouvertes, et un crayon pris au hasard
+    // dans le document corrigerait la journée de quelqu'un d'autre.
+    const bloc = `#emp-card-${emp.id}`;
+    const ouvrirCrayon = async () => {
+      await onglet.ev(`document.querySelector('[data-action="toggleFiche"][data-emp="${emp.id}"]').click()`);
+      await jusqua(() => onglet.ev(`!!document.querySelector('${bloc} [data-action="editEntry"]')`), { quoi: "le crayon" });
+      await onglet.ev(`document.querySelector('${bloc} [data-action="editEntry"]').click()`);
+      await jusqua(() => onglet.ev(`document.getElementById("entryModalOverlay").style.display === "flex"`), { quoi: "la fenêtre" });
+    };
+
+    await ouvrirCrayon();
+    // Avant de cocher : journée de service ordinaire, les trois champs sont là.
+    assert.equal(await onglet.ev(`document.getElementById("lblVentes").textContent`), "Ventes $");
+    assert.equal(await onglet.ev(`getComputedStyle(document.getElementById("entryClients").closest("label")).display === "none"`), false, "les clients sont visibles");
+
+    // On coche hôtesse.
+    await onglet.ev(`(() => { const c = document.getElementById("entryHotesse");
+      c.checked = true; c.dispatchEvent(new Event("change", { bubbles: true })); return true; })()`);
+    assert.equal(await onglet.ev(`document.getElementById("lblVentes").textContent`), "Montant reçu des serveuses $", "le libellé change");
+    assert.equal(await onglet.ev(`getComputedStyle(document.getElementById("entryClients").closest("label")).display === "none"`), true, "les clients disparaissent");
+    assert.equal(await onglet.ev(`getComputedStyle(document.getElementById("entryPct").closest("label")).display === "none"`), true, "le % disparaît");
+    assert.equal(await onglet.ev(`getComputedStyle(document.getElementById("entryRemis").closest("label")).display === "none"`), true, "le remis disparaît");
+    assert.equal(await onglet.ev(`document.getElementById("entryPct").value`), "100", "le pct est forcé à 100 pour que le net suive");
+
+    // Le montant reçu, et on enregistre.
+    await onglet.ev(`(() => { const c = document.getElementById("entryVentes");
+      c.value = "80"; c.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`);
+    assert.match(await onglet.ev(`document.getElementById("entryNet").textContent`), /80/, "le net vaut le montant reçu");
+    await onglet.ev(`document.getElementById("entrySaveBtn").click()`);
+    await jusqua(() => onglet.ev(`document.getElementById("entryModalOverlay").style.display === "none"`), { quoi: "la fermeture" });
+
+    const apres = (await (await fetch(`${serveur.base}/api/employee/${emp.access_code}`)).json()).entries[0];
+    assert.equal(apres.is_hotesse, 1, "la journée est enregistrée en hôtesse");
+    assert.equal(apres.ventes, 80, "le montant reçu est gardé");
+    assert.equal(apres.clients, 0, "aucun client");
+    assert.equal(apres.net, 80, "et le net vaut le montant reçu");
+
+    // Et en rouvrant, décocher fait réapparaître les trois champs.
+    await ouvrirCrayon();
+    assert.equal(await onglet.ev(`document.getElementById("lblVentes").textContent`), "Montant reçu des serveuses $", "elle rouvre en mode hôtesse");
+    await onglet.ev(`(() => { const c = document.getElementById("entryHotesse");
+      c.checked = false; c.dispatchEvent(new Event("change", { bubbles: true })); return true; })()`);
+    assert.equal(await onglet.ev(`document.getElementById("lblVentes").textContent`), "Ventes $", "le libellé revient");
+    assert.equal(await onglet.ev(`getComputedStyle(document.getElementById("entryClients").closest("label")).display === "none"`), false, "les clients reviennent");
+    await onglet.ev(`document.getElementById("entryModalCloseX").click()`);
+  });
+
   await t.test("le relevé photo s'ouvre DANS la page, avec un bouton pour fermer", async () => {
     // Rapporté ainsi : « quand j'ouvre une photo pour valider dans mon admin il n'y a pas de
     // bouton fermer sur mon cell ». La vignette était un lien `target="_blank"` vers l'image
