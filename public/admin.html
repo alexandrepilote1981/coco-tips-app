@@ -1178,7 +1178,7 @@ const I18N = {
     exporter: "Résumé pour paye",
     exporterDetail: "Rapport total",
     exportAide: "Les deux s\u2019ouvrent dans Numbers ou Excel, sur la p\u00e9riode choisie plus haut.",
-    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Je lui dois $", "Déjà viré $", "RESTE À VIRER $", "Il me doit $", "Déjà reçu $", "RESTE À RECEVOIR $"],
+    csvHeadersResume: ["Restaurant", "Employé", "# Employé", "Jours", "Ventes $", "# Clients", "% moyen", "Remis employés $", "Reçu comme hôtesse $", "Pourboire brut $", "Pourboire net $", "Moy./client $", "Sens", "Reste à régler $"],
     nomFichierResume: "declara-resume",
     nomFichierDetail: "declara-detail-par-jour",
 
@@ -1395,6 +1395,7 @@ const I18N = {
     modifierJournee: "Corriger cette journée",
     corrigerTitre: "Corriger la journée",
     champVentes: "Ventes $",
+    champMontantRecu: "Montant reçu des serveuses $",
     champClients: "Clients",
     champPct: "Pourboire %",
     champRemis: "Remis à l'hôtesse $",
@@ -1422,6 +1423,7 @@ const I18N = {
     csvNone: "Aucun", csvEmployerOwes: "Vous devez", csvEmployeeOwes: "Employé doit", csvOui: "Oui", csvNon: "Non",
     csvSousTotal: "SOUS-TOTAL",
     csvTotalRestaurant: "TOTAL RESTAURANT",
+    csvSensJeDois: "Je lui dois", csvSensIlMeDoit: "Il me doit",
     tout: "tout",
     locale: "fr-CA",
   },
@@ -1466,7 +1468,7 @@ const I18N = {
     exporter: "Payroll summary",
     exporterDetail: "Full report",
     exportAide: "Both open in Numbers or Excel, over the period chosen above.",
-    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "I owe them $", "Already sent $", "LEFT TO SEND $", "They owe me $", "Already received $", "LEFT TO RECEIVE $"],
+    csvHeadersResume: ["Restaurant", "Employee", "# Employee", "Days", "Sales $", "# Customers", "Avg %", "Given to staff $", "Received as host $", "Gross tips $", "Net tips $", "Avg./customer $", "Direction", "Left to settle $"],
     nomFichierResume: "declara-summary",
     nomFichierDetail: "declara-day-by-day",
 
@@ -1680,6 +1682,7 @@ const I18N = {
     modifierJournee: "Correct this day",
     corrigerTitre: "Correct the day",
     champVentes: "Sales $",
+    champMontantRecu: "Amount received from servers $",
     champClients: "Guests",
     champPct: "Tip %",
     champRemis: "Given to host $",
@@ -1704,6 +1707,7 @@ const I18N = {
     csvNone: "None", csvEmployerOwes: "You owe", csvEmployeeOwes: "Employee owes", csvOui: "Yes", csvNon: "No",
     csvSousTotal: "SUBTOTAL",
     csvTotalRestaurant: "RESTAURANT TOTAL",
+    csvSensJeDois: "I owe them", csvSensIlMeDoit: "They owe me",
     tout: "all",
     locale: "en-CA",
   },
@@ -3391,6 +3395,37 @@ function majSensCorrection(sens) {
   document.getElementById("entryMontant").style.display = sens ? "block" : "none";
 }
 
+// La fenêtre change de forme quand on coche « hôtesse », exactement comme la page de
+// l'employée. Une journée d'hôtesse n'a ni clients, ni %, ni remis : la colonne « ventes »
+// y devient le MONTANT REÇU des serveuses, et le net vaut ce montant. Sans ça, le gérant
+// corrigeait une hôtesse avec un formulaire de serveuse — des champs qui ne veulent rien
+// dire ce jour-là.
+//
+// `bascule` est vrai quand c'est l'utilisateur qui vient de (dé)cocher : on force alors les
+// mêmes valeurs neutres que côté employée, pour que le net suive. À l'OUVERTURE d'une
+// journée déjà hôtesse, il est faux — ses chiffres sont déjà les bons, on n'y touche pas.
+function majHotesseCorrection(estHotesse, bascule) {
+  document.getElementById("lblVentes").textContent = estHotesse ? t("champMontantRecu") : t("champVentes");
+  for (const id of ["entryClients", "entryPct", "entryRemis"])
+    document.getElementById(id).closest("label").style.display = estHotesse ? "none" : "";
+  // Un seul champ sur toute la largeur en mode hôtesse, comme la grille de l'employée.
+  document.querySelector(".entry-grille").style.gridTemplateColumns = estHotesse ? "1fr" : "";
+  if (bascule) {
+    if (estHotesse) {
+      // ventes = montant reçu ; pct 100 et remis 0 font que le net vaut ce montant.
+      document.getElementById("entryPct").value = 100;
+      document.getElementById("entryClients").value = 0;
+      document.getElementById("entryRemis").value = 0;
+    } else {
+      // En sortant, on repart à zéro plutôt que de garder le montant reçu collé dans
+      // « ventes » et un pct à 100 — exactement ce que fait la page de l'employée.
+      for (const id of ["entryVentes", "entryClients", "entryPct", "entryRemis"])
+        document.getElementById(id).value = 0;
+    }
+  }
+  majNetCorrection();
+}
+
 function ouvrirCorrection(entryId) {
   const trouve = journeeParId(entryId);
   if (!trouve) return;
@@ -3431,7 +3466,9 @@ function ouvrirCorrection(entryId) {
   }
 
   majSensCorrection(journee.remit_direction || "");
-  majNetCorrection();
+  // La forme de la fenêtre suit la case hôtesse dès l'ouverture, sans forcer les valeurs
+  // d'une journée déjà enregistrée (bascule = false).
+  majHotesseCorrection(!!journee.is_hotesse, false);
   // Le bouton se réarme À L'OUVERTURE, et pas seulement quand un envoi échoue.
   // Le bogue vécu : « ça marchait pour une mais l'autre s'enregistre pas quand j'appuie
   // sur le piton ». L'enregistrement désactive le bouton le temps de l'aller-retour, et ne
@@ -3556,13 +3593,34 @@ function ligneResume(nomResto, nom, numero, s) {
     s.brut.toFixed(2),
     s.net.toFixed(2),
     siVentes(moyenneParClient(s.ventes, s.clients).toFixed(2)),
-    s.duParMoi.toFixed(2),
-    s.dejaVire.toFixed(2),
-    (s.duParMoi - s.dejaVire).toFixed(2),
-    s.duParLui.toFixed(2),
-    s.dejaRecu.toFixed(2),
-    (s.duParLui - s.dejaRecu).toFixed(2),
+    ...soldeResume(s),
   ];
+}
+
+/**
+ * Les deux sens d'argent, réduits à DEUX colonnes : le sens, et ce qui reste à régler.
+ *
+ * Il y avait six colonnes (total / réglé / reste, pour chaque sens). Le propriétaire, le
+ * rapport ouvert dans Numbers sur son iPad : « as-tu vu comme c'est compliqué… simplifie ».
+ * Presque tout était à 0,00, parce qu'une personne n'est jamais dans les deux sens à la
+ * fois — soit tu lui dois, soit elle te doit. On fusionne donc les deux « reste » en un
+ * seul chiffre, et un mot dit le sens : exactement ce que fait déjà la pastille verte/rouge
+ * à l'écran.
+ *
+ * Le net se calcule sur le NON réglé des deux sens : ce qu'il reste à virer moins ce qu'il
+ * reste à recevoir. La trace de ce qui est DÉJÀ réglé n'est pas perdue — elle vit dans le
+ * Rapport total (colonnes « Viré ? » / « Date ») et dans la fiche de la personne. Le résumé
+ * de paye, lui, ne répond qu'à une question : reste-t-il quelque chose à régler, et dans
+ * quel sens.
+ */
+function soldeResume(s) {
+  const resteAVirer = s.duParMoi - s.dejaVire;       // ce que je lui dois encore
+  const resteARecevoir = s.duParLui - s.dejaRecu;    // ce qu'elle me doit encore
+  const net = resteAVirer - resteARecevoir;          // positif = je lui dois ; négatif = elle me doit
+  // Un cent près : des arrondis de centièmes ne doivent pas inventer un sens pour un solde nul.
+  if (net > 0.005) return [t("csvSensJeDois"), net.toFixed(2)];
+  if (net < -0.005) return [t("csvSensIlMeDoit"), (-net).toFixed(2)];
+  return ["", "0.00"];
 }
 
 /**
@@ -3827,6 +3885,8 @@ document.getElementById("entryModalOverlay").addEventListener("click", (e) => {
 });
 for (const champ of ["entryVentes", "entryClients", "entryPct", "entryRemis"])
   document.getElementById(champ).addEventListener("input", majNetCorrection);
+// Cocher « hôtesse » change la forme de la fenêtre, comme sur la page de l'employée.
+document.getElementById("entryHotesse").addEventListener("change", (ev) => majHotesseCorrection(ev.target.checked, true));
 for (const bouton of document.querySelectorAll(".entry-sens button"))
   bouton.addEventListener("click", () => majSensCorrection(bouton.dataset.sens));
 
