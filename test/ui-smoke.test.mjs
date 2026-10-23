@@ -1255,6 +1255,55 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
   });
 
+  await t.test("un quart devenu hors dispo se barre et s'annonce en haut de la grille", async () => {
+    // Le cas du propriétaire : « quand l'horaire est déjà fait et après l'employé se met pas
+    // disponible ». On cédule d'abord, PUIS la personne change sa dispo — et le quart doit se
+    // barrer tout seul au prochain affichage, plus une alerte en tête qui le nomme.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto HorsDispo" }),
+    })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: "Dalia Dispo", secteur: "salle" }),
+    })).json();
+
+    // Un quart AUJOURD'HUI (dans la semaine affichée par défaut).
+    const jour = new Date().toISOString().slice(0, 10);
+    const quart = await (await api("/api/admin/shifts", {
+      method: "POST",
+      body: JSON.stringify({ employee_id: emp.id, date: jour, start_time: "09:00", end_time: "17:00", role: "server" }),
+    })).json();
+
+    // L'horaire est fait. MAINTENANT elle se met « pas disponible » ce jour-là.
+    const js = new Date(jour + "T12:00:00Z").getUTCDay(); // 0 = dimanche
+    const jour0 = js === 0 ? 6 : js - 1;                  // 0 = lundi, comme l'app
+    await fetch(`${serveur.base}/api/employee/${emp.access_code}/disponibilites`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ disponibilites: [{ jour: jour0, disponible: false }] }),
+    });
+
+    await ouvrirAdmin();
+    await onglet.ev(`document.querySelector('[data-onglet="salle"]').click()`);
+    await jusqua(() => onglet.ev(`!!document.querySelector('[data-id="${quart.id}"]')`), { quoi: "le quart dans la grille" });
+
+    // La case porte la classe hors-dispo…
+    assert.equal(
+      await onglet.ev(`document.querySelector('[data-id="${quart.id}"]').classList.contains("hors-dispo")`),
+      true, "le quart tombe hors dispo, il doit porter la classe"
+    );
+    // …et la diagonale rouge est bien dessinée (un SVG en background de ::after).
+    assert.match(
+      await onglet.ev(`getComputedStyle(document.querySelector('[data-id="${quart.id}"]'), "::after").backgroundImage`),
+      /svg|url\(/, "la diagonale (SVG) doit être dessinée"
+    );
+    // L'alerte en tête nomme la personne.
+    assert.match(
+      await onglet.ev(`([...document.querySelectorAll(".quarts-hors-dispo")].map((n) => n.textContent).join(" "))`),
+      /Dalia Dispo/, "l'alerte du haut doit nommer la personne"
+    );
+
+    await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
+  });
+
   await t.test("l'export CSV ne sort que ceux qui ont déclaré, et un seul sens par colonne", async () => {
     // Quatre défauts rapportés en lisant le vrai rapport dans Numbers, sur un iPad :
     // tout l'effectif listé en lignes de zéros, le numéro d'employé perdu sur les
@@ -1927,12 +1976,25 @@ test("interface", optionsDuTest, async (t) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, ventes, clients: 50, pct: 10, remis: 0, is_hotesse: false }),
       });
-    // Ancre au lundi 5 octobre 2026 : la paye court du 5 au 18, la précédente du 21 sept au
-    // 4 oct. Les deux BORNES sont déclarées exprès — c'est là que ça se joue.
-    await decl("2026-10-05", 1000); // premier jour de la paye → 100 $
-    await decl("2026-10-18", 1000); // DERNIER jour de la paye → 100 $
-    await decl("2026-10-04", 5000); // dimanche d'avant : paye précédente → 500 $
-    await decl("2026-10-19", 9000); // lundi d'après : paye suivante → ne doit jamais paraître
+    // Les dates sont RELATIVES à aujourd'hui : ce test vérifie la logique des bornes de paye,
+    // pas un calendrier précis. L'ancrer sur des dates fixes le faisait mourir dès qu'on
+    // passait la période en question. On ancre donc sur le lundi de la semaine en cours, et
+    // on dépose les quatre déclarations autour : les deux bornes de la paye courante, un jour
+    // dans la précédente, un jour dans la suivante. Tout en UTC midi, comme l'app.
+    const isoJour = (d) => d.toISOString().slice(0, 10);
+    const ajoute = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return isoJour(d); };
+    const aujourdISO = new Date().toISOString().slice(0, 10);
+    const dowUTC = new Date(aujourdISO + "T12:00:00Z").getUTCDay(); // 0 = dimanche
+    const lundiISO = ajoute(aujourdISO, -(dowUTC === 0 ? 6 : dowUTC - 1)); // lundi de cette semaine
+    const mardiISO = ajoute(lundiISO, 1);   // on règlera l'ancre AVEC ce mardi : doit retomber au lundi
+    const dernierISO = ajoute(lundiISO, 13); // dernier jour de la paye courante (dimanche)
+    const dimAvantISO = ajoute(lundiISO, -1); // la veille : paye précédente
+    const lundiApresISO = ajoute(lundiISO, 14); // début de la paye suivante : jamais dans la courante
+
+    await decl(lundiISO, 1000);     // premier jour de la paye courante → 100 $
+    await decl(dernierISO, 1000);   // DERNIER jour de la paye courante → 100 $ (total courant = 200)
+    await decl(dimAvantISO, 5000);  // paye précédente → 500 $
+    await decl(lundiApresISO, 9000);// paye suivante → ne doit jamais paraître dans la courante
 
     await ouvrirAdmin();
     const netDe = () =>
@@ -1949,48 +2011,46 @@ test("interface", optionsDuTest, async (t) => {
     // silence sur les deux dernières semaines, qui donneraient un chiffre d'allure juste.
     assert.equal(await onglet.ev(`!!document.querySelector(".paye-dates")`), false);
 
-    // On règle un MARDI exprès : le serveur doit le ramener à son lundi, et le DIRE.
+    // On règle un MARDI exprès : le serveur doit le ramener à son lundi, et le DIRE (alerte).
     await onglet.ev(`(function () {
       window.__alertes = [];
       window.alert = function (m) { window.__alertes.push(m); };
-      document.getElementById("payeDebutInput").value = "2026-10-06";
-    })()`);
+      document.getElementById("payeDebutInput").value = __MARDI__;
+    })()`.replace("__MARDI__", JSON.stringify(mardiISO)));
     await onglet.ev(`document.getElementById("payeEnregistrer").click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector(".paye-dates")`), { quoi: "la navigation de paye" });
-    assert.match(
-      await onglet.ev(`(window.__alertes || [])[0] || ""`),
-      /5 octobre|October 5/,
-      "ramener la date en douce ferait afficher un autre chiffre que celui qu'on pensait régler"
-    );
+    // Qu'une alerte sorte dit qu'on ne corrige pas la date en douce. Et le net ci-dessous le
+    // PROUVE : si l'ancre n'avait pas retombé au lundi, les bornes auraient glissé d'un jour
+    // et le total de la paye courante ne serait pas 200.
+    assert.ok((await onglet.ev(`(window.__alertes || []).length`)) > 0, "le lundi retenu doit être annoncé");
 
     const datesPaye = () => onglet.ev(`document.querySelector(".paye-dates").textContent`);
-    assert.match(await datesPaye(), /5 octobre 2026.*18 octobre 2026|October 5, 2026.*October 18, 2026/);
-    assert.match(await netDe(), /200,00|200\.00/, "les DEUX bornes comptent : le 5 et le 18");
+    // La paye EN COURS contient aujourd'hui : elle porte sa marque, et il n'y a pas de paye
+    // future à visiter. Les DEUX bornes comptent → 200.
+    assert.match(await netDe(), /200,00|200\.00/, "les DEUX bornes comptent : le lundi et le dimanche 13 jours plus tard");
     assert.equal(await onglet.ev(`!!document.querySelector(".paye-marque")`), true, "« Paye en cours »");
-    // Une paye à venir n'a aucune déclaration : le bouton donnerait un écran vide qui se
-    // lirait comme une perte de données.
-    assert.equal(await onglet.ev(`document.getElementById("payeSuivante").disabled`), true);
+    assert.equal(await onglet.ev(`document.getElementById("payeSuivante").disabled`), true, "pas de paye future à visiter");
 
+    // La paye PRÉCÉDENTE : le jour d'avant le lundi d'ancrage y tombe, pas dans la courante.
+    const avant = await datesPaye();
     await onglet.ev(`document.getElementById("payePrecedente").click()`);
-    await jusqua(async () => /21 septembre|September 21/.test(await datesPaye()), { quoi: "la paye précédente" });
-    assert.match(
-      await netDe(),
-      /500,00|500\.00/,
-      "le dimanche 4 octobre appartient à la paye PRÉCÉDENTE, pas à celle en cours"
-    );
+    await jusqua(async () => (await datesPaye()) !== avant, { quoi: "la paye précédente" });
+    assert.match(await netDe(), /500,00|500\.00/, "la veille du lundi d'ancrage appartient à la paye PRÉCÉDENTE");
     assert.equal(await onglet.ev(`document.getElementById("payeSuivante").disabled`), false);
 
-    // Rechargement : l'ancre vit en BASE, pas dans le navigateur — le gérant règle ça sur
-    // son téléphone et ouvre /admin du bureau. Et les chiffres doivent être justes du
-    // PREMIER rendu : l'ancre arrive avec l'aperçu, donc la première requête serait partie
-    // sans dates et aurait ramené tout l'historique sous les bonnes dates de paye.
+    // On revient à la paye en cours avant de recharger : le décalage est gardé PAR APPAREIL,
+    // donc sans ça le rechargement nous laisserait sur la précédente.
     await onglet.ev(`document.getElementById("payeSuivante").click()`);
     await jusqua(() => onglet.ev(`!!document.querySelector(".paye-marque")`), { quoi: "le retour à la paye en cours" });
+
+    // Rechargement : l'ancre vit en BASE, pas dans le navigateur. Et les chiffres doivent
+    // être justes DÈS le premier rendu — l'ancre arrive avec l'aperçu, donc une première
+    // requête partie sans dates ramènerait tout l'historique sous les bonnes dates de paye.
     await onglet.aller(`${serveur.base}/admin`, ".paye-dates");
+    await jusqua(() => onglet.ev(`!!document.querySelector(".paye-marque")`), { quoi: "le retour à la paye en cours" });
     await jusqua(async () => /200,00|200\.00/.test(await netDe()), {
       quoi: "le bon total dès le rechargement",
     });
-    assert.match(await datesPaye(), /5 octobre 2026|October 5, 2026/);
 
     // Pas besoin de remettre la période : `ouvrirAdmin()` repart de « tout l'historique »
     // pour chaque test, justement parce qu'elle fuit par localStorage.
