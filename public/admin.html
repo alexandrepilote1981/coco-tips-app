@@ -772,9 +772,24 @@
     font-size: 8.5px; font-weight: 700;
   }
   .empty-cell.dispo-partielle { opacity: 0.55; }
-  /* Un quart placé hors des disponibilités déclarées : un liseré, pas un contour plein —
-     le contour plein rouge est réservé aux congés, qui sont plus forts. */
-  .shift-chip.hors-dispo { border-style: dashed; border-color: rgba(137,147,164,0.7); }
+  /* Un quart placé hors des disponibilités déclarées : BARRÉ d'une diagonale rouge, d'un
+     coin à l'autre. Demandé ainsi : « quand l'horaire est déjà fait et après l'employé se
+     met pas disponible ». La diagonale est unique à ce cas — le contour plein rouge reste
+     réservé aux congés, plus forts. La ligne est un SVG étiré (preserveAspectRatio=none)
+     pour toucher les coins quelle que soit la taille de la case ; les ::before du poste et
+     le texte passent dessous. On ne BLOQUE pas : le gérant garde le quart, appelle, ou le
+     déplace. */
+  .shift-chip.hors-dispo { border-color: rgba(226,104,90,0.55); }
+  .shift-chip.hors-dispo::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: 8px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none' viewBox='0 0 100 100'%3E%3Cline x1='0' y1='100' x2='100' y2='0' stroke='%23E2685A' stroke-width='3'/%3E%3C/svg%3E");
+    background-size: 100% 100%; background-repeat: no-repeat;
+  }
+  /* L'alerte en tête de grille : une case barrée seule se perd dans une grille de quatorze. */
+  .quarts-hors-dispo {
+    font-size: 11.5px; color: #E2685A; background: rgba(226,104,90,0.1);
+    border-radius: 8px; padding: 7px 10px; margin: 0 0 8px; line-height: 1.4;
+  }
   .dispo-manquantes {
     font-size: 11px; color: #D4A857; margin: 0 0 8px;
     background: rgba(212,168,87,0.08); border-radius: 8px; padding: 7px 10px;
@@ -1278,6 +1293,7 @@ const I18N = {
     congeConflit: (type) => `Attention : cédulé pendant « ${type} »`,
     dispoConflit: (texte) => `Attention : hors de ses disponibilités (${texte})`,
     dispoCourt: "Pas dispo",
+    quartsHorsDispoLigne: (n, details) => `⚠ ${n} quart${n > 1 ? "s" : ""} hors des disponibilités déclarées : ${details}. Une dispo a peut-être changé après l'horaire.`,
     disposManquantes: (n, noms) =>
       `${n} personne${n > 1 ? "s n'ont pas rempli leurs" : " n'a pas rempli ses"} disponibilités : ${noms}`,
     confirmMalgreConge: (nom, type, periode) =>
@@ -1568,6 +1584,7 @@ const I18N = {
     congeConflit: (type) => `Warning: scheduled during "${type}"`,
     dispoConflit: (texte) => `Warning: outside their availability (${texte})`,
     dispoCourt: "Unavailable",
+    quartsHorsDispoLigne: (n, details) => `⚠ ${n} shift${n > 1 ? "s" : ""} outside declared availability: ${details}. An availability may have changed after the schedule.`,
     disposManquantes: (n, noms) =>
       `${n} ${n > 1 ? "people have" : "person has"} not filled in their availability: ${noms}`,
     confirmMalgreConge: (nom, type, periode) =>

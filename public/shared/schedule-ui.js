@@ -417,6 +417,29 @@ window.ScheduleUI = (function () {
 
     const absences = absencesDuSecteur(employees);
 
+    // Les quarts DÉJÀ placés qui tombent hors de la disponibilité déclarée de la personne.
+    // Le cas visé, dans les mots du propriétaire : « quand l'horaire est déjà fait et après
+    // l'employé se met pas disponible ». La grille regarde l'ÉTAT actuel — il y a un quart un
+    // jour où la personne dit maintenant « pas dispo » — donc elle attrape ce cas sans avoir
+    // à comparer des dates de modification, qui mentiraient (une seule sauvegarde de dispos
+    // réécrit les sept lignes d'un coup).
+    //
+    // Rien n'est bloqué : on barre le quart dans la grille ET on le nomme ici, en tête. Une
+    // seule case barrée perdue dans une grille de quatorze personnes passerait inaperçue —
+    // or c'est justement le cas où le gérant ne regarde plus cette semaine-là.
+    const horsDispoSemaine = [];
+    for (const emp of employees) {
+      const dispos = disposDeEmploye(emp.id);
+      for (const d of dates) {
+        const dateStr = isoDate(d);
+        const quart = shifts.find((s) => s.employee_id === emp.id && s.date === dateStr);
+        if (quart && window.Disponibilites.conflit(dispos, quart)) {
+          const j = window.Disponibilites.jourDeSemaine(dateStr);
+          horsDispoSemaine.push(`${echapper(emp.name)} (${window.Disponibilites.nomDuJour(j, lang)} ${+dateStr.slice(8, 10)})`);
+        }
+      }
+    }
+
     return `
     ${blocCongesHTML(restaurantId, secteur, employees, peutModifier)}
     ${blocLiensHTML(restaurantId, secteur, employees)}
@@ -441,6 +464,11 @@ window.ScheduleUI = (function () {
             jamaisRepondu(employees).length,
             jamaisRepondu(employees).map((e) => echapper(e.name)).join(", ")
           )}</div>`
+        : ""
+    }
+    ${
+      peutModifier && horsDispoSemaine.length > 0
+        ? `<div class="quarts-hors-dispo">${host.t("quartsHorsDispoLigne", horsDispoSemaine.length, horsDispoSemaine.join(", "))}</div>`
         : ""
     }
     <div class="week-actions">

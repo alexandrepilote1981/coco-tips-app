@@ -605,6 +605,40 @@ disponibilité effective. On les distingue par l'**existence** des lignes (`aRep
 par leur contenu — c'est ce qui permet d'afficher au gérant la liste de ceux qu'il reste à
 relancer, au-dessus de la grille.
 
+### Un quart déjà placé qui tombe hors dispo se BARRE
+
+Demandé ainsi : « quand l'horaire est déjà fait et après l'employé se met pas disponible ».
+Le quart était déjà détecté en conflit (`Disponibilites.conflit`, déjà appelé par la grille)
+mais marqué trop discrètement — un contour pointillé gris que personne ne voyait. Il est
+maintenant **barré d'une diagonale rouge, d'un coin à l'autre** de la case (`.shift-chip.hors-dispo`
+dans `admin.html` et `horaire.html`). La diagonale est un SVG étiré (`preserveAspectRatio=none`)
+pour toucher les coins quelle que soit la taille de la case ; le texte et la barre de poste
+passent dessous. C'est unique à ce cas — le contour plein rouge reste réservé aux congés, plus
+forts (voir « Une couleur par poste »).
+
+**Et une alerte en tête de grille** (`.quarts-hors-dispo`, calculée dans `schedule-ui.js`) nomme
+la personne et le jour : « ⚠ Marie (jeudi 30) ». Sans elle, une seule case barrée se perd dans
+une grille de quatorze, et c'est justement le cas où le gérant ne regarde plus cette
+semaine-là. Elle ne sort que pour les portes qui modifient (`peutModifier`).
+
+**La détection regarde l'ÉTAT, pas les horodatages.** Un quart existe un jour où la personne
+dit maintenant « pas dispo » → conflit, peu importe l'ordre dans le temps. Comparer
+`disponibilites.updated_at` à la date du quart mentirait : une seule sauvegarde de dispos
+réécrit les sept lignes d'un coup, donc tout aurait l'air « changé après ». L'état actuel suffit
+et couvre le cas demandé.
+
+**Ça n'INTERDIT toujours rien** — c'est la règle de `disponibilites.js` : le gérant garde le
+quart, appelle la personne, ou le déplace. On avertit, fort cette fois. Couvert par
+`test/ui-smoke.test.mjs` (on cédule, PUIS on met la personne « pas dispo », et le quart se barre
+avec l'alerte en haut).
+
+**Avertir hors de l'app (e-mail / texto) n'a PAS été ajouté**, et c'est une décision : l'app n'a
+aucun service externe ni aucune clé API, et c'est une force — rien à exposer. L'incident Railway
+d'octobre 2026 (variables d'environnement lues, clés API fuitées) l'a rappelé. Un e-mail ou un
+texto demanderait un fournisseur, une clé en base/variable, le contact du gérant et la gestion
+des échecs. Le signal in-app (diagonale + alerte + pastille de l'onglet) reste le canal fiable et
+gratuit, comme la bande « nouvelle version ». À rouvrir seulement sur demande explicite.
+
 ### Ce qui n'est PAS marqué
 
 La **pâleur** plutôt qu'une couleur : la grille porte déjà les congés, les fériés, les
