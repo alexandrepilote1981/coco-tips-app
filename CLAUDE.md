@@ -639,6 +639,26 @@ texto demanderait un fournisseur, une clé en base/variable, le contact du géra
 des échecs. Le signal in-app (diagonale + alerte + pastille de l'onglet) reste le canal fiable et
 gratuit, comme la bande « nouvelle version ». À rouvrir seulement sur demande explicite.
 
+### Un jour « pas dispo » doit se VOIR dans la grille
+
+Rapporté ainsi : « on ne voit pas qu'il n'est pas disponible quand on fait l'horaire, juste
+quand on appuie sur la journée ». La case existait bien (`.empty-cell.pas-dispo`, une journée
+vide un jour où la personne a déclaré `disponible: false`) mais elle était si pâle — un gris à
+peine plus foncé que le fond — qu'on la confondait avec une case vide ordinaire. On ne
+l'apprenait qu'à la tape, par la question d'accroc.
+
+Elle est maintenant **gris hachuré** (un `repeating-linear-gradient` à 135°), bien visible,
+dans `admin.html` et `horaire.html`. Deux choses tenues exprès : ça reste **gris**, pas rouge —
+le rouge est réservé aux alertes (quart barré, férié, congé, plafond), sinon la grille devient
+un arbre de Noël (voir « Ce qui n'est PAS marqué » juste en dessous, qui parle de la PÂLEUR
+comme canal : le hachuré reste dans ce canal gris, il ne l'ouvre pas à une teinte neuve) ; et
+la case reste **cliquable**, la question sort encore à l'enregistrement — une disponibilité
+n'interdit rien. Couvert par `test/ui-smoke.test.mjs` (un jour pas-dispo sans quart porte la
+classe et un fond hachuré).
+
+Les demi-disponibilités (« à partir de 9h ») restent discrètes (`dispo-partielle`, opacité) :
+la personne EST là, juste plus tard — ce n'est pas un jour bloqué.
+
 ### Ce qui n'est PAS marqué
 
 La **pâleur** plutôt qu'une couleur : la grille porte déjà les congés, les fériés, les

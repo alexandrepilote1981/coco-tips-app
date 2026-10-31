@@ -766,10 +766,17 @@
      les congés, les fériés, les rangées rouges du plafond d'heures et les conflits. Une
      cinquième couleur en ferait un arbre de Noël. La pâleur est un canal encore libre — ça
      se voit sans crier, et ça ne barre rien : le gérant peut toujours cliquer. */
+  /* Un jour « pas disponible », case VIDE : gris hachuré « bloqué », bien visible. Rapporté
+     ainsi : « on ne voit pas qu'il n'est pas disponible quand on fait l'horaire, juste quand
+     on appuie sur la journée ». La version d'avant était si pâle qu'on la confondait avec une
+     case vide ordinaire — on ne l'apprenait qu'à la tape, par la question. Ça reste GRIS, pas
+     rouge : le rouge est réservé aux alertes (quart barré, férié, congé). Et ça reste
+     cliquable — on peut quand même céduler, la question sort encore à l'enregistrement. */
   .empty-cell.pas-dispo {
-    border-style: solid; border-color: rgba(255,255,255,0.07);
-    background: rgba(255,255,255,0.015); color: rgba(137,147,164,0.65);
-    font-size: 8.5px; font-weight: 700;
+    border-style: solid; border-color: rgba(137,147,164,0.45);
+    background-color: rgba(137,147,164,0.10);
+    background-image: repeating-linear-gradient(135deg, rgba(137,147,164,0.22) 0 5px, transparent 5px 11px);
+    color: #AEB7C3; font-size: 9px; font-weight: 700; letter-spacing: 0.2px;
   }
   .empty-cell.dispo-partielle { opacity: 0.55; }
   /* Un quart placé hors des disponibilités déclarées : BARRÉ d'une diagonale rouge, d'un
