@@ -24,6 +24,10 @@ Variables d'environnement (toutes avec une valeur de repli, l'app démarre sans 
 | `SCHEDULE_PASSWORD` | `horaire2026`          | accès à `/horaire` (horaire seulement, sans les montants) |
 | `DB_PATH`           | `./data.sqlite`        | fichier SQLite ; sur Railway, il vit sur le volume |
 | `PHOTOS_DIR`        | `<dossier de DB_PATH>/photos` | justificatifs téléversés                   |
+| `RESEND_API_KEY`    | *(vide)*               | clé Resend pour les notifications par courriel ; vide = aucune notification |
+| `NOTIF_EMAIL`       | *(vide)*               | adresse qui reçoit les notifications ; vide = aucune notification |
+| `NOTIF_FROM`        | `Declara <notifications@declara.tips>` | expéditeur des courriels (domaine à vérifier dans Resend) |
+| `APP_URL`           | `https://declara.tips` | base des liens dans les courriels                 |
 
 Pour lancer une instance jetable sans toucher aux données locales :
 
@@ -43,10 +47,12 @@ backup.js                 archive .zip téléchargeable (base + CSV lisibles)
 pdf-horaire.js            PDF de l'horaire hebdomadaire (pdfkit)
 rate-limit.js             plafond de tentatives en mémoire, sur les échecs seulement
 mdp.js                    le mot de passe du lien gérant cuisine : le poser, le vérifier
+notifications.js          courriels au gérant (congé demandé, message) ; off sans clé Resend
 public/admin.html         tableau de bord du gérant
 public/employee.html      page d'un employé, atteinte par /e/<code>
 public/horaire.html       horaire seul, atteint par /horaire/<code>
 public/landing.html       page de présentation publique
+public/conge.html         page Accepter/Refuser ouverte depuis le courriel d'une demande de congé
 public/shared/tip-math.js calcul des pourboires — chargé par le serveur ET le navigateur
 public/shared/schedule-ui.js  grille d'horaire — partagée par /admin et /horaire
 public/shared/noms.js     découpage prénom / nom de famille
@@ -1763,6 +1769,12 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 - `test/rate-limit.test.js` — la mécanique du plafond, chaque test sur son propre guichet.
 - `test/mdp.test.js` — le mot de passe du lien gérant : il ne se relit pas, une valeur
   abîmée ferme la porte, et le cache ne fait jamais passer un mauvais essai.
+- `test/notifications.test.js` — les courriels, sans réseau : le jeton signé (propre à une
+  demande, infalsifiable), le contenu des deux courriels (objet, liens signés, texte échappé),
+  et surtout que RIEN ne part tant que ce n'est pas configuré et qu'un envoi raté ne lève jamais.
+- `test/conge-courriel.test.mjs` — répondre à un congé par le lien du courriel, sur le vrai
+  serveur : un jeton falsifié ou d'une autre demande est refusé, on ne répond qu'une fois,
+  et accepter place bien le congé dans la grille.
 - `test/verrou-codes.test.mjs` — la promesse vécue par une employée : mon lien marche-t-il ?
   C'est ici qu'on vérifie qu'un WiFi bloqué ne ferme pas la porte à quelqu'un dont le code
   est bon, et qu'il la ferme quand même à qui essaie de deviner. Et que les portes par mot de
@@ -1789,6 +1801,90 @@ nanoid, pdfkit et adm-zip. Les tests n'utilisent que `node:test`, intégré à N
 Une modification dans `admin.html` ou `employee.html` mérite d'être vérifiée dans un vrai
 navigateur, pas seulement relue : c'est là que vit l'essentiel de la logique, et rien d'autre
 ne la couvre.
+
+## Notifications par courriel
+
+Le problème, dans les mots du propriétaire : « c'est sûr que j'aimerais avoir un SMS mais ça
+coûte cher, ou un e-mail ». Jusque-là, il fallait **ouvrir l'app** pour savoir qu'un employé
+avait demandé un congé ou écrit un message. Le gérant pouvait passer une semaine dans l'onglet
+cuisine et manquer les deux — d'autant que ni l'un ni l'autre ne porte de pastille sur les
+onglets.
+
+Deux événements seulement déclenchent un courriel, et c'est voulu : une **demande de congé**
+et un **message d'employé**. Ce sont ceux qui attendent une action du gérant. On n'envoie pas
+pour chaque petit fait (une déclaration, un changement de dispo) — un courriel qui part tout
+le temps devient du bruit qu'on filtre, et c'est exactement ce qu'on reproche à un bandeau qui
+crie sans cesse.
+
+### « Off » par défaut, et pourquoi
+
+Tout le reste du dépôt tient **sans aucun service externe ni clé API** — c'est une force, et
+l'incident Railway d'octobre 2026 (variables d'environnement lues, clés fuitées) l'a rappelé.
+`notifications.js` est donc la **seule** porte vers l'extérieur, isolée dans son fichier, et
+elle ne s'allume que si **deux** variables sont posées : `RESEND_API_KEY` et `NOTIF_EMAIL`.
+Sans elles, `Notifications.activee()` est faux, rien ne part, et l'app se comporte EXACTEMENT
+comme avant — on ne casse pas une installation qui n'a pas configuré ça. C'est le même principe
+que « toutes les variables ont une valeur de repli ».
+
+**La clé ne vit que dans l'environnement (Railway), jamais en base ni dans la sauvegarde
+téléchargeable.** Une clé de courriel qui fuite est peu grave (au pire du spam, on la change en
+deux minutes), mais on ne la met pas là où la sauvegarde l'emporterait — comme on ne laisse
+jamais sortir l'empreinte du mot de passe cuisine.
+
+**Un envoi raté ne casse jamais rien.** La demande et le message sont déjà enregistrés quand on
+appelle la notification ; l'envoi se fait **après la réponse** et **sans `await`**. Si le
+courriel ne part pas (réseau, clé expirée, domaine pas vérifié), l'employé ne voit aucune
+différence. Tout est en try/catch, et `envoyer()` ne lève jamais — il renvoie un objet qui dit
+ce qui s'est passé.
+
+On passe par **Resend** (API HTTPS simple, appelée avec le `fetch` intégré de Node : **aucune
+dépendance neuve**). Pour écrire à une autre adresse que celle du compte, Resend demande un
+domaine vérifié — d'où `NOTIF_FROM` sur `declara.tips`.
+
+### Accepter / Refuser depuis le courriel
+
+Demandé ainsi : « serais-tu possible d'avoir une option, quand on reçoit le courriel, accepter
+ou refuser ? Quand on accepte, ça le place directement en congé dans l'horaire. » Oui — et
+accepter place bien le congé dans la grille, parce qu'**accepter une demande ne fait que passer
+son statut à `accepte`** : elle devient alors une absence ordinaire, marquée dans la grille.
+Rien n'est recopié (voir « L'employé demande, le gérant répond »).
+
+Le courriel de congé porte donc **deux boutons** qui mènent à `public/conge.html`, une page qui
+agit **sans connexion**. Ce qui autorise l'action, c'est un **jeton signé** dans l'adresse :
+une empreinte HMAC-SHA256 de l'identifiant de la demande, calculée avec un secret que seul le
+serveur connaît (`notifSecret()` dans `server.js`). Un lien ne peut donc être ni fabriqué ni
+deviné, et ne vaut que pour CETTE demande.
+
+**Le secret vit dans `reglages`, pas dans une variable d'environnement** : ainsi il survit à un
+redéploiement ET à un changement de clé Resend — sinon les liens déjà envoyés cesseraient de
+marcher. Généré une fois, au premier besoin.
+
+**La lecture n'agit pas.** La page ne fait qu'AFFICHER au chargement (un GET) ; la réponse part
+d'un bouton (un POST). C'est délibéré : les clients courriel (Gmail, antivirus) **préchargent**
+les liens pour les scanner — si le GET acceptait, chaque demande se ferait accepter toute seule
+au moment où le courriel est ouvert. Le bouton « Refuser » du courriel ouvre directement la
+zone de refus sur la page, mais ne refuse jamais sans un tap de confirmation.
+
+**Une réponse ne se donne qu'une fois** (409 au second envoi), exactement comme la route admin :
+un refus déjà envoyé ne devient pas une acceptation d'un lien rouvert. Le jeton couvre l'id
+SEUL (pas l'action) : le même lien laisse voir, puis accepter OU refuser — c'est la page qui
+demande laquelle.
+
+`public/conge.html` est en **français seulement**, à dessein : elle n'est atteinte que depuis
+le courriel de notification, lui aussi en français, et c'est le gérant qui la lit.
+
+### Ce qui n'a PAS été fait, et pourquoi
+
+- **Pas de SMS.** « Ça coûte cher » — et ça demande un numéro loué, une vérification auprès des
+  opérateurs, et la gestion des échecs. Le courriel est quasi gratuit et arrive comme une
+  notification sur le téléphone.
+- **Pas de notification pour les conflits de disponibilité** (voir « Disponibilités » plus
+  haut, qui garde sa note : avertir hors de l'app n'y a pas été ajouté). Le signal in-app
+  (diagonale + alerte) reste le canal pour ça. On n'ouvre la porte externe que pour les deux
+  événements qui attendent vraiment une action du gérant.
+
+Couvert par `test/notifications.test.js` (le module, sans réseau) et
+`test/conge-courriel.test.mjs` (répondre par le lien signé, sur le vrai serveur).
 
 ## Déploiement
 

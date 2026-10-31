@@ -15,6 +15,10 @@ const Absences = require("./public/shared/absences.js");
 const Secteurs = require("./public/shared/secteurs.js");
 const { guard, blocageSecondes, refuser, noteFailure, clearFailures, noteSuccess, estConnu } = require("./rate-limit");
 const Mdp = require("./mdp");
+// Notifications par courriel (congé demandé, message d'employé). Isolé dans son fichier, et
+// « off » tant que les variables RESEND_API_KEY + NOTIF_EMAIL ne sont pas posées : sans elles,
+// l'app se comporte exactement comme avant. Voir notifications.js.
+const Notifications = require("./notifications");
 // Le calcul des pourboires vit dans public/shared/ pour que le navigateur puisse charger
 // EXACTEMENT le même fichier. Une seule implémentation, couverte par test/tip-math.test.js.
 const TipMath = require("./public/shared/tip-math.js");
@@ -128,6 +132,18 @@ function memeSecret(essai, attendu) {
   const a = crypto.createHash("sha256").update(String(essai)).digest();
   const b = crypto.createHash("sha256").update(String(attendu)).digest();
   return crypto.timingSafeEqual(a, b);
+}
+
+// Le secret qui signe les liens « Accepter / Refuser » des courriels de congé. Il vit dans
+// `reglages` (persistant) et pas dans une variable d'environnement : ainsi il survit à un
+// redéploiement ET à un changement de clé Resend — sinon les liens déjà envoyés cesseraient
+// de marcher. Généré une seule fois, au premier besoin.
+function notifSecret() {
+  const row = db.prepare("SELECT valeur FROM reglages WHERE cle = 'notif_secret'").get();
+  if (row && row.valeur) return row.valeur;
+  const s = crypto.randomBytes(32).toString("hex");
+  db.prepare("INSERT INTO reglages (cle, valeur) VALUES ('notif_secret', ?) ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur").run(s);
+  return s;
 }
 
 /**
@@ -316,6 +332,18 @@ app.post("/api/employee/:code/conges", (req, res) => {
     VALUES (?,?,?,?,?,?,'en_attente')
   `).run(id, emp.id, propre.date_debut, propre.date_fin, type, propre.note.slice(0, 120));
   res.json({ id, ...propre, type, statut: "en_attente", employee_id: emp.id });
+
+  // Le gérant est prévenu par courriel (si configuré). Après la réponse et sans `await` :
+  // la demande est déjà enregistrée, un courriel raté ne doit rien changer pour l'employé.
+  if (Notifications.activee()) {
+    const restaurant = db.prepare("SELECT id, name FROM restaurants WHERE id = ?").get(emp.restaurant_id);
+    Notifications.notifierDemandeConge({
+      demande: { id, date_debut: propre.date_debut, date_fin: propre.date_fin, type, note: propre.note },
+      employe: emp,
+      restaurant,
+      secret: notifSecret(),
+    });
+  }
 });
 
 // Annuler SA demande. Seulement tant qu'elle attend : une fois répondue, elle appartient à
@@ -335,6 +363,71 @@ app.delete("/api/employee/:code/conges/:id", (req, res) => {
   }
   db.prepare("DELETE FROM absences WHERE id = ?").run(demande.id);
   res.json({ ok: true });
+});
+
+// ---------- Répondre à une demande de congé DEPUIS LE COURRIEL ----------
+//
+// Les boutons « Accepter / Refuser » du courriel mènent ici, SANS connexion. Ce qui autorise,
+// c'est le jeton signé `t` : une empreinte HMAC de l'id de la demande, que seul le serveur
+// peut calculer (voir notifications.js). Pas de mot de passe, pas de session — mais un lien
+// qui ne vaut que pour CETTE demande et ne se fabrique pas.
+//
+// La lecture (GET) ne fait qu'afficher ; la réponse part d'un POST déclenché par un bouton.
+// Un scanner de liens (Gmail, antivirus) qui ouvre l'URL ne répond donc jamais à la place du
+// gérant.
+
+function demandeAvecJeton(req, res) {
+  const t = req.method === "GET" ? req.query.t : req.body.t;
+  if (!Notifications.jetonValide(notifSecret(), req.params.id, t)) {
+    res.status(403).json({ error: "Lien invalide" });
+    return null;
+  }
+  const demande = db
+    .prepare(`
+      SELECT a.*, e.name AS employee_name, r.name AS restaurant_name
+      FROM absences a
+      JOIN employees e ON e.id = a.employee_id
+      JOIN restaurants r ON r.id = e.restaurant_id
+      WHERE a.id = ?
+    `)
+    .get(req.params.id);
+  if (!demande) {
+    res.status(404).json({ error: "Demande introuvable" });
+    return null;
+  }
+  return demande;
+}
+
+app.get("/api/conge/:id", (req, res) => {
+  const d = demandeAvecJeton(req, res);
+  if (!d) return;
+  res.json({
+    demande: {
+      id: d.id,
+      employee_name: d.employee_name,
+      restaurant_name: d.restaurant_name,
+      date_debut: d.date_debut,
+      date_fin: d.date_fin,
+      type: d.type,
+      note: d.note,
+      statut: d.statut,
+    },
+  });
+});
+
+app.post("/api/conge/:id/reponse", (req, res) => {
+  const d = demandeAvecJeton(req, res);
+  if (!d) return;
+  // Une réponse ne se donne qu'une fois — comme la route admin : un refus déjà envoyé ne
+  // devient pas une acceptation d'un second clic (ou d'un lien rouvert).
+  if (d.statut !== "en_attente") {
+    return res.status(409).json({ error: "Cette demande a déjà reçu une réponse" });
+  }
+  const accepte = !!req.body.accepte;
+  const mot = String(req.body.reponse || "").trim().slice(0, 200);
+  db.prepare("UPDATE absences SET statut=?, reponse=?, repondu_at=datetime('now') WHERE id=?")
+    .run(accepte ? "accepte" : "refuse", mot, d.id);
+  res.json({ ok: true, statut: accepte ? "accepte" : "refuse" });
 });
 
 app.post("/api/employee/:code/entries", (req, res) => {
@@ -478,6 +571,13 @@ app.post("/api/employee/:code/messages", (req, res) => {
   const id = nanoid(10);
   db.prepare("INSERT INTO messages (id, employee_id, body, sender) VALUES (?,?,?,'employee')").run(id, emp.id, body);
   res.json({ ok: true, id });
+
+  // Le gérant est prévenu par courriel (si configuré). Même principe que pour les congés :
+  // après la réponse, sans `await`, un échec d'envoi ne touche pas le message enregistré.
+  if (Notifications.activee()) {
+    const restaurant = db.prepare("SELECT id, name FROM restaurants WHERE id = ?").get(emp.restaurant_id);
+    Notifications.notifierMessage({ message: { body }, employe: emp, restaurant });
+  }
 });
 
 app.get("/api/employee/:code/messages", (req, res) => {
@@ -1970,6 +2070,10 @@ app.get("/admin", (req, res) => {
 });
 app.get("/horaire", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "horaire.html"), NO_CACHE_HEADERS);
+});
+// La page « Accepter / Refuser » ouverte depuis le courriel de notification d'un congé.
+app.get("/conge", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "conge.html"), NO_CACHE_HEADERS);
 });
 app.get("/horaire/:code", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "horaire.html"), NO_CACHE_HEADERS);

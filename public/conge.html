@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Demande de congé — Declara</title>
+<!--
+  La page ouverte par les boutons « Accepter » / « Refuser » du courriel de notification.
+
+  Elle agit SANS connexion : ce qui l'autorise, c'est le jeton signé (`t`) passé dans
+  l'adresse, que seul le serveur peut avoir calculé. Elle ne fait qu'AFFICHER au chargement
+  (un GET) ; la réponse part d'un bouton (un POST). Ainsi un scanner de liens qui ouvre
+  l'URL n'accepte ni ne refuse jamais à la place du gérant.
+
+  Page en français seulement, à dessein : elle n'est atteinte que depuis le courriel de
+  notification, lui aussi en français, et c'est le gérant qui la lit.
+-->
+<style>
+  :root {
+    --fond: #10151D; --carte: #161C26; --texte: #F1EFEA; --gris: #8993A4;
+    --vert: #6FBF93; --or: #D4A857; --rouge: #E2685A; --bord: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fond); color: var(--texte);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+    min-height: 100vh; display: flex; align-items: flex-start; justify-content: center;
+    padding: 24px 16px;
+  }
+  .carte {
+    background: var(--carte); border: 1px solid var(--bord); border-radius: 16px;
+    padding: 24px 20px; max-width: 440px; width: 100%; margin-top: 24px;
+  }
+  .marque { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gris); margin: 0 0 4px; }
+  h1 { font-family: "Fraunces", Georgia, serif; font-size: 24px; margin: 0 0 16px; font-weight: 600; }
+  .ligne { font-size: 17px; margin: 0 0 6px; }
+  .dates { font-weight: 700; }
+  .note { color: var(--or); font-size: 14px; margin: 8px 0 0; font-style: italic; }
+  .type-pastille {
+    display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+    background: rgba(212,168,87,0.15); color: var(--or); margin-bottom: 14px;
+  }
+  .boutons { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+  button {
+    height: 52px; border: 0; border-radius: 12px; font-size: 17px; font-weight: 700;
+    cursor: pointer; width: 100%; font-family: inherit;
+  }
+  .b-accepter { background: var(--vert); color: var(--fond); }
+  .b-refuser { background: rgba(226,104,90,0.14); color: var(--rouge); }
+  .b-refuser.plein { background: var(--rouge); color: var(--fond); }
+  .b-annuler { background: transparent; color: var(--gris); height: 40px; font-weight: 600; }
+  textarea {
+    width: 100%; min-height: 72px; margin-top: 14px; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--bord); background: var(--fond); color: var(--texte);
+    font-family: inherit; font-size: 15px; resize: vertical;
+  }
+  .etat { text-align: center; padding: 10px 0; }
+  .etat .pic { font-size: 40px; margin-bottom: 8px; }
+  .etat.ok .pic { color: var(--vert); }
+  .etat.non .pic { color: var(--rouge); }
+  .sous { color: var(--gris); font-size: 14px; margin-top: 10px; }
+  a.lien-app { display: inline-block; margin-top: 18px; color: var(--vert); font-weight: 700; text-decoration: none; font-size: 15px; }
+  .cache { display: none !important; }
+  .erreur { color: var(--rouge); }
+</style>
+</head>
+<body>
+  <div class="carte" id="app">
+    <p class="marque">Declara</p>
+    <div id="contenu"><p class="sous">Chargement…</p></div>
+  </div>
+
+<script>
+  var params = new URLSearchParams(location.search);
+  var id = params.get("id") || "";
+  var t = params.get("t") || "";
+  var actionVoulue = params.get("a") || ""; // "accepte" | "refuse" | ""
+  var contenu = document.getElementById("contenu");
+
+  var NOM_TYPE = { conge: "Congé", vacances: "Vacances", maladie: "Maladie", cnesst: "CNESST" };
+  var JOURS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
+  var MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+  function dateLongue(iso){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||"")); if(!m) return iso;
+    var d = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], 12));
+    return JOURS[d.getUTCDay()] + " " + (+m[3]) + " " + MOIS[d.getUTCMonth()];
+  }
+  function plage(deb, fin){ return (!fin || fin===deb) ? dateLongue(deb) : ("du " + dateLongue(deb) + " au " + dateLongue(fin)); }
+
+  function erreur(msg){
+    contenu.innerHTML = '<h1>Oups</h1><p class="ligne erreur">' + esc(msg) + '</p>'
+      + '<p class="sous">Ouvre l\'app pour répondre à la demande.</p>'
+      + '<a class="lien-app" href="/admin">Ouvrir Declara →</a>';
+  }
+
+  function etatFinal(accepte){
+    contenu.innerHTML =
+      '<div class="etat ' + (accepte?"ok":"non") + '">'
+      + '<div class="pic">' + (accepte?"✓":"✕") + '</div>'
+      + '<h1>' + (accepte?"Congé accepté":"Congé refusé") + '</h1>'
+      + '<p class="sous">' + (accepte
+          ? "C'est placé dans l'horaire. L'employé verra la réponse sur sa page."
+          : "L'employé verra la réponse sur sa page.") + '</p>'
+      + '<a class="lien-app" href="/admin">Ouvrir l\'horaire →</a>'
+      + '</div>';
+  }
+
+  function dejaRepondu(statut){
+    var accepte = statut === "accepte";
+    contenu.innerHTML =
+      '<div class="etat ' + (accepte?"ok":"non") + '">'
+      + '<div class="pic">' + (accepte?"✓":"✕") + '</div>'
+      + '<h1>Déjà ' + (accepte?"accepté":"refusé") + '</h1>'
+      + '<p class="sous">Cette demande a déjà reçu une réponse.</p>'
+      + '<a class="lien-app" href="/admin">Ouvrir Declara →</a>'
+      + '</div>';
+  }
+
+  function repondre(accepte, reponse, bouton){
+    if (bouton) { bouton.disabled = true; bouton.textContent = "…"; }
+    fetch("/api/conge/" + encodeURIComponent(id) + "/reponse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ t: t, accepte: accepte, reponse: reponse || "" })
+    }).then(function(r){
+      if (r.status === 409) { dejaRepondu(accepte ? "accepte" : "refuse"); return null; }
+      if (!r.ok) throw new Error("Réponse impossible");
+      return r.json();
+    }).then(function(d){
+      if (d) etatFinal(accepte);
+    }).catch(function(){
+      erreur("La réponse n'a pas pu être enregistrée. Réessaie, ou ouvre l'app.");
+    });
+  }
+
+  function afficherDemande(d){
+    var type = NOM_TYPE[d.type] || "Congé";
+    if (d.statut && d.statut !== "en_attente") { dejaRepondu(d.statut); return; }
+
+    var html = ""
+      + (d.restaurant_name ? '<p class="marque">' + esc(d.restaurant_name) + '</p>' : "")
+      + '<span class="type-pastille">' + esc(type) + '</span>'
+      + '<h1>' + esc(d.employee_name || "Un employé") + '</h1>'
+      + '<p class="ligne">Demande : <span class="dates">' + esc(plage(d.date_debut, d.date_fin)) + '</span></p>'
+      + (d.note ? '<p class="note">« ' + esc(d.note) + ' »</p>' : "")
+      + '<div class="boutons" id="boutons">'
+      + '  <button class="b-accepter" id="bAccepter">Accepter — placer dans l\'horaire</button>'
+      + '  <button class="b-refuser" id="bRefuser">Refuser</button>'
+      + '</div>'
+      + '<div id="zoneRefus" class="cache">'
+      + '  <textarea id="motRefus" placeholder="Un mot pour l\'employé (facultatif)…"></textarea>'
+      + '  <div class="boutons">'
+      + '    <button class="b-refuser plein" id="bConfirmerRefus">Confirmer le refus</button>'
+      + '    <button class="b-annuler" id="bAnnulerRefus">Annuler</button>'
+      + '  </div>'
+      + '</div>';
+    contenu.innerHTML = html;
+
+    document.getElementById("bAccepter").addEventListener("click", function(){
+      repondre(true, "", this);
+    });
+    document.getElementById("bRefuser").addEventListener("click", function(){
+      document.getElementById("boutons").classList.add("cache");
+      document.getElementById("zoneRefus").classList.remove("cache");
+      document.getElementById("motRefus").focus();
+    });
+    document.getElementById("bConfirmerRefus").addEventListener("click", function(){
+      repondre(false, document.getElementById("motRefus").value, this);
+    });
+    document.getElementById("bAnnulerRefus").addEventListener("click", function(){
+      document.getElementById("zoneRefus").classList.add("cache");
+      document.getElementById("boutons").classList.remove("cache");
+    });
+
+    // Si le courriel pointait sur « Refuser », on ouvre directement la zone de refus —
+    // mais on ne refuse PAS tout seul : il faut toujours confirmer d'un tap.
+    if (actionVoulue === "refuse") document.getElementById("bRefuser").click();
+  }
+
+  if (!id || !t) {
+    erreur("Lien incomplet.");
+  } else {
+    fetch("/api/conge/" + encodeURIComponent(id) + "?t=" + encodeURIComponent(t))
+      .then(function(r){
+        if (r.status === 403) throw new Error("Ce lien n'est pas valide.");
+        if (r.status === 404) throw new Error("Cette demande n'existe plus.");
+        if (!r.ok) throw new Error("Chargement impossible.");
+        return r.json();
+      })
+      .then(function(d){ afficherDemande(d.demande); })
+      .catch(function(e){ erreur(e.message || "Chargement impossible."); });
+  }
+</script>
+</body>
+</html>
