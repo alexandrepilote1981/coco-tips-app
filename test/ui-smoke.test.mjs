@@ -1304,6 +1304,44 @@ test("interface", optionsDuTest, async (t) => {
     await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
   });
 
+  await t.test("un jour « pas dispo » se voit dans la grille, pas juste à la tape", async () => {
+    // Rapporté ainsi : « on ne voit pas qu'il n'est pas disponible quand on fait l'horaire,
+    // juste quand on appuie sur la journée ». La case était là mais trop pâle. Elle doit
+    // maintenant être hachurée (grise), bien visible, sur une journée SANS quart.
+    const resto = await (await api("/api/admin/restaurants", {
+      method: "POST", body: JSON.stringify({ name: "Resto PasDispo" }),
+    })).json();
+    const emp = await (await api("/api/admin/employees", {
+      method: "POST", body: JSON.stringify({ restaurant_id: resto.id, name: "Paula PasDispo", secteur: "salle" }),
+    })).json();
+
+    // « Pas disponible » le jour de semaine d'AUJOURD'HUI, et aucun quart ce jour-là.
+    const jour = new Date().toISOString().slice(0, 10);
+    const js = new Date(jour + "T12:00:00Z").getUTCDay();
+    const jour0 = js === 0 ? 6 : js - 1;
+    await fetch(`${serveur.base}/api/employee/${emp.access_code}/disponibilites`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ disponibilites: [{ jour: jour0, disponible: false }] }),
+    });
+
+    await ouvrirAdmin();
+    await onglet.ev(`document.querySelector('[data-onglet="salle"]').click()`);
+    const sel = `[data-action="newShift"][data-emp="${emp.id}"][data-date="${jour}"]`;
+    await jusqua(() => onglet.ev(`!!document.querySelector('${sel}')`), { quoi: "la case du jour" });
+
+    assert.equal(
+      await onglet.ev(`document.querySelector('${sel}').classList.contains("pas-dispo")`),
+      true, "la case porte la classe pas-dispo"
+    );
+    // Le hachuré : un background-image en dégradé, pas la case vide ordinaire (none).
+    assert.match(
+      await onglet.ev(`getComputedStyle(document.querySelector('${sel}')).backgroundImage`),
+      /gradient/, "la case doit être hachurée (visible), pas transparente"
+    );
+
+    await onglet.ev(`localStorage.setItem("coco-onglet-admin", "declarations")`);
+  });
+
   await t.test("l'export CSV ne sort que ceux qui ont déclaré, et un seul sens par colonne", async () => {
     // Quatre défauts rapportés en lisant le vrai rapport dans Numbers, sur un iPad :
     // tout l'effectif listé en lignes de zéros, le numéro d'employé perdu sur les
