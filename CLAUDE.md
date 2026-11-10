@@ -830,6 +830,16 @@ L'état vit dans `fichesOuvertes` au niveau du module, comme `fichesEnEdition` �
 en cours de modification est forcément dépliée (`ficheOuverte()`). La replier referme aussi
 son édition : faire disparaître une saisie sans rien dire serait pire.
 
+**À côté de « Copier » il y a « Ouvrir »** (`.open-btn`), sur les fiches de salle ET de
+cuisine : demandé ainsi — « un piton pour accéder au portail de chaque employé pour faire des
+vérifications ou des modifications sans avoir à copier le lien et le coller ». Ça amène le
+gérant sur `/e/<code>`, la page de la personne, où il peut tout voir et corriger avec son
+code. C'est un vrai `<a target="_blank">` et pas un bouton à écouteur : il survit à `render()`
+sans rebranchement, et sur un iPhone en mode « app » (ajouté à l'écran d'accueil) un
+`target="_blank"` s'ouvre dans une fenêtre avec un bouton pour revenir — pas le piège de la
+photo qui s'ouvrait sans sortie (voir « Le relevé photo s'ouvre DANS la page »). Ton neutre
+pour ne pas voler la vedette au « Copier » vert.
+
 ### Qui apparaît dans la liste des déclarations
 
 `equipeSalle` ramasse les gens de salle, les mixtes — **et quiconque a déjà déclaré une

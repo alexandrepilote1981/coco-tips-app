@@ -142,9 +142,14 @@
   .employee-name { font-weight: 700; font-size: 15px; color: #F1EFEA; }
   .employee-sub { font-size: 11px; color: #8993A4; }
   .link-box { font-size: 11px; background: rgba(255,255,255,0.06); color: #8993A4; padding: 4px 8px; border-radius: 6px; font-family: monospace; word-break: break-all; }
-  .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
-  .link-row .link-box { flex: 1; margin-top: 0; }
+  .link-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; flex-wrap: wrap; }
+  .link-row .link-box { flex: 1; min-width: 0; margin-top: 0; }
   .copy-btn { background: #6FBF93; color: #10151D; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  /* « Ouvrir » : amène directement à la page de l'employé, sans copier-coller le lien. Ton
+     neutre pour ne pas voler la vedette au « Copier » vert. C'est un vrai <a target="_blank">
+     plutôt qu'un bouton à écouteur : il survit à render() tout seul, et sur un iPhone en mode
+     « app » il s'ouvre dans une fenêtre avec un bouton pour revenir — pas le piège de la photo. */
+  .open-btn { background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
   .copy-btn.copied { background: #D4A857; }
   .report-toggle {
     background: rgba(255,255,255,0.08); color: #F1EFEA; font-size: 11px; font-weight: 700;
@@ -1007,6 +1012,7 @@ const ICON_PATHS = {
   chef: '<path d="M6 20h12"/><path d="M7 16h10a4 4 0 0 0 .6-7.95 4.5 4.5 0 0 0-8.4-1.6A3.5 3.5 0 0 0 7 16Z"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
   lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 };
 function icon(name, size, extraStyle) {
   return `<svg width="${size || 16}" height="${size || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;${extraStyle || ""}">${ICON_PATHS[name] || ""}</svg>`;
@@ -1219,6 +1225,7 @@ const I18N = {
     pourboireNet: "pourboire net",
     code: "Code",
     copier: "Copier",
+    ouvrirPortail: "Ouvrir",
     copie: "✓ Copié",
     copieImpossible: "Impossible de copier automatiquement. Lien : ",
     retirer: "Retirer",
@@ -1510,6 +1517,7 @@ const I18N = {
     pourboireNet: "net tips",
     code: "Code",
     copier: "Copy",
+    ouvrirPortail: "Open",
     copie: "✓ Copied",
     copieImpossible: "Could not copy automatically. Link: ",
     retirer: "Remove",
@@ -2394,6 +2402,7 @@ function render() {
               <div class="link-row">
                 <div class="link-box">${origin}/e/${e.access_code}</div>
                 <button class="copy-btn" data-action="copyLink" data-link="${origin}/e/${e.access_code}">${icon("copy", 13)} ${t("copier")}</button>
+                <a class="open-btn" href="${origin}/e/${e.access_code}" target="_blank" rel="noopener noreferrer">${icon("external", 13)} ${t("ouvrirPortail")}</a>
               </div>
               <div class="lien-avis">${t("sousCuisine")}</div>
             </div>
@@ -2507,6 +2516,7 @@ function render() {
               <div class="link-row">
                 <div class="link-box">${link}</div>
                 <button class="copy-btn" data-action="copyLink" data-link="${link}">${icon("copy", 13)} ${t("copier")}</button>
+                <a class="open-btn" href="${link}" target="_blank" rel="noopener noreferrer">${icon("external", 13)} ${t("ouvrirPortail")}</a>
               </div>
             </div>
             <div class="employee-row-actions">
